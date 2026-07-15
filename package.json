@@ -1,0 +1,28 @@
+{
+  "name": "human-to-code",
+  "version": "0.0.1",
+  "description": "Compile natural-language .human files to code via a strict intermediate representation.",
+  "type": "module",
+  "bin": {
+    "human-to-code": "src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=23.6.0"
+  },
+  "scripts": {
+    "start": "node src/cli.ts",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "codegen",
+    "compiler",
+    "llm",
+    "natural-language",
+    "dsl"
+  ],
+  "license": "MIT"
+}

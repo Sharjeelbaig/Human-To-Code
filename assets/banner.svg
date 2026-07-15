@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img" aria-label="human-to-code — write intent in plain language, compile it to real code">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#111a2e"/>
+    </linearGradient>
+    <style>
+      .mono { font-family: 'SFMono-Regular','Menlo','Consolas',ui-monospace,monospace; }
+      .sans { font-family: 'Segoe UI',system-ui,-apple-system,'Helvetica Neue',sans-serif; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="360" rx="24" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1280" height="6" rx="3" fill="#38bdf8" opacity="0.9"/>
+
+  <text x="640" y="118" text-anchor="middle" class="mono" font-size="62" font-weight="700" fill="#f8fafc">human-to-code</text>
+  <text x="640" y="158" text-anchor="middle" class="sans" font-size="21" fill="#94a3b8">Write intent in plain language. Compile it to real code.</text>
+
+  <!-- pipeline: human -> strict -> code -->
+  <g>
+    <rect x="300" y="212" width="170" height="62" rx="14" fill="#f59e0b"/>
+    <text x="385" y="251" text-anchor="middle" class="mono" font-size="24" font-weight="700" fill="#1c1206">human</text>
+
+    <text x="495" y="252" text-anchor="middle" class="sans" font-size="30" fill="#64748b">&#8594;</text>
+
+    <rect x="520" y="212" width="240" height="62" rx="14" fill="#38bdf8"/>
+    <text x="640" y="251" text-anchor="middle" class="mono" font-size="24" font-weight="700" fill="#062033">strict</text>
+
+    <text x="785" y="252" text-anchor="middle" class="sans" font-size="30" fill="#64748b">&#8594;</text>
+
+    <rect x="810" y="212" width="170" height="62" rx="14" fill="#34d399"/>
+    <text x="895" y="251" text-anchor="middle" class="mono" font-size="24" font-weight="700" fill="#062018">code</text>
+  </g>
+
+  <text x="385" y="304" text-anchor="middle" class="sans" font-size="15" fill="#64748b">natural language</text>
+  <text x="640" y="304" text-anchor="middle" class="sans" font-size="15" fill="#64748b">reviewable IR &#183; deterministic</text>
+  <text x="895" y="304" text-anchor="middle" class="sans" font-size="15" fill="#64748b">TS &#183; JS &#183; Python</text>
+</svg>
