@@ -1,218 +1,597 @@
 #!/usr/bin/env node
-/**
- * human-to-code CLI (deterministic core).
- *
- * Implemented now: `--init`, discovery + planning report (`--dry-run` style),
- * and `--check` (CI: are there human sources without an up-to-date strict IR?).
- * The `human -> strict` and `strict -> code` steps are added in later build
- * steps; until then the CLI reports the plan instead of generating code.
- */
+/** Production CLI: analyze -> reviewed contract -> grounded patch -> validation -> explicit apply. */
 
+import { constants as fsConstants, realpathSync } from "node:fs";
+import { copyFile, lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { analyzeProject, type ProjectProfileV1 } from "./analyzer.ts";
 import {
   CONFIG_FILENAME,
   ConfigError,
   defaultConfigJson,
   defaultModelFor,
   loadConfig,
+  migrateLegacyConfig,
+  validateConfig,
+  type ConfigV1,
 } from "./config.ts";
-import { discover, secretsTrackedError } from "./discovery.ts";
-import type { ProviderName } from "./types.ts";
+import { ContextSecurityError } from "./context.ts";
+import { DocumentationError } from "./documentation.ts";
+import { discover, DiscoveryError, secretsTrackedError } from "./discovery.ts";
+import {
+  PlanningError,
+  contractPathForSource,
+  createDraftContract,
+  loadReviewedContract,
+  writeDraftContract,
+} from "./planner.ts";
+import { ProviderError, type ProviderAdapter } from "./provider.ts";
+import { createOllamaProvider, createOpenAIProvider } from "./providers.ts";
+import { RunStore } from "./run-store.ts";
+import type { ProviderName, SourceFile } from "./types.ts";
+import {
+  applyVerifiedRun,
+  buildContextPreview,
+  generateRun,
+  resolveWorkspaceConfig,
+  rollbackAppliedRun,
+  validateStoredRun,
+  type WorkflowOutcome,
+} from "./workflow.ts";
 
-const HELP = `human-to-code — compile .human files to code via a strict IR
+const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
 
 Usage:
-  human-to-code [path] [options]
+  human-to-code [root]                         Guided analyze/plan/generate/validate flow
+  human-to-code analyze [root] [--json]
+  human-to-code plan <file.human> [--root <root>]
+  human-to-code context <contract> --explain [--offline] [--json]
+  human-to-code generate <contract> [--provider <name>] [--model <id>]
+  human-to-code validate <run-id> [--sandbox-image <image>] [--manual-passed]
+  human-to-code apply <run-id>
+  human-to-code rollback <run-id>                Restore a successfully applied run
+  human-to-code check [root]
+  human-to-code migrate-config [root]
+  human-to-code --init [root]
 
-Arguments:
-  path                 Directory to scan (default: ".")
+Provider options:
+  --provider <name>              openai | ollama (other configured names are unsupported)
+  --model <id>                   Exact requested model id; never silently changed
+  --base-url <url>               Trusted Ollama Cloud/custom provider base URL
+  --api-key-env <ENV_NAME>       Environment variable name only, never a credential value
+  --input-cost-per-million <USD> Conservative input-token API rate for remote cost reservation
+  --output-cost-per-million <USD> Conservative output-token API rate for remote cost reservation
+  --unmetered-provider            Explicitly attest that both remote API rates are zero
+  --trust-custom-endpoint        Required acknowledgement for every configured base URL
 
-Options:
-  --init               Write a default ${CONFIG_FILENAME} and exit
-  --dry-run            Show the plan without generating anything (default today)
-  --check              Exit non-zero if any .human lacks an up-to-date .strict.human
-  --file <path>        Restrict to a single source file
-  --provider <name>    Override provider (openai|anthropic|ollama|grok|gemini)
-  -h, --help           Show this help
+Other options:
+  --root <root>                  Explicit project root
+  --file <file.human>            Select one source in guided mode
+  --offline                      Use cached/local documentation only
+  --explain                      Show outbound context provenance and exact selected content
+  --json                         Machine-readable output
+  --dry-run                      Analyze and preview only; perform no generation
+  --manual-passed                Explicitly attest all reviewed manual acceptance checks
+  --sandbox-image <image>        Trusted image reference that must already exist locally
+  --docker-binary <path>         Docker-compatible runtime override (for example Podman)
+  -h, --help                     Show this help
 
-Exit codes: 0 ok · 1 error · 2 --check found stale/missing strict IR
+Exit codes:
+  0 verified/successful non-generation command
+  1 usage or configuration error
+  2 stale contract or failed validation
+  3 needs input, unsupported, or inconclusive
+  4 security blocked
+  5 provider or documentation dependency failure
+  6 internal error or partial scan
 `;
 
-interface Cli {
-  path: string;
-  init: boolean;
+const COMMANDS = new Set(["analyze", "plan", "context", "generate", "validate", "apply", "rollback", "check", "migrate-config"]);
+const PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama", "grok", "gemini"];
+
+interface CliOptions {
+  positionals: string[];
+  json: boolean;
+  offline: boolean;
+  explain: boolean;
   dryRun: boolean;
-  check: boolean;
+  manualPassed: boolean;
+  trustCustomEndpoint: boolean;
+  init: boolean;
+  help: boolean;
+  root?: string;
   file?: string;
   provider?: string;
-  help: boolean;
+  model?: string;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  inputCostPerMillion?: string;
+  outputCostPerMillion?: string;
+  unmeteredProvider: boolean;
+  sandboxImage?: string;
+  dockerBinary?: string;
 }
 
-function parse(argv: string[]): Cli {
+function parse(argv: string[]): CliOptions {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
+    strict: true,
     options: {
-      init: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
+      offline: { type: "boolean", default: false },
+      explain: { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
-      check: { type: "boolean", default: false },
+      "manual-passed": { type: "boolean", default: false },
+      "trust-custom-endpoint": { type: "boolean", default: false },
+      init: { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+      root: { type: "string" },
       file: { type: "string" },
       provider: { type: "string" },
-      help: { type: "boolean", short: "h", default: false },
+      model: { type: "string" },
+      "base-url": { type: "string" },
+      "api-key-env": { type: "string" },
+      "input-cost-per-million": { type: "string" },
+      "output-cost-per-million": { type: "string" },
+      "unmetered-provider": { type: "boolean", default: false },
+      "sandbox-image": { type: "string" },
+      "docker-binary": { type: "string" },
     },
   });
-  const cli: Cli = {
-    path: positionals[0] ?? ".",
-    init: values.init === true,
+  return {
+    positionals,
+    json: values.json === true,
+    offline: values.offline === true,
+    explain: values.explain === true,
     dryRun: values["dry-run"] === true,
-    check: values.check === true,
+    manualPassed: values["manual-passed"] === true,
+    trustCustomEndpoint: values["trust-custom-endpoint"] === true,
+    init: values.init === true,
     help: values.help === true,
+    ...(typeof values.root === "string" ? { root: values.root } : {}),
+    ...(typeof values.file === "string" ? { file: values.file } : {}),
+    ...(typeof values.provider === "string" ? { provider: values.provider } : {}),
+    ...(typeof values.model === "string" ? { model: values.model } : {}),
+    ...(typeof values["base-url"] === "string" ? { baseUrl: values["base-url"] } : {}),
+    ...(typeof values["api-key-env"] === "string" ? { apiKeyEnv: values["api-key-env"] } : {}),
+    ...(typeof values["input-cost-per-million"] === "string" ? { inputCostPerMillion: values["input-cost-per-million"] } : {}),
+    ...(typeof values["output-cost-per-million"] === "string" ? { outputCostPerMillion: values["output-cost-per-million"] } : {}),
+    unmeteredProvider: values["unmetered-provider"] === true,
+    ...(typeof values["sandbox-image"] === "string" ? { sandboxImage: values["sandbox-image"] } : {}),
+    ...(typeof values["docker-binary"] === "string" ? { dockerBinary: values["docker-binary"] } : {}),
   };
-  if (typeof values.file === "string") cli.file = values.file;
-  if (typeof values.provider === "string") cli.provider = values.provider;
-  return cli;
 }
 
-const VALID_PROVIDERS: readonly ProviderName[] = [
-  "openai",
-  "anthropic",
-  "ollama",
-  "grok",
-  "gemini",
-];
-
-async function runInit(root: string): Promise<number> {
-  const target = join(root, CONFIG_FILENAME);
-  if (existsSync(target)) {
-    console.error(`${CONFIG_FILENAME} already exists — not overwriting.`);
-    return 1;
+function output(value: unknown, json: boolean): void {
+  if (json) {
+    console.log(JSON.stringify(value, null, 2));
+    return;
   }
-  await writeFile(target, defaultConfigJson(), "utf8");
-  console.log(`Wrote ${CONFIG_FILENAME}.`);
+  if (typeof value === "string") console.log(value);
+  else console.log(JSON.stringify(value, null, 2));
+}
+
+function profileText(profile: ProjectProfileV1): string {
+  const lines = [
+    `Analysis: ${profile.status}`,
+    `Root: ${profile.root}`,
+    `Fingerprint: ${profile.fingerprint}`,
+    `Workspaces: ${profile.workspaces.length}`,
+  ];
+  for (const workspace of profile.workspaces) {
+    lines.push(`  ${workspace.id} — ${workspace.variant} — ${workspace.support.tier}`);
+    lines.push(`    framework ${workspace.framework.name} ${workspace.framework.resolvedVersion ?? workspace.framework.declaredVersion ?? "version unresolved"}`);
+    lines.push(`    validation ${workspace.validationPlan.map((command) => command.category).join(", ") || "none"}`);
+  }
+  for (const diagnostic of profile.diagnostics) lines.push(`  [${diagnostic.code}] ${diagnostic.message}`);
+  return lines.join("\n");
+}
+
+function analysisExit(profile: ProjectProfileV1): number {
+  if (profile.status === "PARTIAL_SCAN") return 6;
+  if (profile.status === "NEEDS_INPUT" || profile.status === "UNSUPPORTED") return 3;
   return 0;
 }
 
+function outcomeExit(outcome: WorkflowOutcome): number {
+  if (outcome.exitCode !== undefined) return outcome.exitCode;
+  if (outcome.status === "VERIFIED") return 0;
+  if (outcome.status === "SECURITY_BLOCKED") return 4;
+  if (outcome.status === "NEEDS_INPUT" || outcome.status === "UNSUPPORTED" || outcome.status === "INCONCLUSIVE") return 3;
+  return 2;
+}
+
+function outcomeText(outcome: WorkflowOutcome): string {
+  const lines = [`Run ${outcome.runId}: ${outcome.status}`];
+  for (const diagnostic of outcome.diagnostics) lines.push(`  ${diagnostic}`);
+  if (outcome.diff) lines.push("", outcome.diff);
+  return lines.join("\n");
+}
+
+function projectRoot(cli: CliOptions, fallback = "."): string {
+  return resolve(cli.root ?? fallback);
+}
+
+function relativeInside(root: string, path: string): string {
+  const absolute = resolve(root, path);
+  const rel = relative(root, absolute);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`)) throw new PlanningError("PATH_ESCAPE", "File must be inside the project root.");
+  return rel.split(sep).join("/");
+}
+
+async function initConfig(root: string): Promise<number> {
+  const target = resolve(root, CONFIG_FILENAME);
+  try {
+    await writeFile(target, defaultConfigJson(), { encoding: "utf8", mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new ConfigError(`${CONFIG_FILENAME} already exists; it was not overwritten.`);
+    throw error;
+  }
+  console.log(`Wrote ${target}. Review provider, model, privacy consent, sandbox, and budgets before remote generation.`);
+  return 0;
+}
+
+function overrideConfig(config: ConfigV1, cli: CliOptions): ConfigV1 {
+  const raw = structuredClone(config) as ConfigV1;
+  if (cli.provider !== undefined) {
+    if (!PROVIDERS.includes(cli.provider as ProviderName)) throw new ConfigError(`Unknown provider ${JSON.stringify(cli.provider)}.`);
+    const name = cli.provider as ProviderName;
+    if (raw.provider.name !== name) {
+      raw.provider = { name, model: cli.model ?? defaultModelFor(name) };
+    }
+  }
+  if (cli.model !== undefined) raw.provider.model = cli.model;
+  if (cli.baseUrl !== undefined) raw.provider.baseUrl = cli.baseUrl;
+  if (cli.apiKeyEnv !== undefined) raw.provider.apiKeyEnv = cli.apiKeyEnv;
+  if (cli.inputCostPerMillion !== undefined || cli.outputCostPerMillion !== undefined || cli.unmeteredProvider) {
+    const input = cli.inputCostPerMillion === undefined
+      ? raw.provider.pricing?.inputUsdPerMillionTokens
+      : Number(cli.inputCostPerMillion);
+    const output = cli.outputCostPerMillion === undefined
+      ? raw.provider.pricing?.outputUsdPerMillionTokens
+      : Number(cli.outputCostPerMillion);
+    if (input === undefined || output === undefined) {
+      throw new ConfigError("Both remote input and output cost upper bounds are required.");
+    }
+    raw.provider.pricing = {
+      inputUsdPerMillionTokens: input,
+      outputUsdPerMillionTokens: output,
+      ...(cli.unmeteredProvider ? { unmetered: true } : {}),
+    };
+  }
+  if (cli.trustCustomEndpoint) raw.provider.trustCustomEndpoint = true;
+  return validateConfig(raw);
+}
+
+function isLoopbackProviderHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/gu, "").replace(/\.$/u, "").toLowerCase();
+  return host === "localhost" || host === "::1" || /^127(?:\.\d{1,3}){3}$/u.test(host);
+}
+
+function providerFor(config: ConfigV1): ProviderAdapter {
+  const remote = config.provider.name === "openai"
+    || config.provider.name === "ollama" && config.provider.baseUrl !== undefined
+      && !isLoopbackProviderHost(new URL(config.provider.baseUrl).hostname);
+  if (remote && config.provider.pricing === undefined) {
+    throw new ConfigError(
+      "Remote generation requires provider.pricing input/output USD-per-million upper bounds so maxCostUsd cannot fail open.",
+    );
+  }
+  if (config.provider.name === "openai") return createOpenAIProvider(config.provider);
+  if (config.provider.name === "ollama") return createOllamaProvider(config.provider);
+  throw new ConfigError(`Provider '${config.provider.name}' has no certified HTTP adapter in this release. Use openai or ollama.`);
+}
+
+async function safeProject(root: string): Promise<{ profile: ProjectProfileV1; config: ConfigV1; fromFile: boolean }> {
+  const [{ config, fromFile }, profile] = await Promise.all([loadConfig(root), analyzeProject(root)]);
+  return { profile, config, fromFile };
+}
+
+async function securityDiscovery(root: string, config: ConfigV1): Promise<Awaited<ReturnType<typeof discover>>> {
+  const sources = await discover(root, config.filesToIgnore);
+  const tracked = secretsTrackedError(sources.secretsFiles);
+  if (tracked) throw new ContextSecurityError("SECRET_DETECTED", tracked);
+  return sources;
+}
+
+async function planCommand(cli: CliOptions, sourceInput: string): Promise<number> {
+  const root = projectRoot(cli);
+  const { profile } = await safeProject(root);
+  const exit = analysisExit(profile);
+  if (exit !== 0) {
+    output(cli.json ? profile : profileText(profile), cli.json);
+    return exit;
+  }
+  const relPath = relativeInside(root, sourceInput);
+  const source: SourceFile = { absPath: resolve(root, sourceInput), relPath, kind: "human", strictSibling: `${relPath.slice(0, -6)}.strict.human` };
+  const draft = await createDraftContract(root, source, profile);
+  await writeDraftContract(draft);
+  const result = {
+    status: "NEEDS_INPUT",
+    contract: draft.contractPath,
+    message: "Draft created. Review targetWorkspaces, targetSymbols, scope, acceptance criteria, risks, then remove the material REVIEW-1 question. Generation rejects unreviewed contracts.",
+  };
+  output(cli.json ? { ...result, draft: draft.contract } : `${result.message}\n${result.contract}`, cli.json);
+  return 3;
+}
+
+async function loadContractFor(root: string, contractInput: string): Promise<{ profile: ProjectProfileV1; config: ConfigV1; contract: Awaited<ReturnType<typeof loadReviewedContract>> }> {
+  const { profile, config } = await safeProject(root);
+  const exit = analysisExit(profile);
+  if (exit !== 0) throw new PlanningError("ANALYSIS_NOT_SUPPORTED", `Static analysis status is ${profile.status}.`);
+  const contractPath = relativeInside(root, contractInput);
+  const contract = await loadReviewedContract(root, contractPath, profile);
+  return { profile, config, contract };
+}
+
+async function contextCommand(cli: CliOptions, contractInput: string): Promise<number> {
+  if (!cli.explain) throw new ConfigError("context requires --explain because the exact outbound material must be reviewable.");
+  const root = projectRoot(cli);
+  const loaded = await loadContractFor(root, contractInput);
+  const config = resolveWorkspaceConfig(overrideConfig(loaded.config, cli), loaded.profile, loaded.contract.contract);
+  const manifest = await buildContextPreview(root, loaded.profile, loaded.contract.contract, config, cli.offline);
+  if (cli.json) output(manifest, true);
+  else {
+    const lines = [
+      `Context fingerprint: ${manifest.projectFingerprint}`,
+      `Selected: ${manifest.evidence.length} items, ${manifest.budget.usedEstimatedTokens} estimated tokens, ${manifest.redactionCount} redactions`,
+    ];
+    for (const item of manifest.evidence) {
+      const location = item.origin === "official_documentation" ? item.url : item.path;
+      lines.push("", `--- ${location}:${item.startLine}-${item.endLine} [${item.sha256}] ---`, item.content);
+    }
+    for (const exclusion of manifest.exclusions) lines.push(`Excluded ${exclusion.location}: ${exclusion.code} — ${exclusion.reason}`);
+    output(lines.join("\n"), false);
+  }
+  return 0;
+}
+
+async function generateCommand(cli: CliOptions, contractInput: string): Promise<{ code: number; outcome: WorkflowOutcome }> {
+  const root = projectRoot(cli);
+  const loaded = await loadContractFor(root, contractInput);
+  const config = resolveWorkspaceConfig(overrideConfig(loaded.config, cli), loaded.profile, loaded.contract.contract);
+  const provider = providerFor(config);
+  const outcome = await generateRun({
+    root,
+    profile: loaded.profile,
+    contract: loaded.contract.contract,
+    config,
+    provider,
+    offline: cli.offline,
+  });
+  output(cli.json ? outcome : outcomeText(outcome), cli.json);
+  return { code: outcomeExit(outcome), outcome };
+}
+
+async function validateCommand(cli: CliOptions, runId: string): Promise<number> {
+  const outcome = await validateStoredRun({
+    runId,
+    sandboxImage: cli.sandboxImage,
+    dockerBinary: cli.dockerBinary,
+    manualChecksPassed: cli.manualPassed,
+  });
+  output(cli.json ? outcome : outcomeText(outcome), cli.json);
+  return outcomeExit(outcome);
+}
+
+async function applyCommand(cli: CliOptions, runId: string): Promise<number> {
+  const outcome = await applyVerifiedRun(runId);
+  output(cli.json ? outcome : outcomeText(outcome), cli.json);
+  return outcomeExit(outcome);
+}
+
+async function rollbackCommand(cli: CliOptions, runId: string): Promise<number> {
+  const outcome = await rollbackAppliedRun(runId);
+  output(cli.json ? outcome : outcomeText(outcome), cli.json);
+  return outcomeExit(outcome);
+}
+
+async function checkCommand(cli: CliOptions, rootInput?: string): Promise<number> {
+  const root = resolve(cli.root ?? rootInput ?? ".");
+  const { profile, config } = await safeProject(root);
+  const profileExit = analysisExit(profile);
+  if (profileExit !== 0) {
+    output(cli.json ? profile : profileText(profile), cli.json);
+    return profileExit;
+  }
+  const sources = await securityDiscovery(root, config);
+  const failures: string[] = [];
+  for (const source of sources.human) {
+    const contractPath = contractPathForSource(root, source);
+    try {
+      await loadReviewedContract(root, relative(root, contractPath), profile);
+    } catch (error) {
+      failures.push(`${source.relPath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (failures.length > 0) {
+    output(cli.json ? { status: "STALE", failures } : `Check failed:\n${failures.map((item) => `  ${item}`).join("\n")}`, cli.json);
+    return 2;
+  }
+  output(cli.json ? { status: "VERIFIED", humanSources: sources.human.length, profileFingerprint: profile.fingerprint } : `Check passed: ${sources.human.length} .human source(s) have reviewed, current contracts.`, cli.json);
+  return 0;
+}
+
+async function migrateConfigCommand(cli: CliOptions, rootInput?: string): Promise<number> {
+  const root = resolve(cli.root ?? rootInput ?? ".");
+  const path = resolve(root, CONFIG_FILENAME);
+  const metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1024 * 1024) throw new ConfigError(`${CONFIG_FILENAME} must be a bounded regular file.`);
+  const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
+  const migrated = migrateLegacyConfig(raw);
+  const backup = `${path}.alpha.bak`;
+  const temporary = `${path}.migrating`;
+  await copyFile(path, backup, fsConstants.COPYFILE_EXCL);
+  try {
+    await writeFile(temporary, `${JSON.stringify(migrated, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+  output(`Migrated ${path}. Original preserved at ${backup}.`, cli.json);
+  return 0;
+}
+
+async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
+  const root = resolve(cli.root ?? rootInput ?? ".");
+  const { profile, config: loadedConfig } = await safeProject(root);
+  const profileExit = analysisExit(profile);
+  if (profileExit !== 0) {
+    output(cli.json ? profile : profileText(profile), cli.json);
+    return profileExit;
+  }
+  if (cli.dryRun) {
+    output(cli.json ? profile : profileText(profile), cli.json);
+    return 0;
+  }
+  const config = overrideConfig(loadedConfig, cli);
+  const sources = await securityDiscovery(root, config);
+  let selected = sources.human;
+  if (cli.file) {
+    const wanted = relativeInside(root, cli.file);
+    selected = selected.filter((source) => source.relPath === wanted);
+  }
+  if (selected.length === 0) {
+    output(cli.json ? { status: "NEEDS_INPUT", message: "No matching .human change request was found.", profile } : `${profileText(profile)}\n\nNEEDS_INPUT: add a .human change request or select one with --file.`, cli.json);
+    return 3;
+  }
+  if (selected.length > 1) {
+    output(cli.json ? { status: "NEEDS_INPUT", sources: selected.map((source) => source.relPath) } : `NEEDS_INPUT: multiple .human sources exist; select one with --file:\n${selected.map((source) => `  ${source.relPath}`).join("\n")}`, cli.json);
+    return 3;
+  }
+  const source = selected[0]!;
+  const contractPath = contractPathForSource(root, source);
+  let reviewed;
+  try {
+    reviewed = await loadReviewedContract(root, relative(root, contractPath), profile);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof PlanningError && error.code === "UNREADABLE" && /ENOENT/u.test(error.message)) {
+      const draft = await createDraftContract(root, source, profile);
+      await writeDraftContract(draft);
+      output(cli.json ? { status: "NEEDS_INPUT", contract: draft.contractPath, draft: draft.contract } : `Created review draft ${draft.contractPath}. Review and resolve REVIEW-1, then rerun the same npx command.`, cli.json);
+      return 3;
+    }
+    output(cli.json ? { status: "NEEDS_INPUT", contract: contractPath, diagnostic: error instanceof Error ? error.message : String(error) } : `NEEDS_INPUT: ${error instanceof Error ? error.message : String(error)}\nReview ${contractPath}; generation will not bypass the contract gate.`, cli.json);
+    return 3;
+  }
+  const effectiveConfig = resolveWorkspaceConfig(config, profile, reviewed.contract);
+  const provider = providerFor(effectiveConfig);
+  const generated = await generateRun({ root, profile, contract: reviewed.contract, config: effectiveConfig, provider, offline: cli.offline });
+  if (generated.diff === undefined) {
+    output(cli.json ? generated : outcomeText(generated), cli.json);
+    return outcomeExit(generated);
+  }
+  const validated = await validateStoredRun({
+    runId: generated.runId,
+    sandboxImage: cli.sandboxImage,
+    dockerBinary: cli.dockerBinary,
+    manualChecksPassed: cli.manualPassed,
+    provider,
+    config: effectiveConfig,
+  });
+  output(cli.json ? validated : outcomeText(validated), cli.json);
+  return outcomeExit(validated);
+}
+
 export async function run(argv: string[]): Promise<number> {
-  let cli: Cli;
+  let cli: CliOptions;
   try {
     cli = parse(argv);
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     console.error(HELP);
     return 1;
   }
-
   if (cli.help) {
     console.log(HELP);
     return 0;
   }
-
-  const root = resolve(cli.path);
-
-  if (cli.init) {
-    return runInit(root);
-  }
-
-  // Load + validate config (structured JSON, never LLM-parsed).
-  let config;
   try {
-    ({ config } = await loadConfig(root));
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(`Config error: ${err.message}`);
-      return 1;
+    if (cli.init) return initConfig(projectRoot(cli, cli.positionals[0] ?? "."));
+    const first = cli.positionals[0];
+    const command = first && COMMANDS.has(first) ? first : undefined;
+    const args = command ? cli.positionals.slice(1) : cli.positionals;
+    if (command === "analyze") {
+      const profile = await analyzeProject(resolve(cli.root ?? args[0] ?? "."));
+      output(cli.json ? profile : profileText(profile), cli.json);
+      return analysisExit(profile);
     }
-    throw err;
-  }
-
-  if (cli.provider) {
-    if (!VALID_PROVIDERS.includes(cli.provider as ProviderName)) {
-      console.error(
-        `Unknown --provider "${cli.provider}". Valid: ${VALID_PROVIDERS.join(", ")}.`,
-      );
-      return 1;
+    if (command === "plan") {
+      if (!args[0]) throw new ConfigError("plan requires a .human file.");
+      return planCommand(cli, args[0]);
     }
-    // A provider override carries that provider's current default model,
-    // rather than silently keeping the previous provider's model id.
-    const name = cli.provider as ProviderName;
-    config.provider.name = name;
-    config.provider.model = defaultModelFor(name);
-    delete config.provider.baseUrl;
-  }
-
-  // Discover sources.
-  const result = await discover(root, config.filesToIgnore);
-
-  // Security gate: refuse to run if secrets.human is git-tracked.
-  if (result.secrets) {
-    const msg = secretsTrackedError(result.secrets);
-    if (msg) {
-      console.error(msg);
-      return 1;
+    if (command === "context") {
+      if (!args[0]) throw new ConfigError("context requires a reviewed contract path.");
+      return contextCommand(cli, args[0]);
     }
-  }
-
-  const strictPaths = new Set(result.strict.map((f) => f.relPath));
-
-  // Which .human files have no corresponding strict IR yet?
-  const humanFiltered = cli.file
-    ? result.human.filter((f) => f.relPath === toPosixRel(root, cli.file!))
-    : result.human;
-
-  const missingStrict = humanFiltered.filter(
-    (f) => f.strictSibling && !strictPaths.has(f.strictSibling),
-  );
-
-  // --check: CI gate.
-  if (cli.check) {
-    if (missingStrict.length > 0) {
-      console.error(
-        `--check failed: ${missingStrict.length} human file(s) without a strict IR:`,
-      );
-      for (const f of missingStrict) console.error(`  ${f.relPath}`);
+    if (command === "generate") {
+      if (!args[0]) throw new ConfigError("generate requires a reviewed contract path.");
+      return (await generateCommand(cli, args[0])).code;
+    }
+    if (command === "validate") {
+      if (!args[0]) throw new ConfigError("validate requires a run id.");
+      return validateCommand(cli, args[0]);
+    }
+    if (command === "apply") {
+      if (!args[0]) throw new ConfigError("apply requires a run id.");
+      return applyCommand(cli, args[0]);
+    }
+    if (command === "rollback") {
+      if (!args[0]) throw new ConfigError("rollback requires a run id.");
+      return rollbackCommand(cli, args[0]);
+    }
+    if (command === "check") return checkCommand(cli, args[0]);
+    if (command === "migrate-config") return migrateConfigCommand(cli, args[0]);
+    return guided(cli, args[0]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof ContextSecurityError) {
+      output(cli.json ? { status: "SECURITY_BLOCKED", diagnostic: message } : `SECURITY_BLOCKED: ${message}`, cli.json);
+      return 4;
+    }
+    if (error instanceof ProviderError) {
+      output(cli.json ? { status: "FAILED", dependency: "provider", code: error.code, diagnostic: message } : `Provider ${error.code}: ${message}`, cli.json);
+      return 5;
+    }
+    if (error instanceof DocumentationError) {
+      output(cli.json ? { status: "INCONCLUSIVE", dependency: "documentation", code: error.code, diagnostic: message } : `Documentation ${error.code}: ${message}`, cli.json);
+      return 5;
+    }
+    if (error instanceof DiscoveryError && error.code === "PARTIAL_SCAN") {
+      output(cli.json ? { status: "FAILED", code: error.code, diagnostic: message } : `Partial scan: ${message}`, cli.json);
+      return 6;
+    }
+    if (error instanceof PlanningError && ["STALE_PROFILE", "STALE_SOURCE", "INVALID_CONTRACT"].includes(error.code)) {
+      output(cli.json ? { status: "STALE", code: error.code, diagnostic: message } : `Stale or invalid contract: ${message}`, cli.json);
       return 2;
     }
-    console.log("--check passed: every .human has a .strict.human.");
-    return 0;
+    if (error instanceof ConfigError || error instanceof PlanningError || error instanceof DiscoveryError) {
+      output(cli.json ? { status: "ERROR", diagnostic: message } : `Error: ${message}`, cli.json);
+      return 1;
+    }
+    console.error(error instanceof Error ? error.stack ?? message : message);
+    return 6;
   }
-
-  // Report the plan (generation is added in a later build step).
-  console.log(`Scanned ${result.root}`);
-  console.log(`Language: ${config.language}`);
-  console.log(
-    `Provider: ${config.provider.name} (${config.provider.model})`,
-  );
-  console.log(
-    `Found: ${humanFiltered.length} .human, ${result.strict.length} .strict.human, ` +
-      `${result.ignoredCount} ignored${result.secrets ? ", secrets.human present" : ""}`,
-  );
-  if (missingStrict.length > 0) {
-    console.log(`Would generate strict IR for ${missingStrict.length} file(s):`);
-    for (const f of missingStrict) console.log(`  ${f.relPath} -> ${f.strictSibling}`);
-  }
-  console.log(
-    "\nNote: human -> strict and strict -> code generation are not implemented yet.",
-  );
-  return 0;
 }
 
-function toPosixRel(root: string, file: string): string {
-  const abs = resolve(root, file);
-  return abs.slice(root.length + 1).split(/[\\/]/).join("/");
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return resolve(entry) === resolve(fileURLToPath(import.meta.url));
+  }
 }
 
-// Only run when invoked as a script (not when imported by tests).
-if (
-  import.meta.url === `file://${process.argv[1]}` ||
-  import.meta.filename === process.argv[1]
-) {
+if (isMainModule()) {
   run(process.argv.slice(2))
-    .then((code) => process.exit(code))
-    .catch((err) => {
-      console.error(err instanceof Error ? err.stack ?? err.message : String(err));
-      process.exit(1);
+    .then((code) => { process.exitCode = code; })
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+      process.exitCode = 6;
     });
 }

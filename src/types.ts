@@ -1,12 +1,11 @@
 /**
  * Shared types for human-to-code.
  *
- * The pipeline is:  .human --(LLM)--> .strict.human --(deterministic)--> code
- * These types describe the deterministic core (config + discovery) only; the
- * strict DSL and code generators are added in later build steps.
+ * The pipeline is: static analysis -> reviewed JSON contract -> grounded model
+ * patch -> isolated validation -> explicit application.
  */
 
-export type TargetLanguage = "typescript" | "javascript" | "python";
+export type TargetLanguage = "typescript" | "javascript" | "python" | "rust";
 
 export type ProviderName =
   | "openai"
@@ -16,16 +15,16 @@ export type ProviderName =
   | "gemini";
 
 export interface ProviderConfig {
-  /** Which LLM provider drives the human -> strict step. */
+  /** Provider selected explicitly for structured patch generation. */
   name: ProviderName;
-  /** Model id. Configurable; defaults are current, not dated snapshots. */
+  /** Exact requested model id. The resolved response identity is audited. */
   model: string;
-  /** Optional override endpoint (e.g. Ollama Cloud). Must be https. */
+  /** Optional trusted endpoint (for example Ollama Cloud); local Ollama may use loopback HTTP. */
   baseUrl?: string;
 }
 
 export interface Config {
-  /** Target language for the deterministic code generator. */
+  /** Legacy single-language hint; static workspace analysis is authoritative. */
   language: TargetLanguage;
   /** Glob-free directory/file names to skip during discovery (a denylist). */
   filesToIgnore: string[];
@@ -69,6 +68,8 @@ export interface DiscoveryResult {
   strict: SourceFile[];
   /** The secrets file, if present. Never compiled, never sent to a provider. */
   secrets?: SourceFile;
+  /** Every nested secrets.human, including ignored trees. */
+  secretsFiles?: SourceFile[];
   /** Files skipped by ignore rules, for reporting under --dry-run. */
   ignoredCount: number;
 }

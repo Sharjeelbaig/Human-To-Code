@@ -1,97 +1,452 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { test } from "node:test";
 import {
-  validateConfig,
-  loadConfig,
+  CONFIG_FILENAME,
+  CONFIG_SCHEMA_VERSION,
   ConfigError,
   DEFAULT_CONFIG,
-  CONFIG_FILENAME,
+  defaultConfigJson,
+  loadConfig,
+  migrateLegacyConfig,
+  validateConfig,
 } from "../src/config.ts";
 
-test("validateConfig fills defaults from an empty object", () => {
-  const c = validateConfig({});
-  assert.equal(c.language, "typescript");
-  assert.equal(c.provider.name, "anthropic");
-  assert.equal(c.provider.model, "claude-opus-4-8");
-  assert.equal(c.allowNonHumanFiles, false);
+const V1 = { schemaVersion: CONFIG_SCHEMA_VERSION } as const;
+
+test("validateConfig fills v1 defaults", () => {
+  const config = validateConfig(V1);
+  assert.equal(config.schemaVersion, 1);
+  assert.equal(config.language, "typescript");
+  assert.equal(config.provider.name, "ollama");
+  assert.equal(config.provider.model, "qwen2.5-coder:7b");
+  assert.equal(config.allowNonHumanFiles, false);
+  assert.equal(config.sandbox.required, true);
+  assert.equal(config.sandbox.network, "none");
+  assert.equal(config.privacy.remoteProviderConsent, false);
+  assert.equal(config.budgets.maxRepairs, 2);
 });
 
-test("validateConfig accepts a valid language", () => {
-  assert.equal(validateConfig({ language: "python" }).language, "python");
+test("schema version is mandatory and unsupported versions fail", () => {
+  assert.throws(() => validateConfig({}), /migrate-config/);
+  assert.throws(() => validateConfig({ schemaVersion: 2 }), /Unsupported/);
 });
 
-test("validateConfig rejects an unknown language", () => {
-  assert.throws(() => validateConfig({ language: "rust" }), ConfigError);
+test("schema v1 cannot disable strong sandbox validation", () => {
+  assert.throws(
+    () => validateConfig({ ...V1, sandbox: { required: false } }),
+    /must be true/u,
+  );
+});
+
+test("defaults are deeply frozen and every result is deeply cloned", () => {
+  assert.equal(Object.isFrozen(DEFAULT_CONFIG), true);
+  assert.equal(Object.isFrozen(DEFAULT_CONFIG.provider), true);
+  assert.equal(Object.isFrozen(DEFAULT_CONFIG.filesToIgnore), true);
+
+  const first = validateConfig(V1);
+  const second = validateConfig(V1);
+  first.provider.model = "changed";
+  first.filesToIgnore.push("custom");
+  first.privacy.excludedPaths.push("private");
+  assert.equal(second.provider.model, "qwen2.5-coder:7b");
+  assert.ok(!second.filesToIgnore.includes("custom"));
+  assert.deepEqual(second.privacy.excludedPaths, []);
+});
+
+test("validateConfig accepts known legacy-compatible fields", () => {
+  const config = validateConfig({
+    ...V1,
+    language: "python",
+    filesToIgnore: ["vendor"],
+    allowNonHumanFiles: true,
+    provider: { name: "openai", model: "pinned-model" },
+  });
+  assert.equal(config.language, "python");
+  assert.deepEqual(config.filesToIgnore, ["vendor"]);
+  assert.equal(config.allowNonHumanFiles, true);
+  assert.equal(config.provider.model, "pinned-model");
 });
 
 test("provider model defaults per provider", () => {
-  const c = validateConfig({ provider: { name: "openai" } });
-  assert.equal(c.provider.model, "gpt-4o");
+  const config = validateConfig({ ...V1, provider: { name: "openai" } });
+  assert.equal(config.provider.model, "gpt-4o");
 });
 
-test("validateConfig rejects an unknown provider", () => {
+test("unknown root and nested fields are rejected", () => {
   assert.throws(
-    () => validateConfig({ provider: { name: "cohere" } }),
-    ConfigError,
+    () => validateConfig({ ...V1, languge: "python" }),
+    /Unknown configuration field `languge`/,
   );
-});
-
-test("baseUrl must be https", () => {
   assert.throws(
     () =>
       validateConfig({
-        provider: { name: "ollama", baseUrl: "http://ollama.com" },
+        ...V1,
+        provider: { name: "openai", typo: true },
       }),
-    ConfigError,
+    /provider\.typo/,
   );
-  const ok = validateConfig({
-    provider: { name: "ollama", baseUrl: "https://ollama.com" },
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        workspaces: [{ root: "apps/web", privacy: { telemtry: true } }],
+      }),
+    /telemtry/,
+  );
+});
+
+test("credential-like fields are rejected at every nesting level", () => {
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: { name: "openai", apiKey: "not-allowed" },
+      }),
+    /Credential-like field `provider\.apiKey`/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        workspaces: [{ root: ".", provider: { name: "openai", clientSecret: "x" } }],
+      }),
+    /Credential-like/,
+  );
+});
+
+test("apiKeyEnv accepts only an environment-variable name", () => {
+  const config = validateConfig({
+    ...V1,
+    provider: { name: "openai", apiKeyEnv: "OPENAI_API_KEY" },
   });
-  assert.equal(ok.provider.baseUrl, "https://ollama.com");
+  assert.equal(config.provider.apiKeyEnv, "OPENAI_API_KEY");
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: { name: "openai", apiKeyEnv: "sk-secret-value" },
+      }),
+    /environment-variable name/,
+  );
 });
 
-test("validateConfig rejects non-object root", () => {
-  assert.throws(() => validateConfig([]), ConfigError);
-  assert.throws(() => validateConfig("nope"), ConfigError);
+test("remote pricing upper bounds are strict model configuration, never credentials", () => {
+  const config = validateConfig({
+    ...V1,
+    provider: {
+      name: "openai",
+      model: "reviewed-model",
+      pricing: {
+        inputUsdPerMillionTokens: 12.5,
+        outputUsdPerMillionTokens: 50,
+      },
+    },
+  });
+  assert.deepEqual(config.provider.pricing, {
+    inputUsdPerMillionTokens: 12.5,
+    outputUsdPerMillionTokens: 50,
+  });
+  assert.throws(
+    () => validateConfig({
+      ...V1,
+      provider: {
+        name: "openai",
+        pricing: { inputUsdPerMillionTokens: 1 },
+      },
+    }),
+    /outputUsdPerMillionTokens/u,
+  );
+  assert.throws(
+    () => validateConfig({
+      ...V1,
+      provider: {
+        name: "openai",
+        pricing: {
+          inputUsdPerMillionTokens: -1,
+          outputUsdPerMillionTokens: 1,
+        },
+      },
+    }),
+    /between 0/u,
+  );
+  assert.throws(() => validateConfig({
+    ...V1,
+    provider: {
+      name: "openai",
+      pricing: {
+        inputUsdPerMillionTokens: 0,
+        outputUsdPerMillionTokens: 0,
+      },
+    },
+  }), /unmetered/u);
+  const unmetered = validateConfig({
+    ...V1,
+    provider: {
+      name: "openai",
+      pricing: {
+        inputUsdPerMillionTokens: 0,
+        outputUsdPerMillionTokens: 0,
+        unmetered: true,
+      },
+    },
+  });
+  assert.equal(unmetered.provider.pricing?.unmetered, true);
 });
 
-test("loadConfig returns defaults when no file exists", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "h2c-cfg-"));
+test("custom HTTPS endpoints require explicit trust and reject unsafe URL forms", () => {
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: { name: "openai", baseUrl: "https://models.example.com" },
+      }),
+    /trustCustomEndpoint/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: {
+          name: "openai",
+          baseUrl: "https://user:pass@models.example.com",
+          trustCustomEndpoint: true,
+        },
+      }),
+    /credentials/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: {
+          name: "openai",
+          baseUrl: "https://192.168.1.5/v1",
+          trustCustomEndpoint: true,
+        },
+      }),
+    /private network/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: {
+          name: "openai",
+          baseUrl: "https://models.example.com/v1?key=x",
+          trustCustomEndpoint: true,
+        },
+      }),
+    /query or fragment/,
+  );
+
+  const config = validateConfig({
+    ...V1,
+    provider: {
+      name: "openai",
+      baseUrl: "https://models.example.com/v1",
+      trustCustomEndpoint: true,
+      apiKeyEnv: "PRIVATE_PROVIDER_KEY",
+    },
+  });
+  assert.equal(config.provider.baseUrl, "https://models.example.com/v1");
+  assert.equal(config.provider.apiKeyEnv, "PRIVATE_PROVIDER_KEY");
+});
+
+test("plain HTTP is restricted to unauthenticated Ollama loopback", () => {
+  const config = validateConfig({
+    ...V1,
+    provider: {
+      name: "ollama",
+      baseUrl: "http://127.0.0.1:11434",
+      trustCustomEndpoint: true,
+    },
+  });
+  assert.equal(config.provider.baseUrl, "http://127.0.0.1:11434");
+  assert.equal(config.provider.apiKeyEnv, undefined);
+
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: {
+          name: "ollama",
+          baseUrl: "http://localhost:11434",
+          trustCustomEndpoint: true,
+          apiKeyEnv: "OLLAMA_API_KEY",
+        },
+      }),
+    /not allowed for a local HTTP/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        provider: {
+          name: "ollama",
+          baseUrl: "http://10.0.0.3:11434",
+          trustCustomEndpoint: true,
+        },
+      }),
+    /Plain HTTP/,
+  );
+});
+
+test("official Ollama Cloud endpoint defaults only its env variable name", () => {
+  const config = validateConfig({
+    ...V1,
+    provider: {
+      name: "ollama",
+      baseUrl: "https://ollama.com/api",
+      trustCustomEndpoint: true,
+    },
+  });
+  assert.equal(config.provider.apiKeyEnv, "OLLAMA_API_KEY");
+});
+
+test("workspace and policy configuration is bounded and path-safe", () => {
+  const config = validateConfig({
+    ...V1,
+    workspaces: [
+      {
+        root: "apps/web",
+        documentation: { privatePaths: ["docs/react"] },
+        privacy: { maxContextTokens: 32_000 },
+        budgets: { maxRepairs: 1 },
+      },
+    ],
+  });
+  assert.equal(config.workspaces[0]?.root, "apps/web");
+  assert.deepEqual(config.workspaces[0]?.documentation?.privatePaths, ["docs/react"]);
+  assert.equal(config.workspaces[0]?.budgets?.maxRepairs, 1);
+
+  assert.throws(
+    () => validateConfig({ ...V1, workspaces: [{ root: "../outside" }] }),
+    /parent segments/,
+  );
+  assert.throws(
+    () => validateConfig({ ...V1, filesToIgnore: ["src/generated"] }),
+    /name, not a path/,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...V1,
+        workspaces: [{ root: "apps/web" }, { root: "apps/web" }],
+      }),
+    /duplicate roots/,
+  );
+  assert.throws(
+    () => validateConfig({ ...V1, budgets: { maxRepairs: 3 } }),
+    /between 0 and 2/,
+  );
+});
+
+test("official documentation mappings are exact, bounded, and version-specific", () => {
+  const config = validateConfig({
+    ...V1,
+    documentation: {
+      officialDomains: ["docs.example.com"],
+      officialSources: [{
+        ecosystem: "fastapi",
+        dependency: "pydantic",
+        version: "2.11.7",
+        url: "https://docs.example.com/pydantic/2.11.7/",
+      }],
+    },
+  });
+  assert.equal(config.documentation.officialSources[0]?.version, "2.11.7");
+  assert.throws(() => validateConfig({
+    ...V1,
+    documentation: {
+      officialSources: [{
+        ecosystem: "fastapi",
+        dependency: "pydantic",
+        version: "latest",
+        url: "https://docs.example.com/pydantic/latest/",
+      }],
+    },
+  }), /exact version identifier/u);
+  assert.throws(() => validateConfig({
+    ...V1,
+    documentation: {
+      officialSources: [{
+        ecosystem: "fastapi",
+        dependency: "pydantic",
+        version: "2.11.7",
+        url: "http://docs.example.com/pydantic/2.11.7/",
+      }],
+    },
+  }), /credential-free HTTPS/u);
+  assert.throws(() => validateConfig({
+    ...V1,
+    documentation: {
+      officialSources: [
+        { ecosystem: "react", dependency: "react", version: "19.1.0", url: "https://react.dev/19.1.0/reference/react/" },
+        { ecosystem: "react", dependency: "react", version: "19.1.0", url: "https://react.dev/19.1.0/learn/" },
+      ],
+    },
+  }), /duplicate/u);
+});
+
+test("migrateLegacyConfig performs an explicit strict upgrade", () => {
+  const config = migrateLegacyConfig({
+    language: "javascript",
+    provider: { name: "gemini" },
+  });
+  assert.equal(config.schemaVersion, 1);
+  assert.equal(config.language, "javascript");
+  assert.equal(config.provider.model, "gemini-2.5-pro");
+  assert.throws(() => migrateLegacyConfig({ oldMysteryField: true }), /Unknown/);
+});
+
+test("loadConfig returns a fresh default when no file exists", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "h2c-cfg-"));
   try {
-    const { config, fromFile } = await loadConfig(dir);
-    assert.equal(fromFile, false);
-    assert.deepEqual(config, DEFAULT_CONFIG);
+    const first = await loadConfig(directory);
+    const second = await loadConfig(directory);
+    assert.equal(first.fromFile, false);
+    assert.deepEqual(first.config, DEFAULT_CONFIG);
+    first.config.filesToIgnore.push("changed");
+    assert.ok(!second.config.filesToIgnore.includes("changed"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 });
 
-test("loadConfig reads and validates a config file", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "h2c-cfg-"));
+test("loadConfig reads a schema-v1 file and rejects legacy JSON", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "h2c-cfg-"));
   try {
     await writeFile(
-      join(dir, CONFIG_FILENAME),
-      JSON.stringify({ language: "javascript", provider: { name: "gemini" } }),
+      join(directory, CONFIG_FILENAME),
+      JSON.stringify({ ...V1, language: "javascript", provider: { name: "gemini" } }),
     );
-    const { config, fromFile } = await loadConfig(dir);
-    assert.equal(fromFile, true);
-    assert.equal(config.language, "javascript");
-    assert.equal(config.provider.name, "gemini");
-    assert.equal(config.provider.model, "gemini-2.5-pro");
+    const loaded = await loadConfig(directory);
+    assert.equal(loaded.fromFile, true);
+    assert.equal(loaded.config.language, "javascript");
+    assert.equal(loaded.config.provider.model, "gemini-2.5-pro");
+
+    await writeFile(join(directory, CONFIG_FILENAME), "{}");
+    await assert.rejects(() => loadConfig(directory), /migrate-config/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 });
 
-test("loadConfig surfaces invalid JSON as ConfigError", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "h2c-cfg-"));
+test("loadConfig rejects invalid JSON and symlinked config", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "h2c-cfg-"));
+  const outside = join(directory, "outside.json");
   try {
-    await writeFile(join(dir, CONFIG_FILENAME), "{ not json ");
-    await assert.rejects(() => loadConfig(dir), ConfigError);
+    await writeFile(join(directory, CONFIG_FILENAME), "{ not json ");
+    await assert.rejects(() => loadConfig(directory), ConfigError);
+    await rm(join(directory, CONFIG_FILENAME));
+
+    await writeFile(outside, defaultConfigJson());
+    await symlink(outside, join(directory, CONFIG_FILENAME));
+    await assert.rejects(() => loadConfig(directory), /non-symlink/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 });

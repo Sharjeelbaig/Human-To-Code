@@ -1,21 +1,41 @@
 {
   "name": "human-to-code",
-  "version": "0.0.1",
-  "description": "Compile natural-language .human files to code via a strict intermediate representation.",
+  "version": "0.1.0",
+  "description": "Safely turn reviewed natural-language change contracts into validated code patches.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
-    "human-to-code": "src/cli.ts"
+    "human-to-code": "./dist/cli.js"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "assets",
+    "Readme.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
   "engines": {
-    "node": ">=23.6.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
-    "start": "node src/cli.ts",
-    "test": "node --test",
-    "typecheck": "tsc --noEmit"
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "dev": "node src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "package:check": "npm run build && node test/package-smoke.mjs",
+    "prepack": "npm run clean && npm run build"
   },
   "keywords": [
     "codegen",
@@ -24,5 +44,13 @@
     "natural-language",
     "dsl"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3"
+  }
 }
