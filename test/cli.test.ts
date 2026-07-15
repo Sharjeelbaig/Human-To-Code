@@ -41,7 +41,7 @@ async function cli(
   });
 }
 
-test("guided root invocation creates a review draft and exits NEEDS_INPUT", async () => {
+test("guided subcommand creates a review draft and exits NEEDS_INPUT", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-guided-"));
   try {
     await put(root, "package.json", JSON.stringify({
@@ -52,13 +52,40 @@ test("guided root invocation creates a review draft and exits NEEDS_INPUT", asyn
     await put(root, "src/main.tsx", "export function App() { return null; }\n");
     await put(root, "feature.human", "Add a status component.\n");
 
-    const result = await cli([root, "--json"]);
+    const result = await cli(["guided", root, "--json"]);
     assert.equal(result.code, 3, result.stderr || result.stdout);
     const value = JSON.parse(result.stdout) as { status: string; contract: string; draft: { unresolvedQuestions: unknown[] } };
     assert.equal(value.status, "NEEDS_INPUT");
     assert.equal(value.contract, join(root, "feature.strict.human.json"));
     assert.equal(value.draft.unresolvedQuestions.length, 1);
     await access(value.contract);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("default convert flow lists .human files and @human markers without contacting a provider", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-convert-"));
+  try {
+    await put(root, "add.human", "Write a function that adds two numbers.\n");
+    await put(root, "math.ts", "// @human Write a function that multiplies two numbers.\n\nmultiply(1, 2);\n");
+
+    const result = await cli([root, "--json"]);
+    assert.equal(result.code, 3, result.stderr || result.stdout);
+    const plan = JSON.parse(result.stdout) as {
+      status: string; language: string; provider: string; requests: number;
+      units: Array<{ kind: string; source: string; output: string }>;
+    };
+    assert.equal(plan.status, "NEEDS_CONFIRMATION");
+    assert.equal(plan.language, "typescript");
+    assert.equal(plan.provider, "ollama");
+    assert.equal(plan.requests, 2);
+    assert.deepEqual(plan.units, [
+      { kind: "file", source: "add.human", output: "add.ts" },
+      { kind: "inline", source: "math.ts", output: "math.ts" },
+    ]);
+    // No confirmation was given, so nothing is written and no provider is called.
+    await assert.rejects(access(join(root, "add.ts")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

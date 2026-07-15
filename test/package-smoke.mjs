@@ -60,9 +60,9 @@ try {
   const help = execFileSync(cli, ["--help"], { encoding: "utf8" });
   assert.match(help, /human-to-code/);
 
-  // Exercise the actual installed package through the documented npx entry.
-  // The review gate exits before provider or sandbox access, keeping this smoke
-  // test deterministic, offline, and representative of `npx human-to-code .`.
+  // Exercise the installed package through the documented npx entry. The default
+  // flow is the simple .human -> code converter; without -y it prints an offline
+  // plan (no provider contact), keeping this smoke deterministic.
   const guidedRoot = join(installRoot, "guided-project");
   mkdirSync(join(guidedRoot, "src"), { recursive: true });
   writeFileSync(join(guidedRoot, "package.json"), JSON.stringify({
@@ -72,22 +72,29 @@ try {
   }));
   writeFileSync(join(guidedRoot, "src", "main.tsx"), "export function App() { return null; }\n");
   writeFileSync(join(guidedRoot, "feature.human"), "Add a status component.\n");
-  const guided = spawnSync(
+
+  const converted = spawnSync(
     npx,
     ["--no-install", "human-to-code", guidedRoot, "--json"],
-    {
-      cwd: installRoot,
-      encoding: "utf8",
-      env: { ...process.env, npm_config_offline: "true" },
-    },
+    { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
+  );
+  assert.equal(converted.status, 3, converted.stderr || converted.stdout);
+  const plan = JSON.parse(converted.stdout);
+  assert.equal(plan.status, "NEEDS_CONFIRMATION");
+  assert.equal(plan.provider, "ollama");
+  assert.equal(plan.requests, 1);
+  assert.deepEqual(plan.units, [{ kind: "file", source: "feature.human", output: "feature.ts" }]);
+
+  // The reviewed/validated pipeline is still available under `guided`.
+  const guided = spawnSync(
+    npx,
+    ["--no-install", "human-to-code", "guided", guidedRoot, "--json"],
+    { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
   );
   assert.equal(guided.status, 3, guided.stderr || guided.stdout);
   const guidedOutcome = JSON.parse(guided.stdout);
   assert.equal(guidedOutcome.status, "NEEDS_INPUT");
-  assert.equal(
-    guidedOutcome.contract,
-    join(guidedRoot, "feature.strict.human.json"),
-  );
+  assert.equal(guidedOutcome.contract, join(guidedRoot, "feature.strict.human.json"));
   assert.equal(existsSync(guidedOutcome.contract), true);
 } finally {
   rmSync(installRoot, { recursive: true, force: true });

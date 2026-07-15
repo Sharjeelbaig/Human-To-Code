@@ -30,6 +30,13 @@ import {
 import { ProviderError, type ProviderAdapter } from "./provider.ts";
 import { createOllamaProvider, createOpenAIProvider } from "./providers.ts";
 import { RunStore } from "./run-store.ts";
+import {
+  applyUnit,
+  discoverUnits,
+  generateCode,
+  renderReceipt,
+  type ConversionUnit,
+} from "./simple.ts";
 import type { ProviderName, SourceFile } from "./types.ts";
 import {
   applyVerifiedRun,
@@ -44,7 +51,9 @@ import {
 const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
 
 Usage:
-  human-to-code [root]                         Guided analyze/plan/generate/validate flow
+  human-to-code [root] [-y]                    Convert .human files and @human markers to code (default)
+  human-to-code build [root] [-y]              Alias of the default convert flow
+  human-to-code guided [root]                  Reviewed/grounded/validated compiler pipeline
   human-to-code analyze [root] [--json]
   human-to-code plan <file.human> [--root <root>]
   human-to-code context <contract> --explain [--offline] [--json]
@@ -72,6 +81,7 @@ Other options:
   --offline                      Use cached/local documentation only
   --explain                      Show outbound context provenance and exact selected content
   --json                         Machine-readable output
+  -y, --yes                      Skip the confirmation prompt and write files
   --dry-run                      Analyze and preview only; perform no generation
   --manual-passed                Explicitly attest all reviewed manual acceptance checks
   --sandbox-image <image>        Trusted image reference that must already exist locally
@@ -88,7 +98,7 @@ Exit codes:
   6 internal error or partial scan
 `;
 
-const COMMANDS = new Set(["analyze", "plan", "context", "generate", "validate", "apply", "rollback", "check", "migrate-config"]);
+const COMMANDS = new Set(["build", "convert", "guided", "analyze", "plan", "context", "generate", "validate", "apply", "rollback", "check", "migrate-config"]);
 const PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama", "grok", "gemini"];
 
 interface CliOptions {
@@ -99,6 +109,7 @@ interface CliOptions {
   dryRun: boolean;
   manualPassed: boolean;
   trustCustomEndpoint: boolean;
+  yes: boolean;
   init: boolean;
   help: boolean;
   root?: string;
@@ -126,6 +137,7 @@ function parse(argv: string[]): CliOptions {
       "dry-run": { type: "boolean", default: false },
       "manual-passed": { type: "boolean", default: false },
       "trust-custom-endpoint": { type: "boolean", default: false },
+      yes: { type: "boolean", short: "y", default: false },
       init: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       root: { type: "string" },
@@ -149,6 +161,7 @@ function parse(argv: string[]): CliOptions {
     dryRun: values["dry-run"] === true,
     manualPassed: values["manual-passed"] === true,
     trustCustomEndpoint: values["trust-custom-endpoint"] === true,
+    yes: values.yes === true,
     init: values.init === true,
     help: values.help === true,
     ...(typeof values.root === "string" ? { root: values.root } : {}),
@@ -439,6 +452,96 @@ async function migrateConfigCommand(cli: CliOptions, rootInput?: string): Promis
   return 0;
 }
 
+async function confirmYes(promptText: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(promptText)).trim().toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Simple `.human`/`@human` -> code flow: discover units, show a receipt, and on
+ * confirmation write real code files. This is the default `human-to-code .`
+ * behavior; the reviewed/validated pipeline is available under `guided`.
+ */
+async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number> {
+  const root = resolve(cli.root ?? rootInput ?? ".");
+  const { config } = await loadConfig(root);
+  const effective = overrideConfig(config, cli);
+  const language = effective.language;
+  const providerName = effective.provider.name;
+  const model = effective.provider.model;
+  const units = await discoverUnits(root, language);
+
+  if (cli.json) {
+    const plan = {
+      status: units.length === 0 ? "NEEDS_INPUT" : cli.yes ? "GENERATING" : "NEEDS_CONFIRMATION",
+      language,
+      provider: providerName,
+      model,
+      requests: units.length,
+      units: units.map((unit) => ({ kind: unit.kind, source: unit.sourcePath, output: unit.outputPath ?? unit.sourcePath })),
+    };
+    if (!cli.yes || units.length === 0) {
+      output(plan, true);
+      return units.length === 0 ? 3 : cli.yes ? 0 : 3;
+    }
+  } else {
+    output(renderReceipt(units, providerName, model, language), false);
+  }
+  if (units.length === 0) return 3;
+  if (cli.dryRun) {
+    if (!cli.json) output("\nDry run: no code was generated.", false);
+    return 0;
+  }
+  const proceed = cli.yes || await confirmYes("\nGenerate and write these files? [y/N] ");
+  if (!proceed) {
+    output(cli.json ? { status: "ABORTED" } : "Aborted. No files were written.", cli.json);
+    return 3;
+  }
+
+  const baseUrl = effective.provider.baseUrl;
+  const apiKey = providerName === "openai"
+    ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
+    : undefined;
+  // Inline markers are applied by descending character offset so that rewriting
+  // a later marker never invalidates the range of an earlier one in the same file.
+  const ordered = [...units].sort((left, right) => {
+    if (left.kind !== right.kind) return left.kind === "file" ? -1 : 1;
+    return (right.range?.start ?? 0) - (left.range?.start ?? 0);
+  });
+  const written: string[] = [];
+  for (const unit of ordered) {
+    let code: string;
+    try {
+      code = await generateCode(unit.prompt, {
+        language,
+        provider: providerName,
+        model,
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(apiKey ? { apiKey } : {}),
+      });
+    } catch (error) {
+      output(cli.json ? { status: "FAILED", source: unit.sourcePath, error: String(error) } : `\nProvider error for ${unit.sourcePath}: ${error instanceof Error ? error.message : String(error)}`, cli.json);
+      return 5;
+    }
+    if (code.trim().length === 0) {
+      if (!cli.json) output(`  ! empty model output for ${unit.sourcePath}; skipped`, false);
+      continue;
+    }
+    const path = await applyUnit(root, unit, code);
+    written.push(path);
+    if (!cli.json) output(`  ✓ wrote ${path}`, false);
+  }
+  output(cli.json ? { status: "DONE", written } : `\nDone. ${written.length} file(s) written.`, cli.json);
+  return 0;
+}
+
 async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
   const root = resolve(cli.root ?? rootInput ?? ".");
   const { profile, config: loadedConfig } = await safeProject(root);
@@ -549,7 +652,9 @@ export async function run(argv: string[]): Promise<number> {
     }
     if (command === "check") return checkCommand(cli, args[0]);
     if (command === "migrate-config") return migrateConfigCommand(cli, args[0]);
-    return guided(cli, args[0]);
+    if (command === "guided") return guided(cli, args[0]);
+    if (command === "build" || command === "convert") return buildCommand(cli, args[0]);
+    return buildCommand(cli, args[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof ContextSecurityError) {
