@@ -4,3 +4,4 @@ dist/
 # Never commit natural-language secrets. human-to-code also refuses to run
 # if this file is git-tracked (see src/discovery.ts).
 secrets.human
+prompt.txt
