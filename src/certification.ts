@@ -110,7 +110,7 @@ export function validateCertificationEvidenceV1(value: unknown): CertificationEv
     throw new Error("Certification evidence supportMatrixVersion must be a non-empty string.");
   }
   if (record.ecosystem !== "react" && record.ecosystem !== "nestjs"
-    && record.ecosystem !== "fastapi" && record.ecosystem !== "rust") {
+    && record.ecosystem !== "fastapi" && record.ecosystem !== "rust" && record.ecosystem !== "general") {
     throw new Error("Certification evidence ecosystem is not a recognized ecosystem.");
   }
   if (typeof record.matrixKey !== "string" || record.matrixKey.length === 0) {

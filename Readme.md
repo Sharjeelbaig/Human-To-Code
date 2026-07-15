@@ -34,6 +34,8 @@ This is not a universal deterministic source-to-source compiler. The LLM writes 
 
 The shipped React, NestJS, FastAPI, and Rust profiles are currently `preview` (CRA is `legacy`), and no provider/model certification benchmark entry is enabled by the CLI. Therefore generated runs in this release cannot honestly become `VERIFIED`; even a clean strong-sandbox validation remains `INCONCLUSIVE`, and `apply` (therefore `rollback`) stays unreachable through a normal preview CLI run. This fail-closed behavior is intentional.
 
+When no framework is recognized, the guided flow falls back to an ungrounded **`general`** preview workspace whose language comes from `human-to-code.config.json` (`language`, default `typescript`). General generation exists so a bare `.human` request against an unrecognized project still yields a reviewable patch instead of a hard `UNSUPPORTED` stop — but it is the lowest-trust path the tool offers: API grounding is skipped (there is no dependency evidence to prove), no toolchain is assumed, and every general run is pinned to `INCONCLUSIVE`, never `VERIFIED` and never auto-applied. Standalone `analyze` stays pure recognition and does not emit the general fallback. Provide a recognized project to get grounded, sandbox-validated output.
+
 “Works in any project” means that analysis succeeds inside an explicitly declared capability and refuses ambiguous or unsupported cases. It does not mean that model confidence turns an unknown framework, version, environment, or toolchain into a supported one.
 
 ## Quick start

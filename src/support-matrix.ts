@@ -147,6 +147,18 @@ const SUPPORT_MATRIX_VALUE: readonly SupportMatrixEntry[] = [
     capabilities: ["workspace-members", "features", "targets", "toolchain"],
     limitations: ["cargo metadata is deferred to sandboxed validation"],
   },
+  {
+    key: "general.code",
+    ecosystem: "general",
+    variant: "general-code",
+    versions: "Language-directed general generation (operator-declared language)",
+    tier: "preview",
+    capabilities: ["language-directed-generation"],
+    limitations: [
+      "ungrounded: no dependency/API evidence is proven",
+      "unvalidated: no toolchain is assumed, so runs stay INCONCLUSIVE and are never auto-applied",
+    ],
+  },
 ] as const;
 
 /** Runtime-immutable: consumers cannot promote preview entries by mutation. */

@@ -615,6 +615,11 @@ function assertExternalApisGrounded(
   workspaces: readonly WorkspaceProfileV1[],
   manifest: ContextManifestV1,
 ): void {
+  // The ungrounded `general` fallback advertises no dependency evidence, so there
+  // is nothing to ground against. Grounding is intentionally skipped for it; the
+  // run is confined to INCONCLUSIVE and is never applied, so no unproven API can
+  // reach a validated/applied state through this path.
+  if (workspaces.length > 0 && workspaces.every((workspace) => workspace.ecosystem === "general")) return;
   const aliases = workspaces.flatMap((workspace) => Object.keys(workspace.moduleAliases));
   const workspacePackages = new Set(workspaces.flatMap((workspace) => workspace.workspaceDependencies));
   const dependencies = new Map<string, string>();
@@ -770,8 +775,15 @@ export async function generateRun(input: GenerateRunOptions): Promise<WorkflowOu
     if (options.profile.status !== "SUPPORTED") throw new Error(`Project profile status is ${options.profile.status}.`);
     if (contract.projectFingerprint !== options.profile.fingerprint) throw new Error("Contract profile fingerprint is stale.");
     const workspaces = targetWorkspaces(options.profile, contract);
-    const validationPlan = createValidationPlan(options.profile, contract);
-    if (validationPlan.commands.length === 0) throw new Error("No required project validation command could be selected before generation.");
+    // The strict pipeline refuses to generate what it cannot validate. The
+    // ungrounded `general` fallback is the sole, explicitly-degraded exception:
+    // it has no toolchain to validate against, produces a reviewable patch, and
+    // is pinned to INCONCLUSIVE for the life of the run (never VERIFIED/applied).
+    const generalRun = workspaces.length > 0 && workspaces.every((workspace) => workspace.ecosystem === "general");
+    const validationPlan = generalRun ? undefined : createValidationPlan(options.profile, contract);
+    if (!generalRun && (validationPlan === undefined || validationPlan.commands.length === 0)) {
+      throw new Error("No required project validation command could be selected before generation.");
+    }
     baseline = await createWorkspaceSnapshot(root, { excludeNames: [".venv", "venv", "target", ".next", "coverage"] });
     let manifest = await buildContextPreview(
       root,
@@ -786,7 +798,7 @@ export async function generateRun(input: GenerateRunOptions): Promise<WorkflowOu
     await store.writeArtifact(runId, "profile.json", options.profile);
     await store.writeArtifact(runId, "run-config.json", options.config);
     await store.writeArtifact(runId, "contract.json", contract);
-    await store.writeArtifact(runId, "validation-plan.json", validationPlan);
+    if (validationPlan) await store.writeArtifact(runId, "validation-plan.json", validationPlan);
     await store.writeArtifact(runId, "context.json", manifest);
 
     if (options.provider.capabilities.remote && !options.config.privacy.remoteProviderConsent) {

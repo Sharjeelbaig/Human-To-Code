@@ -21,6 +21,7 @@ import {
   fingerprint,
   scanProject,
 } from "./analyzer-utils.ts";
+import { buildGeneralWorkspace } from "./adapters/general.ts";
 import { nodeEcosystemAdapter } from "./adapters/node.ts";
 import { fastApiEcosystemAdapter } from "./adapters/python.ts";
 import { rustEcosystemAdapter } from "./adapters/rust.ts";
@@ -92,6 +93,13 @@ export async function analyzeProject(
   const workspaces = adapterResults
     .flat()
     .sort((left, right) => left.id.localeCompare(right.id));
+  // Ungrounded general fallback: only when no framework was recognized, no scan
+  // was truncated, and the operator declared a language for general generation.
+  const partialScan = analyzerDiagnostics.some((item) => item.severity === "partial-scan")
+    || workspaces.some((workspace) => workspace.diagnostics.some((item) => item.severity === "partial-scan"));
+  if (workspaces.length === 0 && !partialScan && options.generalLanguage) {
+    workspaces.push(buildGeneralWorkspace(context, options.generalLanguage));
+  }
   const diagnostics = uniqueDiagnostics([
     ...analyzerDiagnostics,
     ...workspaces.flatMap((workspace) => workspace.diagnostics),

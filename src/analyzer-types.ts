@@ -7,7 +7,7 @@
 
 export const PROJECT_PROFILE_SCHEMA_VERSION = "1" as const;
 
-export type Ecosystem = "react" | "nestjs" | "fastapi" | "rust";
+export type Ecosystem = "react" | "nestjs" | "fastapi" | "rust" | "general";
 
 export type ProjectAnalysisStatus =
   | "SUPPORTED"
@@ -167,6 +167,14 @@ export interface AnalyzerOptions {
   maxDirectories?: number;
   maxFiles?: number;
   maxTextFileBytes?: number;
+  /**
+   * Optional operator-declared language for the ungrounded `general` fallback.
+   * The analyzer stays config-independent; this is a plain hint threaded in from
+   * `human-to-code.config.json` so that a project with no recognizable framework
+   * can still emit a single low-trust `general` workspace instead of UNSUPPORTED.
+   * The fallback is used only when no framework adapter recognized a workspace.
+   */
+  generalLanguage?: string;
 }
 
 /** A safe inventory passed to ecosystem adapters. */

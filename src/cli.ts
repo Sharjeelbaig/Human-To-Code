@@ -286,7 +286,11 @@ function providerFor(config: ConfigV1): ProviderAdapter {
 }
 
 async function safeProject(root: string): Promise<{ profile: ProjectProfileV1; config: ConfigV1; fromFile: boolean }> {
-  const [{ config, fromFile }, profile] = await Promise.all([loadConfig(root), analyzeProject(root)]);
+  // Load config first so its declared language can seed the ungrounded `general`
+  // fallback when no framework is recognized. Standalone `analyze` deliberately
+  // stays pure recognition and does not pass this hint.
+  const { config, fromFile } = await loadConfig(root);
+  const profile = await analyzeProject(root, { generalLanguage: config.language });
   return { profile, config, fromFile };
 }
 
