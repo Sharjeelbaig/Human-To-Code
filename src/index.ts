@@ -10,6 +10,7 @@ export type {
   DiscoveryResult,
 } from "./types.ts";
 
+export * from "./certification.ts";
 export * from "./config.ts";
 export * from "./discovery.ts";
 export * from "./contracts.ts";

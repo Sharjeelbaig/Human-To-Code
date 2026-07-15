@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, lstat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import { analyzeProject, SUPPORT_MATRIX_VERSION, type ProjectProfileV1, type WorkspaceProfileV1 } from "./analyzer.ts";
+import { evaluateProviderCertification, providerProfileId } from "./certification.ts";
 import { CompilerToolExecutor } from "./compiler-tools.ts";
 import { skillsForEcosystems } from "./compiler-skills.ts";
 import { validateConfig, type ConfigV1 } from "./config.ts";
@@ -130,12 +131,6 @@ export interface ValidateStoredRunOptions {
   /** Deterministic test seam; production always uses the strong-sandbox runner. */
   validationRunner?: typeof validateBaselineAndCandidate;
 }
-
-const DEFAULT_CERTIFICATION: ProviderCertificationV1 = Object.freeze({
-  matrixKey: "provider.preview",
-  certified: false,
-  reason: "No certified provider/model benchmark entry was supplied for this run.",
-});
 
 function workspaceOverride(config: ConfigV1, workspace: WorkspaceProfileV1): ConfigV1["workspaces"][number] | undefined {
   return config.workspaces.find((candidate) => candidate.root === workspace.relativeRoot || candidate.root === workspace.ownership.root);
@@ -680,11 +675,29 @@ function usageSummary(budget: ProviderBudgetTracker): UsageSummaryV1 {
 function certificationFor(
   profile: ProjectProfileV1,
   contract: ChangeContractV1,
-  provider: ProviderCertificationV1,
+  profileId: string,
 ): RunCertificationV1 {
-  const profileCertified = targetWorkspaces(profile, contract).every((workspace) => workspace.support.tier === "certified");
+  // Certification is derived only from re-scored, host-owned benchmark evidence
+  // for this exact provider/model profile. The shipped registry is empty, so a
+  // normal preview run resolves to certified: false and cannot reach VERIFIED.
+  const targets = targetWorkspaces(profile, contract);
+  const certifiedKeys = new Set(evaluateProviderCertification(profileId).certifiedMatrixKeys);
+  const providerCertified = certifiedKeys.size > 0;
+  const uncertified = targets.filter((workspace) => !certifiedKeys.has(workspace.support.matrixKey));
+  const profileCertified = targets.length > 0 && uncertified.length === 0;
+  const provider: ProviderCertificationV1 = {
+    matrixKey: profileId,
+    certified: providerCertified,
+    reason: providerCertified
+      ? `Provider profile ${profileId} has passing certification benchmark evidence.`
+      : `No certified benchmark evidence exists for provider profile ${profileId}.`,
+  };
   const reasons = [
-    ...(profileCertified ? [] : ["At least one target ecosystem profile has not passed the certification benchmark."]),
+    ...(profileCertified ? [] : [
+      uncertified.length === targets.length
+        ? "No target ecosystem has passed the certification benchmark for this provider/model."
+        : `These target ecosystems lack certification evidence for this provider/model: ${uncertified.map((workspace) => workspace.support.matrixKey).join(", ")}.`,
+    ]),
     ...(provider.certified ? [] : [provider.reason]),
   ];
   return {
@@ -860,9 +873,14 @@ export async function generateRun(input: GenerateRunOptions): Promise<WorkflowOu
       resolvedModel: result.resolvedModelId,
       requestIds,
     };
-    // Certification is resolved exclusively from shipped, immutable evidence.
-    // Programmatic callers cannot self-attest a provider/model as certified.
-    const certification = certificationFor(options.profile, contract, DEFAULT_CERTIFICATION);
+    // Certification is resolved exclusively from shipped, immutable evidence
+    // bound to this exact provider/model profile. Programmatic callers cannot
+    // self-attest a provider/model as certified.
+    const certification = certificationFor(
+      options.profile,
+      contract,
+      providerProfileId(providerIdentity.name, providerIdentity.resolvedModel),
+    );
     await store.writeArtifact(runId, "context.json", manifest);
     await store.writeArtifact(runId, "patch.json", patch);
     await store.writeArtifact(runId, "diff.json", { diff });
