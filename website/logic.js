@@ -133,148 +133,18 @@
     }
   }
 
-  /* ---------------- playground ---------------- */
-  // A faithful browser port of the module's direct path (`generateCode` and
-  // `stripCodeFence` in src/pipeline/simple.ts): one request, code-only
-  // system contract, temperature 0, fences stripped. The key lives in this
-  // closure only — never persisted, sent only to the selected provider.
-  const LANGUAGE_LABELS = {
-    typescript: "TypeScript", javascript: "JavaScript", python: "Python",
-    rust: "Rust", go: "Go", java: "Java", ruby: "Ruby", csharp: "C#",
-    cpp: "C++", c: "C",
-  };
-  const DEFAULT_MODELS = {
-    "openai": "gpt-4o-mini",
-    "ollama-cloud": "gpt-oss:120b-cloud",
-    "ollama-local": "qwen2.5-coder:7b",
-  };
-
-  const stripCodeFence = (output) => {
-    const trimmed = output.trim();
-    const fenced = /^```[^\n]*\n([\s\S]*?)\n```$/u.exec(trimmed);
-    return fenced ? fenced[1].trim() : trimmed;
-  };
-
-  const generateCode = async (prompt, { provider, model, apiKey, language, signal }) => {
-    const label = LANGUAGE_LABELS[language] ?? language;
-    const system = [
-      `You are a precise ${label} code generator.`,
-      `Convert the user's instruction into correct, self-contained ${label} code.`,
-      "Output ONLY code. No explanations, no comments describing what you did, no markdown fences.",
-    ].join(" ");
-    const messages = [
-      { role: "system", content: system },
-      { role: "user", content: prompt },
-    ];
-
-    if (provider === "openai") {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages, temperature: 0 }),
-        signal,
-      });
-      if (!response.ok) throw new Error(`OpenAI request failed: ${response.status} ${await response.text()}`);
-      const data = await response.json();
-      return stripCodeFence(data.choices?.[0]?.message?.content ?? "");
-    }
-
-    const base = provider === "ollama-cloud" ? "https://ollama.com" : "http://localhost:11434";
-    const response = await fetch(`${base}/api/chat`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(provider === "ollama-cloud" ? { authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({ model, stream: false, options: { temperature: 0 }, messages }),
-      signal,
+/* ---------------- examples tabs ---------------- */
+  const exTabs = document.querySelectorAll(".ex-tab");
+  const exPanels = document.querySelectorAll(".ex-panel");
+  exTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.tab;
+      exTabs.forEach((t) => t.classList.remove("active"));
+      exPanels.forEach((p) => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById(`ex-${target}`)?.classList.add("active");
     });
-    if (!response.ok) throw new Error(`Ollama request failed: ${response.status} ${await response.text()}`);
-    const data = await response.json();
-    return stripCodeFence(data.message?.content ?? "");
-  };
-
-  const pgForm = document.getElementById("pgForm");
-  if (pgForm) {
-    const providerEl = document.getElementById("pgProvider");
-    const modelEl = document.getElementById("pgModel");
-    const keyField = document.getElementById("pgKeyField");
-    const keyEl = document.getElementById("pgKey");
-    const langEl = document.getElementById("pgLanguage");
-    const promptEl = document.getElementById("pgPrompt");
-    const runBtn = document.getElementById("pgRun");
-    const statusEl = document.getElementById("pgStatus");
-    const outWrap = document.getElementById("pgOutWrap");
-    const outEl = document.getElementById("pgOut");
-    const copyBtnPg = document.getElementById("pgCopy");
-
-    const setStatus = (text, isError) => {
-      statusEl.textContent = text;
-      statusEl.classList.toggle("error", Boolean(isError));
-    };
-
-    providerEl.addEventListener("change", () => {
-      const provider = providerEl.value;
-      keyField.hidden = provider === "ollama-local";
-      // only swap the model if the user hasn't customized it
-      if (Object.values(DEFAULT_MODELS).includes(modelEl.value.trim()) || modelEl.value.trim() === "") {
-        modelEl.value = DEFAULT_MODELS[provider];
-      }
-      setStatus(provider === "ollama-local"
-        ? "Local Ollama needs CORS: start it with OLLAMA_ORIGINS=* (key not required)."
-        : "");
-    });
-
-    pgForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const provider = providerEl.value;
-      const apiKey = keyEl.value.trim();
-      if (provider !== "ollama-local" && apiKey === "") {
-        setStatus("An API key is required for this provider.", true);
-        keyEl.focus();
-        return;
-      }
-      runBtn.disabled = true;
-      setStatus("Generating…");
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000);
-      try {
-        const code = await generateCode(promptEl.value.trim(), {
-          provider,
-          model: modelEl.value.trim(),
-          apiKey,
-          language: langEl.value,
-          signal: controller.signal,
-        });
-        if (code.length === 0) {
-          setStatus("The model returned empty output.", true);
-        } else {
-          outEl.textContent = code;
-          outWrap.hidden = false;
-          setStatus("Done — 1 request.");
-        }
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        setStatus(
-          detail.includes("Failed to fetch")
-            ? `Request blocked or unreachable (network/CORS). ${provider === "ollama-local" ? "Is Ollama running with OLLAMA_ORIGINS set?" : "Check your network."}`
-            : detail.slice(0, 300),
-          true,
-        );
-      } finally {
-        clearTimeout(timeout);
-        runBtn.disabled = false;
-      }
-    });
-
-    copyBtnPg?.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(outEl.textContent ?? "");
-        copyBtnPg.textContent = "Copied!";
-        setTimeout(() => { copyBtnPg.textContent = "Copy"; }, 1200);
-      } catch { /* ignore */ }
-    });
-  }
+  });
 
   /* ---------------- scroll reveal ---------------- */
   const revealed = document.querySelectorAll(".reveal");

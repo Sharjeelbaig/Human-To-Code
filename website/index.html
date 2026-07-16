@@ -49,7 +49,6 @@
       <ul class="nav-links">
         <li><a href="#docs">Docs</a></li>
         <li><a href="#examples">Examples</a></li>
-        <li><a href="#playground">Playground</a></li>
         <li><a href="https://github.com/sharjeelbaig/human-to-code" target="_blank" rel="noopener">GitHub <span class="ext" aria-hidden="true">↗</span></a></li>
       </ul>
 
@@ -96,17 +95,17 @@
           <circle cx="120" cy="250" r="220" fill="url(#wireHaze)"/>
           <circle cx="240" cy="470" r="260" fill="url(#wireHaze)"/>
 
-          <!-- the strands: fan in from (and beyond) the left edge, merge at ~x=340 -->
+          <!-- the strands: fan in from (and beyond) the left edge, merge at ~x=620 where the pill sits -->
           <g class="wire-set" stroke="var(--wire)" stroke-width="1.6" stroke-linecap="round">
-            <path id="w1" d="M -60 -120 C 120 -40, 235 396, 350 400 L 1400 400"/>
-            <path id="w2" d="M -60 40   C 130 90,  225 397, 345 400 L 1400 400"/>
-            <path id="w3" d="M -60 170  C 140 200, 215 398, 340 400 L 1400 400"/>
-            <path id="w4" d="M -60 300  C 150 320, 205 399, 335 400 L 1400 400"/>
-            <path id="w5" d="M -60 400  C 150 400, 200 400, 330 400 L 1400 400"/>
-            <path id="w6" d="M -60 500  C 150 480, 205 401, 335 400 L 1400 400"/>
-            <path id="w7" d="M -60 630  C 140 600, 215 402, 340 400 L 1400 400"/>
-            <path id="w8" d="M -60 760  C 130 710, 225 403, 345 400 L 1400 400"/>
-            <path id="w9" d="M -60 920  C 120 840, 235 404, 350 400 L 1400 400"/>
+            <path id="w1" d="M -60 -120 C 160 -40, 380 360, 620 400 L 1400 400"/>
+            <path id="w2" d="M -60 40   C 170 90,  370 370, 615 400 L 1400 400"/>
+            <path id="w3" d="M -60 170  C 180 200, 360 380, 610 400 L 1400 400"/>
+            <path id="w4" d="M -60 300  C 190 320, 350 390, 605 400 L 1400 400"/>
+            <path id="w5" d="M -60 400  C 190 400, 345 400, 600 400 L 1400 400"/>
+            <path id="w6" d="M -60 500  C 190 480, 350 410, 605 400 L 1400 400"/>
+            <path id="w7" d="M -60 630  C 180 600, 360 420, 610 400 L 1400 400"/>
+            <path id="w8" d="M -60 760  C 170 710, 370 430, 615 400 L 1400 400"/>
+            <path id="w9" d="M -60 920  C 160 840, 380 440, 620 400 L 1400 400"/>
           </g>
 
           <!-- brighter energized cores over a few strands -->
@@ -125,9 +124,9 @@
 
           <!-- nodes on the merged line -->
           <g class="wire-nodes">
-            <circle class="merge-node" cx="340" cy="400" r="7"/>
-            <circle cx="560" cy="400" r="5"/>
-            <circle cx="820" cy="400" r="5"/>
+            <circle class="merge-node" cx="620" cy="400" r="7"/>
+            <circle cx="900" cy="400" r="5"/>
+            <circle cx="1180" cy="400" r="5"/>
           </g>
         </svg>
       </div>
@@ -207,11 +206,25 @@
     <!-- ============ EXAMPLES ============ -->
     <section class="section examples" id="examples" aria-label="Examples">
       <h2 class="section-title reveal">Examples</h2>
-      <p class="section-sub reveal">Two ways to ask, one command: <code>npx human-to-code .</code></p>
+      <p class="section-sub reveal">Three ways to use it — pick the one that fits your workflow.</p>
 
-      <div class="example-grid">
-        <article class="example-card reveal">
-          <h3>1 · A whole <code>.human</code> file</h3>
+      <div class="ex-nav reveal">
+        <button class="ex-tab active" data-tab="file">
+          <span class="ex-num">1</span>
+          <span class="ex-label">Whole <code>.human</code> file</span>
+        </button>
+        <button class="ex-tab" data-tab="inline">
+          <span class="ex-num">2</span>
+          <span class="ex-label">Inline <code>@human</code> marker</span>
+        </button>
+        <button class="ex-tab" data-tab="guided">
+          <span class="ex-num">3</span>
+          <span class="ex-label">Guided pipeline</span>
+        </button>
+      </div>
+
+      <div class="ex-content">
+        <article class="ex-panel active" id="ex-file">
           <p>Write your request in a <code>*.human</code> file; the generated code lands in a sibling file named after it (extension follows your configured language).</p>
           <pre class="code-block"><code><span class="t-cmt"># greet.human</span>
 Write a function that takes a name and returns
@@ -221,8 +234,7 @@ a friendly greeting, with a docstring.
 <span class="t-ok">✓ wrote greet.py</span></code></pre>
         </article>
 
-        <article class="example-card reveal">
-          <h3>2 · An inline <code>@human</code> marker</h3>
+        <article class="ex-panel" id="ex-inline">
           <p>Drop a marker inside an existing source file — <code>// @human …</code>, <code># @human …</code>, <code>/* @human … */</code> or <code>""" @human … """</code>. The marker region is replaced in place with generated code.</p>
           <pre class="code-block"><code><span class="t-cmt">// utils.ts</span>
 <span class="t-marker">// @human</span> debounce helper with cancel()
@@ -231,8 +243,7 @@ a friendly greeting, with a docstring.
 <span class="t-ok">✓ wrote utils.ts</span></code></pre>
         </article>
 
-        <article class="example-card reveal">
-          <h3>3 · The guided pipeline</h3>
+        <article class="ex-panel" id="ex-guided">
           <p>For reviewed, sandbox-validated patches against a recognized React, NestJS, FastAPI, or Rust project, use <code>guided</code>: it drafts a change contract for your review before anything is generated.</p>
           <pre class="code-block"><code><span class="t-cmt">$ npx human-to-code guided .</span>
 Wrote add-health-route.strict.human.json
@@ -242,70 +253,7 @@ separate, explicit step.</code></pre>
         </article>
       </div>
 
-      <p class="section-note reveal">Every generation shows a receipt — files, provider, model — and asks before writing. Nothing is written on <code>--dry-run</code>.</p>
-    </section>
-
-    <!-- ============ PLAYGROUND ============ -->
-    <section class="section playground" id="playground" aria-label="Playground">
-      <h2 class="section-title reveal">Playground</h2>
-      <p class="section-sub reveal">The direct path, in your browser — bring your own OpenAI or Ollama key.</p>
-
-      <form class="pg" id="pgForm">
-        <div class="pg-row">
-          <label class="pg-field">
-            <span class="pg-label">Provider</span>
-            <select id="pgProvider">
-              <option value="openai">OpenAI</option>
-              <option value="ollama-cloud">Ollama Cloud</option>
-              <option value="ollama-local">Ollama (local)</option>
-            </select>
-          </label>
-          <label class="pg-field">
-            <span class="pg-label">Model</span>
-            <input id="pgModel" type="text" value="gpt-4o-mini" autocomplete="off" spellcheck="false" required>
-          </label>
-          <label class="pg-field">
-            <span class="pg-label">Language</span>
-            <select id="pgLanguage">
-              <option value="typescript">TypeScript</option>
-              <option value="javascript">JavaScript</option>
-              <option value="python" selected>Python</option>
-              <option value="rust">Rust</option>
-              <option value="go">Go</option>
-              <option value="java">Java</option>
-              <option value="ruby">Ruby</option>
-              <option value="csharp">C#</option>
-              <option value="cpp">C++</option>
-              <option value="c">C</option>
-            </select>
-          </label>
-        </div>
-
-        <label class="pg-field" id="pgKeyField">
-          <span class="pg-label">API key <em>(stays in this tab — sent only to the provider you chose)</em></span>
-          <input id="pgKey" type="password" placeholder="sk-… / your Ollama Cloud key" autocomplete="off">
-        </label>
-
-        <label class="pg-field">
-          <span class="pg-label"><code># @human</code> request</span>
-          <textarea id="pgPrompt" rows="3" spellcheck="false" required>create a Python function that sorts a list</textarea>
-        </label>
-
-        <div class="pg-actions">
-          <button class="btn btn-primary" id="pgRun" type="submit">Generate <span aria-hidden="true">→</span></button>
-          <span class="pg-status" id="pgStatus" role="status"></span>
-        </div>
-
-        <div class="pg-out-wrap" hidden id="pgOutWrap">
-          <div class="pg-out-bar">
-            <span>output</span>
-            <button class="pg-copy" id="pgCopy" type="button">Copy</button>
-          </div>
-          <pre class="pg-out"><code id="pgOut"></code></pre>
-        </div>
-
-        <p class="pg-note">This mirrors the module's direct path: one request, code-only output, fences stripped — the same prompt contract as <code>generateCode()</code> in <code>src/pipeline/simple.ts</code>. Your key is kept in memory only and never stored. For local Ollama the browser needs CORS enabled: start it with <code>OLLAMA_ORIGINS=*</code> (or this page's origin).</p>
-      </form>
+      <p class="section-note">Every generation shows a receipt — files, provider, model — and asks before writing. Nothing is written on <code>--dry-run</code>.</p>
     </section>
 
     <!-- ============ DOCS ============ -->
