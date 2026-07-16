@@ -31,8 +31,8 @@ import {
   win32,
 } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { PatchOperation, PatchSetV1 } from "./contracts.ts";
-import { hashCanonical, sha256Text, validatePatchSetV1 } from "./contracts.ts";
+import type { PatchOperation, PatchSetV1 } from "../core/contracts.ts";
+import { hashCanonical, sha256Text, validatePatchSetV1 } from "../core/contracts.ts";
 
 const DEFAULT_MAX_OPERATIONS = 200;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;

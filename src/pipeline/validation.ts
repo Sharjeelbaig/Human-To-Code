@@ -9,8 +9,8 @@ import type {
   ValidationCommandV1,
   ValidationPlanV1,
   ValidationReportV1,
-} from "./contracts.ts";
-import { scanSecrets } from "./context.ts";
+} from "../core/contracts.ts";
+import { scanSecrets } from "../context/context.ts";
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const MIN_TIMEOUT_MS = 1_000;

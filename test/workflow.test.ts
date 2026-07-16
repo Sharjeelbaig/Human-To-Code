@@ -4,9 +4,9 @@ import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "no
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { analyzeProject, type ProjectProfileV1 } from "../src/analyzer.ts";
-import { DEFAULT_CONFIG, type ConfigV1 } from "../src/config.ts";
-import { CompilerToolExecutor } from "../src/compiler-tools.ts";
+import { analyzeProject, type ProjectProfileV1 } from "../src/analysis/analyzer.ts";
+import { DEFAULT_CONFIG, type ConfigV1 } from "../src/config/config.ts";
+import { CompilerToolExecutor } from "../src/context/compiler-tools.ts";
 import {
   hashCanonical,
   sha256Text,
@@ -14,21 +14,21 @@ import {
   type PatchSetV1,
   type RunRecordV1,
   type ValidationReportV1,
-} from "../src/contracts.ts";
-import { hashContextManifest, selectContext } from "../src/context.ts";
+} from "../src/core/contracts.ts";
+import { hashContextManifest, selectContext } from "../src/context/context.ts";
 import type {
   ProviderAdapter,
   ProviderGenerationRequestV1,
   ProviderGenerationResultV1,
-} from "../src/provider.ts";
-import { RunStore } from "../src/run-store.ts";
+} from "../src/providers/provider.ts";
+import { RunStore } from "../src/pipeline/run-store.ts";
 import {
   applyVerifiedRun,
   buildContextPreview,
   generateRun,
   rollbackAppliedRun,
   validateStoredRun,
-} from "../src/workflow.ts";
+} from "../src/pipeline/workflow.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {
   const absolute = join(root, ...path.split("/"));

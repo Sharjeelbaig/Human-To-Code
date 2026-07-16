@@ -397,6 +397,12 @@ Every generated run has exactly one status:
 
 Only `VERIFIED` authorizes automatic application. See [SECURITY.md](SECURITY.md) for the trust model and [CONTRIBUTING.md](CONTRIBUTING.md) for the invariants changes must preserve.
 
+## Codebase documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, pipeline flow, and design decisions.
+- [docs/MODULES.md](docs/MODULES.md) — per-file guide to `src/` and the test map.
+- [docs/SCALABILITY.md](docs/SCALABILITY.md) — layering rules, extension points (new ecosystems, providers, schema versions), and engineering practices.
+
 ## Development checks
 
 ```bash

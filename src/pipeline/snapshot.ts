@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { hashCanonical, sha256Bytes } from "./contracts.ts";
+import { hashCanonical, sha256Bytes } from "../core/contracts.ts";
 
 const ALWAYS_EXCLUDE_NAMES = new Set([
   ".git",

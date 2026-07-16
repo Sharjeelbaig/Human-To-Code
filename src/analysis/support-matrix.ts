@@ -1,3 +1,9 @@
+/**
+ * Declared capability matrix: the exhaustive list of ecosystem/variant/version
+ * profiles this release recognizes and their support tier. Anything outside
+ * this matrix is UNSUPPORTED by definition — support is declared here, never
+ * inferred from analysis confidence.
+ */
 import type { Ecosystem, SupportDecision, SupportTier } from "./analyzer-types.ts";
 
 export interface SupportMatrixEntry {

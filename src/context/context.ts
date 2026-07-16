@@ -11,7 +11,7 @@ import {
   isSafeRelativePath,
   sha256Text,
   type ValidationIssue,
-} from "./contracts.ts";
+} from "../core/contracts.ts";
 
 export type LocalContextOrigin =
   | "project"

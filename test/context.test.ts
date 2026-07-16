@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ArtifactValidationError, sha256Text } from "../src/contracts.ts";
+import { ArtifactValidationError, sha256Text } from "../src/core/contracts.ts";
 import {
   ContextRequestLimitError,
   ContextRequestSession,
@@ -12,7 +12,7 @@ import {
   scanSecrets,
   selectContext,
   validateContextManifestV1,
-} from "../src/context.ts";
+} from "../src/context/context.ts";
 
 async function fixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "h2c-context-"));

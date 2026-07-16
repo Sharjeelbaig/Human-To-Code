@@ -3,8 +3,8 @@ import { mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { RunRecordV1 } from "../src/contracts.ts";
-import { RunStore, RunStoreError } from "../src/run-store.ts";
+import type { RunRecordV1 } from "../src/core/contracts.ts";
+import { RunStore, RunStoreError } from "../src/pipeline/run-store.ts";
 
 function record(runId: string, root: string): RunRecordV1 {
   const timestamp = "2026-07-15T00:00:00.000Z";

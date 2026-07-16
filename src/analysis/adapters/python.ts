@@ -1,3 +1,8 @@
+/**
+ * Python ecosystem adapter: static recognition of FastAPI applications —
+ * environment manager, router/dependency layout, Pydantic, and sync/async
+ * signals — from manifests and source, without importing project modules.
+ */
 import type {
   AnalyzerContext,
   AnalyzerDiagnostic,

@@ -3,22 +3,22 @@ import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { analyzeProject } from "../src/analyzer.ts";
-import { buildGeneralWorkspace, normalizeGeneralLanguage } from "../src/adapters/general.ts";
-import { DEFAULT_CONFIG, type ConfigV1 } from "../src/config.ts";
+import { analyzeProject } from "../src/analysis/analyzer.ts";
+import { buildGeneralWorkspace, normalizeGeneralLanguage } from "../src/analysis/adapters/general.ts";
+import { DEFAULT_CONFIG, type ConfigV1 } from "../src/config/config.ts";
 import {
   hashCanonical,
   sha256Text,
   type ChangeContractV1,
   type PatchSetV1,
-} from "../src/contracts.ts";
+} from "../src/core/contracts.ts";
 import type {
   ProviderAdapter,
   ProviderGenerationRequestV1,
   ProviderGenerationResultV1,
-} from "../src/provider.ts";
-import { RunStore } from "../src/run-store.ts";
-import { generateRun } from "../src/workflow.ts";
+} from "../src/providers/provider.ts";
+import { RunStore } from "../src/pipeline/run-store.ts";
+import { generateRun } from "../src/pipeline/workflow.ts";
 
 class GeneralMockProvider implements ProviderAdapter {
   readonly name = "general-mock";

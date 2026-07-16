@@ -4,11 +4,11 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmod, lstat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
-import { analyzeProject, SUPPORT_MATRIX_VERSION, type ProjectProfileV1, type WorkspaceProfileV1 } from "./analyzer.ts";
-import { evaluateProviderCertification, providerProfileId } from "./certification.ts";
-import { CompilerToolExecutor } from "./compiler-tools.ts";
-import { skillsForEcosystems } from "./compiler-skills.ts";
-import { validateConfig, type ConfigV1 } from "./config.ts";
+import { analyzeProject, SUPPORT_MATRIX_VERSION, type ProjectProfileV1, type WorkspaceProfileV1 } from "../analysis/analyzer.ts";
+import { evaluateProviderCertification, providerProfileId } from "../providers/certification.ts";
+import { CompilerToolExecutor } from "../context/compiler-tools.ts";
+import { skillsForEcosystems } from "../context/compiler-skills.ts";
+import { validateConfig, type ConfigV1 } from "../config/config.ts";
 import {
   canonicalJson,
   hashCanonical,
@@ -26,16 +26,16 @@ import {
   type UsageSummaryV1,
   type ValidationPlanV1,
   type ValidationReportV1,
-} from "./contracts.ts";
+} from "../core/contracts.ts";
 import {
   hashContextManifest,
   selectContext,
   validateContextManifestV1,
   type ContextCandidateV1,
   type ContextManifestV1,
-} from "./context.ts";
+} from "../context/context.ts";
 import { applyPatchAtomic, normalizePatchPath, PatchSafetyError, preparePatch, type PatchPolicy } from "./patch.ts";
-import { DocumentationError, OfficialDocumentationClient } from "./documentation.ts";
+import { DocumentationError, OfficialDocumentationClient } from "../context/documentation.ts";
 import {
   COMPILER_CONTEXT_TOOLS,
   ProviderBudgetTracker,
@@ -45,10 +45,10 @@ import {
   type ProviderAdapter,
   type ProviderGenerationResultV1,
   type ProviderMessageV1,
-} from "./provider.ts";
+} from "../providers/provider.ts";
 import { RunStore } from "./run-store.ts";
-import { PATCH_SET_SCHEMA_V1 } from "./schemas.ts";
-import { ProjectSecretScanError, scanProjectForSecrets } from "./secret-scan.ts";
+import { PATCH_SET_SCHEMA_V1 } from "../providers/schemas.ts";
+import { ProjectSecretScanError, scanProjectForSecrets } from "../security/secret-scan.ts";
 import { cloneWorkspaceSnapshot, createWorkspaceSnapshot, disposeWorkspaceSnapshot, type WorkspaceSnapshot } from "./snapshot.ts";
 import { strongSandboxAvailable, validateBaselineAndCandidate } from "./validation.ts";
 

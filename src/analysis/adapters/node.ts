@@ -1,3 +1,9 @@
+/**
+ * Node.js ecosystem adapter: static recognition of React (Vite, Next, CRA,
+ * libraries, Nx) and NestJS (standalone, Nest CLI monorepo, Nx) workspaces
+ * from manifests, lockfiles, and configuration — without executing project
+ * code — plus their version evidence and candidate validation commands.
+ */
 import { posix } from "node:path";
 import type {
   AnalyzerContext,

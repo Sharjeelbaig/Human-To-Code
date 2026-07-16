@@ -3,20 +3,20 @@ import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
-import type { ProviderConfigV1 } from "../src/config.ts";
+import type { ProviderConfigV1 } from "../src/config/config.ts";
 import {
   generateValidated,
   ProviderError,
   type JsonSchemaV1,
   type ProviderGenerationRequestV1,
-} from "../src/provider.ts";
+} from "../src/providers/provider.ts";
 import {
   OllamaProvider,
   OpenAIResponsesProvider,
   type ProviderFetch,
   type ProviderHostnameResolver,
-} from "../src/providers.ts";
-import { pinnedHttpFetch } from "../src/pinned-http.ts";
+} from "../src/providers/providers.ts";
+import { pinnedHttpFetch } from "../src/security/pinned-http.ts";
 
 const RESPONSE_SCHEMA: JsonSchemaV1 = {
   type: "object",

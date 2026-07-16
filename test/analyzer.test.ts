@@ -3,7 +3,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { analyzeProject } from "../src/analyzer.ts";
+import { analyzeProject } from "../src/analysis/analyzer.ts";
 
 async function fixture(): Promise<string> {
   return mkdtemp(join(tmpdir(), "h2c-analyzer-"));

@@ -16,7 +16,7 @@ import {
   DiscoveryError,
   secretsTrackedError,
   sourceContentHash,
-} from "../src/discovery.ts";
+} from "../src/config/discovery.ts";
 
 async function makeFixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "h2c-disc-"));

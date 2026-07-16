@@ -12,7 +12,7 @@ import {
   loadConfig,
   migrateLegacyConfig,
   validateConfig,
-} from "../src/config.ts";
+} from "../src/config/config.ts";
 
 const V1 = { schemaVersion: CONFIG_SCHEMA_VERSION } as const;
 

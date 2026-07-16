@@ -6,14 +6,14 @@ import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/pr
 import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { pinnedHttpFetch, type PinnedDestination } from "./pinned-http.ts";
+import { pinnedHttpFetch, type PinnedDestination } from "../security/pinned-http.ts";
 import {
   DEFAULT_OFFICIAL_DOCUMENTATION_HOSTS,
   ContextSecurityError,
   scanSecrets,
   type OfficialDocumentationCandidateV1,
 } from "./context.ts";
-import { sha256Bytes, sha256Text } from "./contracts.ts";
+import { sha256Bytes, sha256Text } from "../core/contracts.ts";
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const ABSOLUTE_MAX_BYTES = 8 * 1024 * 1024;

@@ -12,7 +12,7 @@ import { constants as fsConstants, existsSync } from "node:fs";
 import { access, lstat, readFile, readdir } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CONFIG_FILENAME } from "./config.ts";
-import type { DiscoveryResult, SourceFile, SourceKind } from "./types.ts";
+import type { DiscoveryResult, SourceFile, SourceKind } from "../core/types.ts";
 
 const SECRETS_FILENAME = "secrets.human";
 const HUMAN_CONFIG_FILENAME = "config.human";

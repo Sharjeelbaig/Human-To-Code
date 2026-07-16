@@ -8,7 +8,7 @@ import {
   createWorkspaceSnapshot,
   disposeWorkspaceSnapshot,
   type WorkspaceSnapshot,
-} from "../src/snapshot.ts";
+} from "../src/pipeline/snapshot.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {
   const absolute = join(root, ...path.split("/"));

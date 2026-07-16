@@ -48,27 +48,22 @@ The LLM generates structured code edits. It is not a deterministic `strict → c
 
 ## Project layout
 
+Source is organized into layered domain folders; a module may import from its own layer or a layer above it in this table, never below. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency rules and [docs/MODULES.md](docs/MODULES.md) for a per-file guide.
+
 | Path | Responsibility |
 | --- | --- |
-| `src/analyzer.ts`, `src/analyzer-*.ts` | Root validation, bounded inventory, deterministic multi-workspace profiling. |
-| `src/adapters/` | Static React/NestJS, FastAPI/Python, and Cargo/Rust ecosystem adapters. |
-| `src/support-matrix.ts` | Versioned capability declarations and preview/certification tiers. |
-| `src/config.ts` | Strict schema-v1 configuration, endpoint policy, defaults, and alpha migration. |
-| `src/discovery.ts` | Fail-closed `.human` discovery and protected secret-file detection. |
-| `src/contracts.ts`, `src/schemas.ts` | Versioned artifact types, exact validators, canonical serialization, and hashes. |
-| `src/planner.ts` | Conservative `.strict.human.json` draft creation and reviewed-contract loading. |
-| `src/context.ts` | Secret-aware, provenance-bound context selection and validation. |
-| `src/documentation.ts` | Allowlisted, exact-version official-documentation retrieval, cache, and revalidation. |
-| `src/secret-scan.ts` | Fail-closed first-party repository credential scan before provider access. |
-| `src/compiler-skills.ts` | Non-executable ecosystem policy packs supplied to the compiler agent. |
-| `src/compiler-tools.ts` | Bounded read-only context-request executor. |
-| `src/provider.ts` | Provider-neutral schemas, budgets, normalized errors, and retry policy. |
-| `src/providers.ts` | Dependency-free OpenAI Responses and Ollama local/cloud HTTP adapters. |
-| `src/snapshot.ts`, `src/patch.ts` | Immutable snapshots, exact structured edits, atomic writes, and rollback. |
-| `src/validation.ts` | Strong container sandbox and baseline/candidate comparison. |
-| `src/run-store.ts`, `src/workflow.ts` | Secret-gated private artifacts, provenance, generation, validation, apply, and rollback orchestration. |
+| `src/core/` | Shared primitives: `types.ts` public option/result types; `contracts.ts` versioned artifact types, exact validators, canonical serialization, and hashes. |
+| `src/config/` | `config.ts` strict schema-v1 configuration, endpoint policy, defaults, and alpha migration; `discovery.ts` fail-closed `.human` discovery and protected secret-file detection. |
+| `src/analysis/` | `analyzer.ts` and `analyzer-*.ts` root validation, bounded inventory, deterministic multi-workspace profiling; `support-matrix.ts` versioned capability declarations and preview/certification tiers. |
+| `src/analysis/adapters/` | Static React/NestJS, FastAPI/Python, Cargo/Rust, and ungrounded-general ecosystem adapters. |
+| `src/security/` | `secret-scan.ts` fail-closed first-party repository credential scan before provider access; `pinned-http.ts` DNS-vetted, address-pinned HTTPS fetch. |
+| `src/context/` | `context.ts` secret-aware, provenance-bound context selection; `documentation.ts` allowlisted exact-version documentation retrieval, cache, and revalidation; `compiler-skills.ts` non-executable ecosystem policy packs; `compiler-tools.ts` bounded read-only context-request executor. |
+| `src/providers/` | `provider.ts` provider-neutral schemas, budgets, normalized errors, and retry policy; `providers.ts` dependency-free OpenAI Responses and Ollama local/cloud HTTP adapters; `certification.ts` fail-closed provider/model certification gate; `schemas.ts` provider-bound JSON output schemas. |
+| `src/pipeline/` | `planner.ts` conservative `.strict.human.json` drafts and reviewed-contract loading; `snapshot.ts`/`patch.ts` immutable snapshots, exact structured edits, atomic writes, and rollback; `validation.ts` strong container sandbox and baseline/candidate comparison; `run-store.ts`/`workflow.ts` secret-gated private artifacts, provenance, generation, validation, apply, and rollback orchestration; `simple.ts` lightweight direct `.human` generation path. |
+| `src/index.ts` | Stable public embedding API, grouped by layer. |
 | `src/cli.ts` | Guided and explicit command-line interfaces with fixed exit codes. |
 | `test/` | Unit, adversarial, integration, and clean-package smoke tests. |
+| `docs/` | Architecture, module guide, and scalability/engineering practices. |
 
 ## Non-negotiable safety invariants
 

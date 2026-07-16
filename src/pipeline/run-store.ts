@@ -14,8 +14,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { validateRunRecordV1, type RunRecordV1 } from "./contracts.ts";
-import { scanSecrets } from "./context.ts";
+import { validateRunRecordV1, type RunRecordV1 } from "../core/contracts.ts";
+import { scanSecrets } from "../context/context.ts";
 
 const RUN_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 const heldRunLocks = new AsyncLocalStorage<ReadonlySet<string>>();

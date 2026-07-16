@@ -3,15 +3,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { analyzeProject } from "../src/analyzer.ts";
-import { ArtifactValidationError, validateChangeContractV1 } from "../src/contracts.ts";
+import { analyzeProject } from "../src/analysis/analyzer.ts";
+import { ArtifactValidationError, validateChangeContractV1 } from "../src/core/contracts.ts";
 import {
   PlanningError,
   createDraftContract,
   loadReviewedContract,
   writeDraftContract,
-} from "../src/planner.ts";
-import type { SourceFile } from "../src/types.ts";
+} from "../src/pipeline/planner.ts";
+import type { SourceFile } from "../src/core/types.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {
   const absolute = join(root, ...path.split("/"));

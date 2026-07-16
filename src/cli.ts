@@ -6,7 +6,7 @@ import { copyFile, lstat, readFile, rename, rm, writeFile } from "node:fs/promis
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { analyzeProject, type ProjectProfileV1 } from "./analyzer.ts";
+import { analyzeProject, type ProjectProfileV1 } from "./analysis/analyzer.ts";
 import {
   CONFIG_FILENAME,
   ConfigError,
@@ -16,28 +16,28 @@ import {
   migrateLegacyConfig,
   validateConfig,
   type ConfigV1,
-} from "./config.ts";
-import { ContextSecurityError } from "./context.ts";
-import { DocumentationError } from "./documentation.ts";
-import { discover, DiscoveryError, secretsTrackedError } from "./discovery.ts";
+} from "./config/config.ts";
+import { ContextSecurityError } from "./context/context.ts";
+import { DocumentationError } from "./context/documentation.ts";
+import { discover, DiscoveryError, secretsTrackedError } from "./config/discovery.ts";
 import {
   PlanningError,
   contractPathForSource,
   createDraftContract,
   loadReviewedContract,
   writeDraftContract,
-} from "./planner.ts";
-import { ProviderError, type ProviderAdapter } from "./provider.ts";
-import { createOllamaProvider, createOpenAIProvider } from "./providers.ts";
-import { RunStore } from "./run-store.ts";
+} from "./pipeline/planner.ts";
+import { ProviderError, type ProviderAdapter } from "./providers/provider.ts";
+import { createOllamaProvider, createOpenAIProvider } from "./providers/providers.ts";
+import { RunStore } from "./pipeline/run-store.ts";
 import {
   applyUnit,
   discoverUnits,
   generateCode,
   renderReceipt,
   type ConversionUnit,
-} from "./simple.ts";
-import type { ProviderName, SourceFile } from "./types.ts";
+} from "./pipeline/simple.ts";
+import type { ProviderName, SourceFile } from "./core/types.ts";
 import {
   applyVerifiedRun,
   buildContextPreview,
@@ -46,7 +46,7 @@ import {
   rollbackAppliedRun,
   validateStoredRun,
   type WorkflowOutcome,
-} from "./workflow.ts";
+} from "./pipeline/workflow.ts";
 
 const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
 

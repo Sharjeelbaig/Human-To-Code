@@ -3,7 +3,7 @@
 import { constants as fsConstants } from "node:fs";
 import { lstat, open, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import type { ProjectProfileV1, WorkspaceProfileV1 } from "./analyzer-types.ts";
+import type { ProjectProfileV1, WorkspaceProfileV1 } from "../analysis/analyzer-types.ts";
 import {
   hashCanonical,
   sha256Text,
@@ -11,8 +11,8 @@ import {
   type RiskAssessmentV1,
   type RiskCategory,
   validateChangeContractV1,
-} from "./contracts.ts";
-import type { SourceFile } from "./types.ts";
+} from "../core/contracts.ts";
+import type { SourceFile } from "../core/types.ts";
 
 const MAX_HUMAN_BYTES = 512 * 1024;
 const MAX_CONTRACT_BYTES = 2 * 1024 * 1024;

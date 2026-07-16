@@ -1,3 +1,8 @@
+/**
+ * Shared analyzer infrastructure: bounded read-only repository scanning,
+ * hashing, evidence collection, diagnostics, and workspace finalization used
+ * by every ecosystem adapter.
+ */
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";

@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { sha256Text, type PatchSetV1 } from "../src/contracts.ts";
-import { applyPatchAtomic, PatchSafetyError, preparePatch } from "../src/patch.ts";
+import { sha256Text, type PatchSetV1 } from "../src/core/contracts.ts";
+import { applyPatchAtomic, PatchSafetyError, preparePatch } from "../src/pipeline/patch.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {
   const absolute = join(root, ...path.split("/"));

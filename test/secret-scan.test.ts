@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { ProjectSecretScanError, scanProjectForSecrets } from "../src/secret-scan.ts";
+import { ProjectSecretScanError, scanProjectForSecrets } from "../src/security/secret-scan.ts";
 
 test("repository secret scan includes ignored-style first-party paths without exposing values", async () => {
   const root = await mkdtemp(join(tmpdir(), "human-to-code-secret-scan-"));

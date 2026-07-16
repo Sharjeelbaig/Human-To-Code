@@ -5,8 +5,8 @@ import {
   ArtifactValidationError,
   canonicalJson,
   type JsonValue,
-} from "./contracts.ts";
-import { scanSecrets, type ContextRequestV1 } from "./context.ts";
+} from "../core/contracts.ts";
+import { scanSecrets, type ContextRequestV1 } from "../context/context.ts";
 
 export type ProviderOperation = "contract" | "context" | "patch" | "repair";
 export type ProviderMessageRole = "system" | "user" | "assistant" | "tool";

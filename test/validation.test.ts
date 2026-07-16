@@ -3,8 +3,8 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { sha256Text, type ValidationPlanV1 } from "../src/contracts.ts";
-import { ValidationError, validateBaselineAndCandidate } from "../src/validation.ts";
+import { sha256Text, type ValidationPlanV1 } from "../src/core/contracts.ts";
+import { ValidationError, validateBaselineAndCandidate } from "../src/pipeline/validation.ts";
 
 function plan(argv: string[] = ["npm", "run", "test"]): ValidationPlanV1 {
   return {

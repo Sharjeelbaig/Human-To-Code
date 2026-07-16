@@ -2,7 +2,7 @@
 
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ProjectProfileV1, WorkspaceProfileV1 } from "./analyzer-types.ts";
+import type { ProjectProfileV1, WorkspaceProfileV1 } from "../analysis/analyzer-types.ts";
 import {
   ContextRequestSession,
   isProtectedContextPath,

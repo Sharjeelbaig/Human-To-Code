@@ -10,15 +10,15 @@
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { canonicalJson } from "./contracts.ts";
+import { canonicalJson } from "../core/contracts.ts";
 import {
   pinnedHttpFetch,
   type PinnedDestination,
-} from "./pinned-http.ts";
+} from "../security/pinned-http.ts";
 import {
   validateProviderBaseUrl,
   type ProviderConfigV1,
-} from "./config.ts";
+} from "../config/config.ts";
 import {
   conservativeProviderInputTokenUpperBound,
   ProviderError,
@@ -31,7 +31,7 @@ import {
   type ProviderRequestUsageV1,
   type ProviderToolDefinitionV1,
 } from "./provider.ts";
-import type { ProviderPricingV1 } from "./config.ts";
+import type { ProviderPricingV1 } from "../config/config.ts";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434/api";

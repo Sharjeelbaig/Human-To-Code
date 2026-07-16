@@ -16,7 +16,7 @@ import type {
   ProviderConfig,
   ProviderName,
   TargetLanguage,
-} from "./types.ts";
+} from "../core/types.ts";
 
 export const CONFIG_FILENAME = "human-to-code.config.json";
 export const CONFIG_SCHEMA_VERSION = 1 as const;

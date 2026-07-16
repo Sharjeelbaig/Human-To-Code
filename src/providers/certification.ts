@@ -11,8 +11,8 @@
  * VERIFIED stays unreachable, exactly as the preview requires.
  */
 
-import type { Ecosystem } from "./analyzer-types.ts";
-import { SUPPORT_MATRIX, SUPPORT_MATRIX_VERSION } from "./support-matrix.ts";
+import type { Ecosystem } from "../analysis/analyzer-types.ts";
+import { SUPPORT_MATRIX, SUPPORT_MATRIX_VERSION } from "../analysis/support-matrix.ts";
 
 /**
  * Fail-closed thresholds from the reliability contract: a large per-ecosystem

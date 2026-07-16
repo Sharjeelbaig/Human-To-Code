@@ -1,3 +1,8 @@
+/**
+ * Rust ecosystem adapter: static recognition of Cargo crates and workspaces —
+ * edition, toolchain, features, targets, `unsafe`/FFI, build scripts, proc
+ * macros, and native dependencies — without invoking Cargo.
+ */
 import { posix } from "node:path";
 import type {
   AnalyzerContext,

@@ -3,7 +3,7 @@
 import { constants as fsConstants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
-import { scanSecrets, type SecretKind } from "./context.ts";
+import { scanSecrets, type SecretKind } from "../context/context.ts";
 
 const SKIP_DIRECTORIES = new Set(["node_modules", ".venv", "venv", "target", ".git", ".hg", ".svn", ".human-to-code"]);
 

@@ -11,8 +11,8 @@ import {
   type ChangeContractV1,
   type PatchSetV1,
   type RunRecordV1,
-} from "../src/contracts.ts";
-import { RunStore } from "../src/run-store.ts";
+} from "../src/core/contracts.ts";
+import { RunStore } from "../src/pipeline/run-store.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 

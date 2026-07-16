@@ -11,7 +11,7 @@ import {
   validateValidationPlanV1,
   type ChangeContractV1,
   type PatchSetV1,
-} from "../src/contracts.ts";
+} from "../src/core/contracts.ts";
 
 function contract(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

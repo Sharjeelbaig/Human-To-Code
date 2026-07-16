@@ -4,7 +4,7 @@ import {
   ArtifactValidationError,
   sha256Text,
   validateChangeContractV1,
-} from "../src/contracts.ts";
+} from "../src/core/contracts.ts";
 import {
   DeterministicMockProvider,
   ProviderBudgetTracker,
@@ -15,8 +15,8 @@ import {
   type JsonSchemaV1,
   type ProviderAdapter,
   type ProviderGenerationRequestV1,
-} from "../src/provider.ts";
-import { COMPILER_SKILLS } from "../src/compiler-skills.ts";
+} from "../src/providers/provider.ts";
+import { COMPILER_SKILLS } from "../src/context/compiler-skills.ts";
 
 const schema: JsonSchemaV1 = {
   type: "object",
