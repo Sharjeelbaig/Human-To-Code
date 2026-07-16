@@ -34,6 +34,35 @@
     }
   });
 
+  /* ---------------- hero editor language tabs ---------------- */
+  const demoTabs = [...document.querySelectorAll("[data-demo-tab]")];
+  const demoPanels = [...document.querySelectorAll("[data-demo-panel]")];
+  const activateDemo = (language) => {
+    demoTabs.forEach((tab) => {
+      const active = tab.dataset.demoTab === language;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    demoPanels.forEach((panel) => {
+      const active = panel.dataset.demoPanel === language;
+      panel.hidden = !active;
+      panel.classList.toggle("active", active);
+    });
+  };
+
+  demoTabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activateDemo(tab.dataset.demoTab));
+    tab.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const direction = event.key === "ArrowRight" ? 1 : -1;
+      const next = demoTabs[(index + direction + demoTabs.length) % demoTabs.length];
+      activateDemo(next.dataset.demoTab);
+      next.focus();
+    });
+  });
+
   /* ---------------- language marquees ---------------- */
   // Icons come from the devicon CDN; a bubble whose icon fails to load is removed.
   const DEVICON = "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons";

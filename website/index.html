@@ -162,32 +162,218 @@
             </a>
           </div>
 
-          <!-- before/after: an inline @human marker is replaced in place -->
-          <div class="demo reveal">
-            <figure class="term term-in">
-              <figcaption class="term-bar">
-                <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-                <span class="term-title">sort.py <em>(before)</em></span>
-              </figcaption>
-              <pre class="term-body"><code><span class="t-marker"># @human</span> create a Python function that sorts a list</code></pre>
-            </figure>
-
-            <div class="demo-arrow" aria-hidden="true">
-              <svg viewBox="0 0 64 24" width="64" height="24"><path class="arrow-path" d="M2 12 H54 M46 4 L56 12 L46 20" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-
-            <figure class="term term-out">
-              <figcaption class="term-bar">
-                <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-                <span class="term-title">sort.py <em>(after npx human-to-code .)</em></span>
-              </figcaption>
-              <pre class="term-body"><code><span class="t-kw">def</span> <span class="t-fn">sort_list</span>(items):
-    <span class="t-str">"""Return a new sorted list."""</span>
-    <span class="t-kw">return</span> <span class="t-fn">sorted</span>(items)</code></pre>
-              <p class="term-status"><span class="status-dot"></span> marker replaced in place</p>
-            </figure>
-          </div>
         </div>
+
+        <section class="editor-demo reveal" aria-label="Language conversion examples">
+          <div class="editor-tabs" role="tablist" aria-label="Choose an input language">
+            <button class="editor-tab active" id="demo-tab-human" type="button" role="tab" aria-selected="true" aria-controls="demo-human" data-demo-tab="human">
+              <span class="lang-logo lang-logo-human" aria-hidden="true">H</span>
+              <span>Human</span>
+            </button>
+            <button class="editor-tab" id="demo-tab-typescript" type="button" role="tab" aria-selected="false" aria-controls="demo-typescript" data-demo-tab="typescript">
+              <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/typescript/typescript-original.svg" alt="" width="22" height="22">
+              <span>TypeScript</span>
+            </button>
+            <button class="editor-tab" id="demo-tab-javascript" type="button" role="tab" aria-selected="false" aria-controls="demo-javascript" data-demo-tab="javascript">
+              <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/javascript/javascript-original.svg" alt="" width="22" height="22">
+              <span>JavaScript</span>
+            </button>
+            <button class="editor-tab" id="demo-tab-python" type="button" role="tab" aria-selected="false" aria-controls="demo-python" data-demo-tab="python">
+              <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg" alt="" width="22" height="22">
+              <span>Python</span>
+            </button>
+            <button class="editor-tab" id="demo-tab-rust" type="button" role="tab" aria-selected="false" aria-controls="demo-rust" data-demo-tab="rust">
+              <img class="rust-logo" src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/rust/rust-original.svg" alt="" width="22" height="22">
+              <span>Rust</span>
+            </button>
+          </div>
+
+          <div class="demo-panel active" id="demo-human" role="tabpanel" aria-labelledby="demo-tab-human" data-demo-panel="human">
+            <div class="demo">
+              <figure class="term term-in">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><span class="lang-logo lang-logo-human" aria-hidden="true">H</span><span class="term-title">sort.human</span></span>
+                </figcaption>
+                <pre class="term-body"><code>Create a reusable TypeScript function that:
+  - accepts an array of numbers
+  - returns a new sorted array
+  - never mutates the input</code></pre>
+              </figure>
+
+              <div class="demo-arrow" aria-hidden="true">
+                <svg viewBox="0 0 72 28" width="72" height="28"><path class="arrow-path" d="M2 14 H60 M51 5 L62 14 L51 23" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+
+              <figure class="term term-out">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/typescript/typescript-original.svg" alt="" width="18" height="18"><span class="term-title">sort.ts</span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-kw">export function</span> <span class="t-fn">sortNumbers</span>(
+  items: <span class="t-type">number[]</span>,
+): <span class="t-type">number[]</span> {
+  <span class="t-kw">return</span> [...items].<span class="t-fn">sort</span>((a, b) =&gt; a - b);
+}</code></pre>
+                <p class="term-status"><span class="status-dot"></span> generated TypeScript from human intent</p>
+              </figure>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="demo-typescript" role="tabpanel" aria-labelledby="demo-tab-typescript" data-demo-panel="typescript" hidden>
+            <div class="demo">
+              <figure class="term term-in">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/typescript/typescript-original.svg" alt="" width="18" height="18"><span class="term-title">sort.ts <em>(before)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-kw">export type</span> SortOrder = <span class="t-str">"asc"</span> | <span class="t-str">"desc"</span>;
+
+<span class="t-marker">/* @human</span>
+<span class="t-cmt">  Implement sortNumbers with:
+    - immutable output
+    - ascending and descending order</span>
+<span class="t-marker">*/</span></code></pre>
+              </figure>
+
+              <div class="demo-arrow" aria-hidden="true">
+                <svg viewBox="0 0 72 28" width="72" height="28"><path class="arrow-path" d="M2 14 H60 M51 5 L62 14 L51 23" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+
+              <figure class="term term-out">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/typescript/typescript-original.svg" alt="" width="18" height="18"><span class="term-title">sort.ts <em>(after)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-kw">export type</span> SortOrder = <span class="t-str">"asc"</span> | <span class="t-str">"desc"</span>;
+
+<span class="t-kw">export function</span> <span class="t-fn">sortNumbers</span>(items: <span class="t-type">number[]</span>, order: SortOrder) {
+  <span class="t-kw">const</span> sorted = [...items].<span class="t-fn">sort</span>((a, b) =&gt; a - b);
+  <span class="t-kw">return</span> order === <span class="t-str">"desc"</span> ? sorted.<span class="t-fn">reverse</span>() : sorted;
+}</code></pre>
+                <p class="term-status"><span class="status-dot"></span> marker replaced in sort.ts</p>
+              </figure>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="demo-javascript" role="tabpanel" aria-labelledby="demo-tab-javascript" data-demo-panel="javascript" hidden>
+            <div class="demo">
+              <figure class="term term-in">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/javascript/javascript-original.svg" alt="" width="18" height="18"><span class="term-title">sort.js <em>(before)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-marker">/* @human</span>
+<span class="t-cmt">  Create sortBy that:
+    - accepts an array and selector function
+    - returns a new array
+    - keeps the original array unchanged</span>
+<span class="t-marker">*/</span></code></pre>
+              </figure>
+
+              <div class="demo-arrow" aria-hidden="true">
+                <svg viewBox="0 0 72 28" width="72" height="28"><path class="arrow-path" d="M2 14 H60 M51 5 L62 14 L51 23" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+
+              <figure class="term term-out">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/javascript/javascript-original.svg" alt="" width="18" height="18"><span class="term-title">sort.js <em>(after)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-kw">export function</span> <span class="t-fn">sortBy</span>(items, select) {
+  <span class="t-kw">return</span> [...items].<span class="t-fn">sort</span>((a, b) =&gt; {
+    <span class="t-kw">const</span> left = <span class="t-fn">select</span>(a);
+    <span class="t-kw">const</span> right = <span class="t-fn">select</span>(b);
+    <span class="t-kw">return</span> left &lt; right ? -1 : left &gt; right ? 1 : 0;
+  });
+}</code></pre>
+                <p class="term-status"><span class="status-dot"></span> marker replaced in sort.js</p>
+              </figure>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="demo-python" role="tabpanel" aria-labelledby="demo-tab-python" data-demo-panel="python" hidden>
+            <div class="demo">
+              <figure class="term term-in">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg" alt="" width="18" height="18"><span class="term-title">sort.py <em>(before)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-kw">from</span> collections.abc <span class="t-kw">import</span> Iterable
+
+<span class="t-marker">""" @human</span>
+<span class="t-cmt">  Implement sort_numbers:
+    - accept an Iterable of numbers
+    - return a new ascending list
+    - never mutate the input</span>
+<span class="t-marker">"""</span></code></pre>
+              </figure>
+
+              <div class="demo-arrow" aria-hidden="true">
+                <svg viewBox="0 0 72 28" width="72" height="28"><path class="arrow-path" d="M2 14 H60 M51 5 L62 14 L51 23" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+
+              <figure class="term term-out">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg" alt="" width="18" height="18"><span class="term-title">sort.py <em>(after)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-kw">from</span> collections.abc <span class="t-kw">import</span> Iterable
+
+
+<span class="t-kw">def</span> <span class="t-fn">sort_numbers</span>(
+    items: Iterable[<span class="t-type">float</span>],
+) -&gt; list[<span class="t-type">float</span>]:
+    <span class="t-kw">return</span> <span class="t-fn">sorted</span>(items)</code></pre>
+                <p class="term-status"><span class="status-dot"></span> marker replaced in sort.py</p>
+              </figure>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="demo-rust" role="tabpanel" aria-labelledby="demo-tab-rust" data-demo-panel="rust" hidden>
+            <div class="demo">
+              <figure class="term term-in">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img class="rust-logo" src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/rust/rust-original.svg" alt="" width="18" height="18"><span class="term-title">sort.rs <em>(before)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-cmt">#[derive(Clone)]</span>
+<span class="t-kw">pub struct</span> Score {
+  <span class="t-kw">pub</span> value: <span class="t-type">i32</span>,
+}
+
+<span class="t-marker">/* @human</span>
+<span class="t-cmt">  Implement sort_scores:
+    - take a borrowed slice
+    - return a new Vec
+    - sort by value ascending</span>
+<span class="t-marker">*/</span></code></pre>
+              </figure>
+
+              <div class="demo-arrow" aria-hidden="true">
+                <svg viewBox="0 0 72 28" width="72" height="28"><path class="arrow-path" d="M2 14 H60 M51 5 L62 14 L51 23" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+
+              <figure class="term term-out">
+                <figcaption class="term-bar">
+                  <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                  <span class="term-file"><img class="rust-logo" src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/rust/rust-original.svg" alt="" width="18" height="18"><span class="term-title">sort.rs <em>(after)</em></span></span>
+                </figcaption>
+                <pre class="term-body"><code><span class="t-cmt">#[derive(Clone)]</span>
+<span class="t-kw">pub struct</span> Score {
+  <span class="t-kw">pub</span> value: <span class="t-type">i32</span>,
+}
+
+<span class="t-kw">pub fn</span> <span class="t-fn">sort_scores</span>(scores: &amp;[Score]) -&gt; Vec&lt;Score&gt; {
+  <span class="t-kw">let mut</span> sorted = scores.<span class="t-fn">to_vec</span>();
+  sorted.<span class="t-fn">sort_by_key</span>(|score| score.value);
+  sorted
+}</code></pre>
+                <p class="term-status"><span class="status-dot"></span> marker replaced in sort.rs</p>
+              </figure>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -331,7 +517,7 @@ a friendly greeting, with a docstring.
         </article>
 
         <article class="ex-panel" id="ex-inline">
-          <p>Drop a marker inside an existing source file — <code>// @human …</code>, <code># @human …</code>, <code>/* @human … */</code> or <code>""" @human … """</code>. The marker region is replaced in place with generated code.</p>
+          <p>Drop a marker inside an existing source file using its native block syntax — for example, <code>/* @human … */</code> for a multiline TypeScript or JavaScript request and <code>""" @human … """</code> in Python. The marker region is replaced in place with generated code.</p>
           <pre class="code-block"><code><span class="t-cmt">// utils.ts</span>
 <span class="t-marker">// @human</span> debounce helper with cancel()
 
