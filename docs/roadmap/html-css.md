@@ -1,0 +1,47 @@
+# HTML & CSS support plan
+
+## Status today
+Level 2 only: not in `LANGUAGE_PROFILES`. React/Vite workspaces already
+cover most component markup/styling through the existing node adapter; this
+plan is for *static* sites and stylesheet-centric projects.
+
+## Target profile
+- `Ecosystem`: `static-web`.
+- Variant: `static-site` — plain HTML/CSS/vanilla-JS trees (like this
+  repo's `website/`), optionally with a recognized static generator config
+  (Eleventy, Astro static) as a later variant.
+- Signals: `index.html` at a root, no framework manifest claiming the tree.
+
+## Detection signals (static only)
+- `index.html` + sibling `*.css`/`*.js` without `package.json` build
+  tooling; `<link rel="stylesheet">`/`<script src>` graphs (textual);
+  generator configs (`.eleventy.js`, `astro.config.*`) detected but not
+  executed.
+
+## Version evidence
+CDN dependencies (script/link URLs) are recorded as evidence with their
+pinned versions when the URL encodes one; unpinned CDN URLs are flagged —
+the skill pack should push toward pinned or vendored assets.
+
+## Validation plan
+- `["npx", "html-validate", "<files>"]` and `["npx", "stylelint", "<files>"]`
+  style checks with tools preinstalled in the image; link-graph check
+  (internal hrefs resolve) implementable in-process without execution.
+
+## Skill pack
+Semantic landmarks, heading order, alt text, `prefers-reduced-motion` and
+`prefers-color-scheme` support, no inline event handlers, responsive images
+— accessibility is the correctness bar for markup.
+
+## Risks & gates
+Third-party `<script src>` additions are supply-chain-sensitive →
+elevated-risk, must be pinned and contract-authorized. Inline scripts are
+ordinary code and reviewed as such.
+
+## Checklist
+0. Add `html`/`css` to `LANGUAGE_PROFILES` (`.html`, `.css`) for the direct path.
+1. `Ecosystem` union + `analysis/adapters/static-web.ts`.
+2. `static-web/static-site` at `preview`.
+3. Skill pack centred on accessibility conventions.
+4. Tests: framework-owned trees not double-claimed, CDN pin detection, link-graph checks.
+5. Docs updates.

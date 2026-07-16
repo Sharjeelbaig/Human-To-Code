@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>human-to-code — Human Language to Code</title>
+  <meta name="description" content="human-to-code turns reviewed natural-language change requests into validated code patches. Static analysis, grounded context, sandbox validation — write less, ship safer.">
+  <meta name="keywords" content="human-to-code, natural language to code, codegen, llm compiler, code patches">
+  <meta name="author" content="the human-to-code authors">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="canonical" href="https://github.com/sharjeelbaig/human-to-code">
+
+  <!-- Open Graph / Twitter -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="human-to-code — Human Language to Code">
+  <meta property="og:description" content="Turn natural language into reviewed, validated code patches in seconds. Write less. Build more.">
+  <meta property="og:site_name" content="human-to-code">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="human-to-code — Human Language to Code">
+  <meta name="twitter:description" content="Turn natural language into reviewed, validated code patches in seconds.">
+
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111'/%3E%3Ctext x='32' y='42' font-size='28' text-anchor='middle' fill='%23fff' font-family='monospace'%3E%26lt;/%26gt;%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "human-to-code",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Cross-platform (Node.js 24+)",
+    "description": "Safely turn reviewed natural-language change contracts into validated code patches.",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/sharjeelbaig/human-to-code"
+  }
+  </script>
+</head>
+<body>
+
+  <!-- ============ NAV ============ -->
+  <header class="nav-wrap">
+    <nav class="nav" aria-label="Primary">
+      <a class="brand" href="#top" aria-label="human-to-code home">
+        <span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>
+        <span class="brand-name">human-to-code</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#docs">Docs</a></li>
+        <li><a href="#examples">Examples</a></li>
+        <li><a href="#playground">Playground</a></li>
+        <li><a href="https://github.com/sharjeelbaig/human-to-code" target="_blank" rel="noopener">GitHub <span class="ext" aria-hidden="true">↗</span></a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <a class="star-btn" href="https://github.com/sharjeelbaig/human-to-code" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .67.42l1.88 3.8 4.2.61a.75.75 0 0 1 .42 1.28l-3.04 2.96.72 4.18a.75.75 0 0 1-1.09.79L8 12.35l-3.76 1.98a.75.75 0 0 1-1.09-.79l.72-4.18L.83 6.36a.75.75 0 0 1 .42-1.28l4.2-.61L7.33.67A.75.75 0 0 1 8 .25Z"/></svg>
+          <span>Star</span>
+        </a>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
+          <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 3a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1Zm0-19a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V2a1 1 0 0 1 1-1Zm11 11a1 1 0 0 1-1 1h-1a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1ZM4 12a1 1 0 0 1-1 1H2a1 1 0 1 1 0-2h1a1 1 0 0 1 1 1Zm14.95 7.07a1 1 0 0 1-1.41 0l-.71-.7a1 1 0 0 1 1.41-1.42l.71.71a1 1 0 0 1 0 1.41ZM7.17 7.17a1 1 0 0 1-1.41 0l-.71-.7A1 1 0 0 1 6.46 5.05l.71.71a1 1 0 0 1 0 1.41Zm11.78-2.12a1 1 0 0 1 0 1.41l-.71.71a1 1 0 1 1-1.41-1.41l.7-.71a1 1 0 0 1 1.42 0ZM7.17 16.83a1 1 0 0 1 0 1.41l-.7.71a1 1 0 0 1-1.42-1.41l.71-.71a1 1 0 0 1 1.41 0Z"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21.75 14.5A9.75 9.75 0 0 1 9.5 2.25a.75.75 0 0 0-.97-.97A11.25 11.25 0 1 0 22.72 15.47a.75.75 0 0 0-.97-.97Z"/></svg>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- ============ HERO ============ -->
+    <section class="hero" aria-label="Introduction">
+
+      <!-- Full-hero wire art: many thin strands fan in from the left edge and
+           merge tangentially into one line that runs beneath the content.
+           Pinned to the left (xMinYMid slice) so it overflows instead of
+           squashing on narrow screens. -->
+      <div class="wires" aria-hidden="true">
+        <svg class="wires-svg" viewBox="0 0 1400 800" preserveAspectRatio="xMinYMid slice" fill="none">
+          <defs>
+            <linearGradient id="wireGrad" x1="0" y1="0" x2="1400" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="var(--pipe-a)"/>
+              <stop offset=".45" stop-color="var(--pipe-b)"/>
+              <stop offset="1" stop-color="var(--pipe-b)" stop-opacity=".25"/>
+            </linearGradient>
+            <filter id="wireGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <radialGradient id="wireHaze">
+              <stop offset="0" stop-color="var(--pipe-a)" stop-opacity=".28"/>
+              <stop offset="1" stop-color="var(--pipe-a)" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+
+          <!-- soft haze blobs behind the fan -->
+          <circle cx="120" cy="250" r="220" fill="url(#wireHaze)"/>
+          <circle cx="240" cy="470" r="260" fill="url(#wireHaze)"/>
+
+          <!-- the strands: fan in from (and beyond) the left edge, merge at ~x=340 -->
+          <g class="wire-set" stroke="var(--wire)" stroke-width="1.6" stroke-linecap="round">
+            <path id="w1" d="M -60 -120 C 120 -40, 235 396, 350 400 L 1400 400"/>
+            <path id="w2" d="M -60 40   C 130 90,  225 397, 345 400 L 1400 400"/>
+            <path id="w3" d="M -60 170  C 140 200, 215 398, 340 400 L 1400 400"/>
+            <path id="w4" d="M -60 300  C 150 320, 205 399, 335 400 L 1400 400"/>
+            <path id="w5" d="M -60 400  C 150 400, 200 400, 330 400 L 1400 400"/>
+            <path id="w6" d="M -60 500  C 150 480, 205 401, 335 400 L 1400 400"/>
+            <path id="w7" d="M -60 630  C 140 600, 215 402, 340 400 L 1400 400"/>
+            <path id="w8" d="M -60 760  C 130 710, 225 403, 345 400 L 1400 400"/>
+            <path id="w9" d="M -60 920  C 120 840, 235 404, 350 400 L 1400 400"/>
+          </g>
+
+          <!-- brighter energized cores over a few strands -->
+          <g class="wire-bright" stroke="url(#wireGrad)" stroke-width="1.8" stroke-linecap="round" filter="url(#wireGlow)">
+            <use href="#w2"/><use href="#w5"/><use href="#w7"/>
+          </g>
+
+          <!-- travelling pulses -->
+          <g class="wire-pulses" filter="url(#wireGlow)">
+            <circle r="3.5" fill="var(--pipe-b)"><animateMotion dur="5.5s" repeatCount="indefinite"><mpath href="#w2"/></animateMotion></circle>
+            <circle r="3" fill="var(--pipe-a)"><animateMotion dur="4.6s" begin="1.2s" repeatCount="indefinite"><mpath href="#w5"/></animateMotion></circle>
+            <circle r="3.5" fill="var(--pipe-b)"><animateMotion dur="6.2s" begin="2.1s" repeatCount="indefinite"><mpath href="#w7"/></animateMotion></circle>
+            <circle r="2.5" fill="var(--pipe-a)"><animateMotion dur="5s" begin="3s" repeatCount="indefinite"><mpath href="#w4"/></animateMotion></circle>
+            <circle r="2.5" fill="var(--pipe-b)"><animateMotion dur="5.8s" begin=".6s" repeatCount="indefinite"><mpath href="#w8"/></animateMotion></circle>
+          </g>
+
+          <!-- nodes on the merged line -->
+          <g class="wire-nodes">
+            <circle class="merge-node" cx="340" cy="400" r="7"/>
+            <circle cx="560" cy="400" r="5"/>
+            <circle cx="820" cy="400" r="5"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="hero-grid">
+        <!-- spacer keeps the copy to the right of the wire fan on wide screens -->
+        <div class="hero-spacer" aria-hidden="true"></div>
+
+        <!-- Right: copy + command + demo -->
+        <div class="hero-content">
+          <h1 class="hero-title reveal">
+            Human Language <span class="grad-text">to&nbsp;Code</span>
+          </h1>
+          <p class="hero-sub reveal">
+            Turn natural language into reviewed, validated code patches in seconds.
+            <strong>Write less. Ship safer.</strong>
+          </p>
+
+          <div class="cmd-pill reveal" id="cmdPill">
+            <span class="cmd-prompt" aria-hidden="true">$</span>
+            <code class="cmd-text">npx&nbsp;human-to-code&nbsp;.</code>
+            <button class="cmd-copy" id="copyBtn" type="button" aria-label="Copy command">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1Zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16h-9V7h9v14Z"/></svg>
+            </button>
+          </div>
+
+          <div class="hero-cta reveal">
+            <a class="btn btn-primary" href="https://github.com/sharjeelbaig/human-to-code#quick-start" target="_blank" rel="noopener">Get Started <span aria-hidden="true">→</span></a>
+            <a class="btn btn-ghost" href="https://github.com/sharjeelbaig/human-to-code#readme" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 6.5C10 4.9 7.4 4 4.5 4c-.8 0-1.6.07-2.5.2v14.3c.9-.13 1.7-.2 2.5-.2 2.9 0 5.5.9 7.5 2.5 2-1.6 4.6-2.5 7.5-2.5.8 0 1.6.07 2.5.2V4.2c-.9-.13-1.7-.2-2.5-.2-2.9 0-5.5.9-7.5 2.5Zm0 12.15c-2-1.25-4.4-1.9-7-1.9V6.1c2.6 0 5 .66 7 1.9 2-1.24 4.4-1.9 7-1.9v10.65c-2.6 0-5 .65-7 1.9Z"/></svg>
+              View Docs
+            </a>
+          </div>
+
+          <!-- before/after: an inline @human marker is replaced in place -->
+          <div class="demo reveal">
+            <figure class="term term-in">
+              <figcaption class="term-bar">
+                <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                <span class="term-title">sort.py <em>(before)</em></span>
+              </figcaption>
+              <pre class="term-body"><code><span class="t-marker"># @human</span> create a Python function that sorts a list</code></pre>
+            </figure>
+
+            <div class="demo-arrow" aria-hidden="true">
+              <svg viewBox="0 0 64 24" width="64" height="24"><path class="arrow-path" d="M2 12 H54 M46 4 L56 12 L46 20" stroke="var(--pipe-b)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+
+            <figure class="term term-out">
+              <figcaption class="term-bar">
+                <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+                <span class="term-title">sort.py <em>(after npx human-to-code .)</em></span>
+              </figcaption>
+              <pre class="term-body"><code><span class="t-kw">def</span> <span class="t-fn">sort_list</span>(items):
+    <span class="t-str">"""Return a new sorted list."""</span>
+    <span class="t-kw">return</span> <span class="t-fn">sorted</span>(items)</code></pre>
+              <p class="term-status"><span class="status-dot"></span> marker replaced in place</p>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LANGUAGES ============ -->
+    <section class="langs" aria-label="Languages and frameworks">
+      <h2 class="langs-title reveal">Languages &amp; Frameworks</h2>
+      <p class="langs-sub reveal">10 languages through the direct path today, grounded profiles for React, NestJS, FastAPI &amp; Rust — the rest are <a href="https://github.com/sharjeelbaig/human-to-code/tree/main/docs/roadmap" target="_blank" rel="noopener">on the roadmap</a></p>
+
+      <div class="marquees reveal" id="marquees">
+        <!-- rows are generated by logic.js; noscript fallback below -->
+        <noscript>
+          <p class="noscript-langs">JavaScript · TypeScript · Python · Go · Java · C# · Ruby · PHP · Rust · Swift · Kotlin · Dart · Bash · SQL · YAML · Node.js · React · NestJS · FastAPI · Docker · Terraform · HTML · CSS</p>
+        </noscript>
+      </div>
+    </section>
+
+    <!-- ============ EXAMPLES ============ -->
+    <section class="section examples" id="examples" aria-label="Examples">
+      <h2 class="section-title reveal">Examples</h2>
+      <p class="section-sub reveal">Two ways to ask, one command: <code>npx human-to-code .</code></p>
+
+      <div class="example-grid">
+        <article class="example-card reveal">
+          <h3>1 · A whole <code>.human</code> file</h3>
+          <p>Write your request in a <code>*.human</code> file; the generated code lands in a sibling file named after it (extension follows your configured language).</p>
+          <pre class="code-block"><code><span class="t-cmt"># greet.human</span>
+Write a function that takes a name and returns
+a friendly greeting, with a docstring.
+
+<span class="t-cmt">$ npx human-to-code .</span>
+<span class="t-ok">✓ wrote greet.py</span></code></pre>
+        </article>
+
+        <article class="example-card reveal">
+          <h3>2 · An inline <code>@human</code> marker</h3>
+          <p>Drop a marker inside an existing source file — <code>// @human …</code>, <code># @human …</code>, <code>/* @human … */</code> or <code>""" @human … """</code>. The marker region is replaced in place with generated code.</p>
+          <pre class="code-block"><code><span class="t-cmt">// utils.ts</span>
+<span class="t-marker">// @human</span> debounce helper with cancel()
+
+<span class="t-cmt">$ npx human-to-code .</span>
+<span class="t-ok">✓ wrote utils.ts</span></code></pre>
+        </article>
+
+        <article class="example-card reveal">
+          <h3>3 · The guided pipeline</h3>
+          <p>For reviewed, sandbox-validated patches against a recognized React, NestJS, FastAPI, or Rust project, use <code>guided</code>: it drafts a change contract for your review before anything is generated.</p>
+          <pre class="code-block"><code><span class="t-cmt">$ npx human-to-code guided .</span>
+Wrote add-health-route.strict.human.json
+Review the contract, then rerun to generate
+a validated, reviewable patch. Apply is a
+separate, explicit step.</code></pre>
+        </article>
+      </div>
+
+      <p class="section-note reveal">Every generation shows a receipt — files, provider, model — and asks before writing. Nothing is written on <code>--dry-run</code>.</p>
+    </section>
+
+    <!-- ============ PLAYGROUND ============ -->
+    <section class="section playground" id="playground" aria-label="Playground">
+      <h2 class="section-title reveal">Playground</h2>
+      <p class="section-sub reveal">The direct path, in your browser — bring your own OpenAI or Ollama key.</p>
+
+      <form class="pg" id="pgForm">
+        <div class="pg-row">
+          <label class="pg-field">
+            <span class="pg-label">Provider</span>
+            <select id="pgProvider">
+              <option value="openai">OpenAI</option>
+              <option value="ollama-cloud">Ollama Cloud</option>
+              <option value="ollama-local">Ollama (local)</option>
+            </select>
+          </label>
+          <label class="pg-field">
+            <span class="pg-label">Model</span>
+            <input id="pgModel" type="text" value="gpt-4o-mini" autocomplete="off" spellcheck="false" required>
+          </label>
+          <label class="pg-field">
+            <span class="pg-label">Language</span>
+            <select id="pgLanguage">
+              <option value="typescript">TypeScript</option>
+              <option value="javascript">JavaScript</option>
+              <option value="python" selected>Python</option>
+              <option value="rust">Rust</option>
+              <option value="go">Go</option>
+              <option value="java">Java</option>
+              <option value="ruby">Ruby</option>
+              <option value="csharp">C#</option>
+              <option value="cpp">C++</option>
+              <option value="c">C</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="pg-field" id="pgKeyField">
+          <span class="pg-label">API key <em>(stays in this tab — sent only to the provider you chose)</em></span>
+          <input id="pgKey" type="password" placeholder="sk-… / your Ollama Cloud key" autocomplete="off">
+        </label>
+
+        <label class="pg-field">
+          <span class="pg-label"><code># @human</code> request</span>
+          <textarea id="pgPrompt" rows="3" spellcheck="false" required>create a Python function that sorts a list</textarea>
+        </label>
+
+        <div class="pg-actions">
+          <button class="btn btn-primary" id="pgRun" type="submit">Generate <span aria-hidden="true">→</span></button>
+          <span class="pg-status" id="pgStatus" role="status"></span>
+        </div>
+
+        <div class="pg-out-wrap" hidden id="pgOutWrap">
+          <div class="pg-out-bar">
+            <span>output</span>
+            <button class="pg-copy" id="pgCopy" type="button">Copy</button>
+          </div>
+          <pre class="pg-out"><code id="pgOut"></code></pre>
+        </div>
+
+        <p class="pg-note">This mirrors the module's direct path: one request, code-only output, fences stripped — the same prompt contract as <code>generateCode()</code> in <code>src/pipeline/simple.ts</code>. Your key is kept in memory only and never stored. For local Ollama the browser needs CORS enabled: start it with <code>OLLAMA_ORIGINS=*</code> (or this page's origin).</p>
+      </form>
+    </section>
+
+    <!-- ============ DOCS ============ -->
+    <section class="section docs" id="docs" aria-label="Documentation">
+      <h2 class="section-title reveal">Docs</h2>
+      <p class="section-sub reveal">The essentials — the <a href="https://github.com/sharjeelbaig/human-to-code#readme" target="_blank" rel="noopener">full README</a> covers everything.</p>
+
+      <div class="docs-grid">
+        <article class="docs-card reveal">
+          <h3>Quick start</h3>
+          <pre class="code-block"><code><span class="t-cmt"># default: discover .human files and @human
+# markers, show a receipt, write code</span>
+npx human-to-code .
+
+<span class="t-cmt"># create a reviewable config (never overwrites)</span>
+npx human-to-code --init .
+
+<span class="t-cmt"># reviewed contract → validated patch</span>
+npx human-to-code guided .</code></pre>
+          <p>Requires Node.js 24+. The default provider is loopback-local Ollama with <code>qwen2.5-coder:7b</code> — no code leaves your machine until you configure a remote provider and consent.</p>
+        </article>
+
+        <article class="docs-card reveal">
+          <h3>Providers</h3>
+          <p><strong>OpenAI</strong> and <strong>Ollama</strong> (local, Cloud, or a trusted custom endpoint) are the supported providers. Credentials are environment-only — the config stores a variable <em>name</em> like <code>OPENAI_API_KEY</code>, never a key. Remote generation requires explicit consent and reviewed pricing bounds.</p>
+        </article>
+
+        <article class="docs-card reveal">
+          <h3>Commands</h3>
+          <ul class="docs-list">
+            <li><code>human-to-code .</code> — direct <code>.human</code>/<code>@human</code> generation with receipt</li>
+            <li><code>guided</code> — analyze → contract → grounded patch → sandbox validation</li>
+            <li><code>analyze</code> — static multi-workspace project profile</li>
+            <li><code>plan</code> / <code>generate</code> / <code>validate</code> — the pipeline, step by step</li>
+            <li><code>apply</code> / <code>rollback</code> — explicit, hash-checked, reversible</li>
+            <li><code>check</code> — verify every <code>.human</code> has a current contract</li>
+          </ul>
+        </article>
+
+        <article class="docs-card reveal">
+          <h3>Safety model</h3>
+          <p>The guided pipeline scans for secrets before any provider call, validates in a no-network container sandbox, and only an explicit <code>apply</code> of a <code>VERIFIED</code> run touches your working tree. Read <a href="https://github.com/sharjeelbaig/human-to-code/blob/main/SECURITY.md" target="_blank" rel="noopener">SECURITY.md</a> and <a href="https://github.com/sharjeelbaig/human-to-code/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener">ARCHITECTURE.md</a>.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>MIT © the human-to-code authors ·
+      <a href="https://github.com/sharjeelbaig/human-to-code" target="_blank" rel="noopener">GitHub</a> ·
+      <a href="https://www.npmjs.com/package/human-to-code" target="_blank" rel="noopener">npm</a>
+    </p>
+  </footer>
+
+  <script src="logic.js" defer></script>
+</body>
+</html>
