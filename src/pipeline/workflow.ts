@@ -113,6 +113,8 @@ export interface WorkflowOutcome {
   diagnostics: string[];
   diff?: string;
   report?: ValidationReportV1;
+  /** Cumulative provider usage for runs that reached the provider, so callers can account for API requests. */
+  usage?: UsageSummaryV1;
   /** Fixed CLI exit code when the status alone cannot distinguish dependency/partial failures. */
   exitCode?: number;
 }
@@ -906,7 +908,7 @@ export async function generateRun(input: GenerateRunOptions): Promise<WorkflowOu
       provider: providerIdentity,
       usage: usageSummary(budget),
     });
-    return { runId, status: "INCONCLUSIVE", diagnostics, diff };
+    return { runId, status: "INCONCLUSIVE", diagnostics, diff, usage: usageSummary(budget) };
   } catch (error) {
     const security = error instanceof ProjectSecretScanError && error.code === "SECRET_DETECTED"
       || error instanceof ProviderError && error.code === "safety"
@@ -1590,7 +1592,14 @@ async function validateStoredRunLocked(options: ValidateStoredRunOptions & { sto
       ...(providerIdentity ? { provider: providerIdentity } : {}),
       ...(budget ? { usage: usageSummary(budget) } : {}),
     });
-    return { runId: options.runId, status, diagnostics, report, diff: renderPatchDiff(patch) };
+    return {
+      runId: options.runId,
+      status,
+      diagnostics,
+      report,
+      diff: renderPatchDiff(patch),
+      ...(budget ? { usage: usageSummary(budget) } : {}),
+    };
   } catch (error) {
     diagnostics.push(error instanceof Error ? error.message : String(error));
     const security = error instanceof PatchSafetyError

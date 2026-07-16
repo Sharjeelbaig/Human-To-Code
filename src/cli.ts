@@ -219,6 +219,10 @@ function outcomeExit(outcome: WorkflowOutcome): number {
 
 function outcomeText(outcome: WorkflowOutcome): string {
   const lines = [`Run ${outcome.runId}: ${outcome.status}`];
+  if (outcome.usage !== undefined) {
+    const repairs = outcome.usage.repairs ?? 0;
+    lines.push(`  Provider API requests: ${outcome.usage.requests}${repairs > 0 ? ` (${repairs} repair${repairs === 1 ? "" : "s"})` : ""}`);
+  }
   for (const diagnostic of outcome.diagnostics) lines.push(`  ${diagnostic}`);
   if (outcome.diff) lines.push("", outcome.diff);
   return lines.join("\n");
