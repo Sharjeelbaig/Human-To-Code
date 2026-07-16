@@ -22,6 +22,32 @@
     applyTheme(next);
   });
 
+  /* ---------------- live GitHub stars ---------------- */
+  const githubPill = document.getElementById("githubPill");
+  const githubMetric = document.getElementById("githubMetric");
+  if (githubPill && githubMetric) {
+    fetch("https://api.github.com/repos/sharjeelbaig/human-to-code", {
+      headers: { accept: "application/vnd.github+json" },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("GitHub stars unavailable");
+        return response.json();
+      })
+      .then((repository) => {
+        const stars = repository?.stargazers_count;
+        if (!Number.isSafeInteger(stars) || stars < 0) return;
+        githubMetric.textContent = new Intl.NumberFormat("en", {
+          notation: "compact",
+          maximumFractionDigits: 1,
+        }).format(stars).toLowerCase();
+        githubPill.dataset.starsLoaded = "true";
+        githubPill.setAttribute("aria-label", `View human-to-code on GitHub — ${stars.toLocaleString("en")} stars`);
+      })
+      .catch(() => {
+        /* Keep the GitHub + star fallback when the public API is unavailable. */
+      });
+  }
+
   /* ---------------- copy command ---------------- */
   const copyBtn = document.getElementById("copyBtn");
   copyBtn?.addEventListener("click", async () => {
