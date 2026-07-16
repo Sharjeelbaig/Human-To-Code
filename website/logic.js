@@ -133,7 +133,28 @@
     }
   }
 
-/* ---------------- examples tabs ---------------- */
+/* ---------------- quick start ---------------- */
+  const qs = document.getElementById("quickstart");
+  if (qs) {
+    const providerSelect = document.getElementById("qsProvider");
+
+    const applyProvider = (provider) => {
+      qs.querySelectorAll("[data-provider]").forEach((el) => {
+        el.hidden = el.dataset.provider !== provider;
+      });
+      // renumber the shared "Generate" step (5 for ollama, 6 for openai)
+      qs.querySelectorAll("[data-step-ollama]").forEach((el) => {
+        el.textContent = provider === "openai" ? el.dataset.stepOpenai : el.dataset.stepOllama;
+      });
+    };
+
+    providerSelect?.addEventListener("change", () => applyProvider(providerSelect.value));
+
+    // Keep Ollama as the recommended provider.
+    applyProvider(providerSelect?.value ?? "ollama");
+  }
+
+  /* ---------------- examples tabs ---------------- */
   const exTabs = document.querySelectorAll(".ex-tab");
   const exPanels = document.querySelectorAll(".ex-panel");
   exTabs.forEach((tab) => {

@@ -47,8 +47,9 @@
       </a>
 
       <ul class="nav-links">
-        <li><a href="#docs">Docs</a></li>
+        <li><a href="#quickstart">Quick start</a></li>
         <li><a href="#examples">Examples</a></li>
+        <li><a href="#docs">Docs</a></li>
         <li><a href="https://github.com/sharjeelbaig/human-to-code" target="_blank" rel="noopener">GitHub <span class="ext" aria-hidden="true">↗</span></a></li>
       </ul>
 
@@ -201,6 +202,101 @@
           <p class="noscript-langs">JavaScript · TypeScript · Python · Go · Java · C# · Ruby · PHP · Rust · Swift · Kotlin · Dart · Bash · SQL · YAML · Node.js · React · NestJS · FastAPI · Docker · Terraform · HTML · CSS</p>
         </noscript>
       </div>
+    </section>
+
+    <!-- ============ QUICK START ============ -->
+    <section class="section quickstart" id="quickstart" aria-label="Quick start">
+      <h2 class="section-title reveal">Quick start</h2>
+      <p class="section-sub reveal">Local &amp; private by default — no code leaves your machine until you choose a remote provider and consent.</p>
+
+      <div class="qs-controls reveal">
+        <label class="qs-provider-pick">
+          <span>Provider</span>
+          <select id="qsProvider">
+            <option value="ollama" selected>Ollama · local &amp; free (recommended)</option>
+            <option value="openai">OpenAI · remote</option>
+          </select>
+        </label>
+      </div>
+
+      <ol class="qs-steps reveal">
+        <li class="qs-step">
+          <div class="qs-head"><span class="qs-n">1</span><h3>Choose a provider</h3></div>
+          <p>human-to-code runs on any platform supported by <strong>Node.js 24+</strong>. Make sure Node.js is installed on your system before continuing; no global installation of human-to-code is required.</p>
+        </li>
+
+        <li class="qs-step" data-provider="ollama">
+          <div class="qs-head"><span class="qs-n">2</span><h3>Install Ollama &amp; pull the model</h3></div>
+          <p>The default config targets your local Ollama on <code>http://localhost:11434</code> with <code>qwen2.5-coder:7b</code>. human-to-code never pulls a model for you, so pull it once.</p>
+          <p class="qs-inline">Install Ollama for your platform, then run:</p>
+          <pre class="code-block"><code>ollama pull qwen2.5-coder:7b</code></pre>
+        </li>
+
+        <li class="qs-step" data-provider="openai" hidden>
+          <div class="qs-head"><span class="qs-n">2</span><h3>Set your OpenAI key</h3></div>
+          <p>Credentials are <strong>environment-only</strong> — the config stores the variable <em>name</em> (<code>OPENAI_API_KEY</code>), never the key itself.</p>
+          <p class="qs-inline">Set <code>OPENAI_API_KEY</code> in your system environment using your platform's standard method.</p>
+        </li>
+
+        <li class="qs-step">
+          <div class="qs-head"><span class="qs-n">3</span><h3>Create the config</h3></div>
+          <p><code>--init</code> writes a complete, schema-versioned <code>human-to-code.config.json</code> and never overwrites an existing one. Treat it as a reviewable template.</p>
+          <pre class="code-block"><code>npx human-to-code --init .</code></pre>
+
+          <div data-provider="ollama">
+            <p class="qs-inline">The generated file already targets local Ollama — no edits needed:</p>
+            <pre class="code-block"><code>{
+  <span class="t-key">"schemaVersion"</span>: <span class="t-num">1</span>,
+  <span class="t-key">"provider"</span>: {
+    <span class="t-key">"name"</span>: <span class="t-str">"ollama"</span>,
+    <span class="t-key">"model"</span>: <span class="t-str">"qwen2.5-coder:7b"</span>
+  },
+  <span class="t-key">"privacy"</span>: { <span class="t-key">"remoteProviderConsent"</span>: <span class="t-num">false</span> }
+}</code></pre>
+          </div>
+
+          <div data-provider="openai" hidden>
+            <p class="qs-inline">Edit the <code>provider</code> and <code>privacy</code> blocks. Remote generation is blocked until you set conservative pricing bounds <em>and</em> consent:</p>
+            <pre class="code-block"><code>{
+  <span class="t-key">"schemaVersion"</span>: <span class="t-num">1</span>,
+  <span class="t-key">"provider"</span>: {
+    <span class="t-key">"name"</span>: <span class="t-str">"openai"</span>,
+    <span class="t-key">"model"</span>: <span class="t-str">"gpt-4o-2024-08-06"</span>,
+    <span class="t-key">"apiKeyEnv"</span>: <span class="t-str">"OPENAI_API_KEY"</span>,
+    <span class="t-key">"pricing"</span>: {
+      <span class="t-key">"inputUsdPerMillionTokens"</span>: <span class="t-num">25</span>,
+      <span class="t-key">"outputUsdPerMillionTokens"</span>: <span class="t-num">100</span>
+    }
+  },
+  <span class="t-key">"privacy"</span>: { <span class="t-key">"remoteProviderConsent"</span>: <span class="t-num">true</span> },
+  <span class="t-key">"budgets"</span>: { <span class="t-key">"maxCostUsd"</span>: <span class="t-num">25</span> }
+}</code></pre>
+            <p class="qs-inline">Set the rates at or above the real published rates for your exact model — they are a fail-closed budget guard, not a live price feed.</p>
+          </div>
+        </li>
+
+        <li class="qs-step">
+          <div class="qs-head"><span class="qs-n">4</span><h3>Write your first request</h3></div>
+          <p>Create a <code>.human</code> file, or drop an inline <code>@human</code> marker into an existing source file.</p>
+          <pre class="code-block"><code><span class="t-cmt"># sort-list.human</span>
+Create a function that returns a new sorted
+copy of a list, with a docstring.
+</code></pre>
+        </li>
+
+        <li class="qs-step" data-provider="openai" hidden>
+          <div class="qs-head"><span class="qs-n">5</span><h3>Review the outbound context</h3></div>
+          <p>Before sending anything to a remote provider, inspect the <em>complete</em> outbound envelope — every file, range, hash, and redaction. Remote providers get no follow-up requests, so this preview is the whole payload.</p>
+          <pre class="code-block"><code>npx human-to-code context sort-list.strict.human.json --explain</code></pre>
+        </li>
+
+        <li class="qs-step">
+          <div class="qs-head"><span class="qs-n" data-step-ollama="5" data-step-openai="6">5</span><h3>Generate</h3></div>
+          <p>Run the guided command. It analyzes the project, shows a receipt, and asks before writing — nothing is generated on <code>--dry-run</code>.</p>
+          <pre class="code-block"><code>npx human-to-code .</code></pre>
+          <p class="qs-inline">For a reviewed, sandbox-validated patch against a recognized React, NestJS, FastAPI, or Rust project, use <code>npx human-to-code guided .</code> instead — it drafts a change contract for your review first.</p>
+        </li>
+      </ol>
     </section>
 
     <!-- ============ EXAMPLES ============ -->
