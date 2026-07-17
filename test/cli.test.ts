@@ -91,6 +91,26 @@ test("default convert flow lists .human files and @human markers without contact
   }
 });
 
+test("remote inline FileMemory requires explicit source-context consent before provider access", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-remote-memory-"));
+  try {
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      provider: { name: "openai", model: "test-model" },
+      privacy: { remoteProviderConsent: false },
+    }));
+    await put(root, "app.ts", "const existing = 5;\n// @human log existing\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 4, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout) as { status: string; diagnostic: string };
+    assert.equal(output.status, "SECURITY_BLOCKED");
+    assert.match(output.diagnostic, /FileMemory would send statically indexed source declarations/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("CLI preserves distinct partial-scan and unsupported exit codes", async () => {
   const container = await mkdtemp(join(tmpdir(), "h2c-cli-exits-"));
   try {

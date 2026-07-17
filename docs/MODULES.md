@@ -73,6 +73,7 @@ mirror these modules by name.
 | `validation.ts` | Strong container-only validation (`validateBaselineAndCandidate`, `strongSandboxAvailable`): Docker/Podman sandbox with no network, read-only root, scrubbed environment, resource limits; unchanged baseline first, then candidate; secret-scanned output. |
 | `run-store.ts` | `RunStore`: durable, private, crash-safe run metadata (contracts, patches, reports, rollback artifacts) with recursive secret gating on every write. |
 | `workflow.ts` | The guided end-to-end orchestrator (`generateRun` and the apply/rollback/repair flows): ties analysis, certification, secret scan, context, provider, snapshot, validation, run store, and patch together with crash-safe budget checkpoints and at most two diagnostic repairs. |
+| `file-memory.ts` | Dependency-free static declaration/signature indexing for every language scanned by the direct path. Produces exact line-range evidence without executing project code. |
 | `simple.ts` | The lightweight direct path: whole-`.human`-file or inline-`@human`-marker generation against local Ollama, with a receipt-and-confirm step. Shares no trust with the guided pipeline; cannot produce `VERIFIED` or apply patches. |
 
 ## Test map

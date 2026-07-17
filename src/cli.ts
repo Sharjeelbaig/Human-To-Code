@@ -33,6 +33,7 @@ import { RunStore } from "./pipeline/run-store.ts";
 import {
   applyUnit,
   discoverUnits,
+  generateConversionUnits,
   generateCode,
   renderReceipt,
   type ConversionUnit,
@@ -513,27 +514,58 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const apiKey = providerName === "openai"
     ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
     : undefined;
-  // Inline markers are applied by descending character offset so that rewriting
-  // a later marker never invalidates the range of an earlier one in the same file.
-  const ordered = [...units].sort((left, right) => {
-    if (left.kind !== right.kind) return left.kind === "file" ? -1 : 1;
-    return (right.range?.start ?? 0) - (left.range?.start ?? 0);
-  });
-  const written: string[] = [];
-  for (const unit of ordered) {
-    let code: string;
-    try {
-      code = await generateCode(unit.prompt, {
+  const localMemoryProvider = providerName === "ollama"
+    && (baseUrl === undefined || isLoopbackProviderHost(new URL(baseUrl).hostname));
+  if (units.some((unit) => unit.kind === "inline")
+    && !localMemoryProvider
+    && !effective.privacy.remoteProviderConsent) {
+    throw new ContextSecurityError(
+      "INVALID_CANDIDATE",
+      "Inline FileMemory would send statically indexed source declarations to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
+    );
+  }
+  let generated;
+  let generatingSource: string | undefined;
+  try {
+    generated = await generateConversionUnits(units, (unit, context) => {
+      generatingSource = unit.sourcePath;
+      if (context.fileMemory
+        && context.fileMemory.length > effective.privacy.maxContextTokens * 4) {
+        throw new ContextSecurityError(
+          "BUDGET_EXCEEDED",
+          `FileMemory for ${unit.sourcePath} exceeds the configured context budget.`,
+          unit.sourcePath,
+        );
+      }
+      return generateCode(unit.prompt, {
         language,
         provider: providerName,
         model,
         ...(baseUrl ? { baseUrl } : {}),
         ...(apiKey ? { apiKey } : {}),
+        ...context,
       });
-    } catch (error) {
-      output(cli.json ? { status: "FAILED", source: unit.sourcePath, error: String(error) } : `\nProvider error for ${unit.sourcePath}: ${error instanceof Error ? error.message : String(error)}`, cli.json);
-      return 5;
-    }
+    });
+  } catch (error) {
+    if (error instanceof ContextSecurityError) throw error;
+    output(
+      cli.json
+        ? { status: "FAILED", ...(generatingSource ? { source: generatingSource } : {}), error: String(error) }
+        : `\nProvider error${generatingSource ? ` for ${generatingSource}` : ""}: ${error instanceof Error ? error.message : String(error)}`,
+      cli.json,
+    );
+    return 5;
+  }
+  // Generation is top-to-bottom so FileMemory is meaningful. Application stays
+  // bottom-to-top so replacing later markers cannot invalidate earlier ranges.
+  const ordered = [...generated].sort((left, right) => {
+    if (left.unit.kind !== right.unit.kind) return left.unit.kind === "file" ? -1 : 1;
+    const byPath = left.unit.sourcePath.localeCompare(right.unit.sourcePath);
+    if (byPath !== 0) return byPath;
+    return (right.unit.range?.start ?? 0) - (left.unit.range?.start ?? 0);
+  });
+  const written: string[] = [];
+  for (const { unit, code } of ordered) {
     if (code.trim().length === 0) {
       if (!cli.json) output(`  ! empty model output for ${unit.sourcePath}; skipped`, false);
       continue;
@@ -657,8 +689,8 @@ export async function run(argv: string[]): Promise<number> {
     if (command === "check") return checkCommand(cli, args[0]);
     if (command === "migrate-config") return migrateConfigCommand(cli, args[0]);
     if (command === "guided") return guided(cli, args[0]);
-    if (command === "build" || command === "convert") return buildCommand(cli, args[0]);
-    return buildCommand(cli, args[0]);
+    if (command === "build" || command === "convert") return await buildCommand(cli, args[0]);
+    return await buildCommand(cli, args[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof ContextSecurityError) {
