@@ -760,39 +760,78 @@ html[data-theme="dark"] .qs-visual::before { background: radial-gradient(circle 
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: start;
+  gap: 12px;
+  align-items: stretch;
   margin-top: 22px;
-  padding: 14px;
-  border: 1px solid rgba(255, 116, 84, .48);
-  border-radius: 16px;
-  background: linear-gradient(120deg, #160b10 0%, #3d1013 45%, #a72f1c 145%);
-  box-shadow: inset 0 1px rgba(255, 255, 255, .1), 0 12px 28px rgba(89, 18, 18, .2);
+  padding: 12px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255, 115, 82, .58);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 92% -45%, rgba(255, 116, 82, .4), transparent 44%),
+    linear-gradient(128deg, #10070b 0%, #2c0b10 52%, #6b1a10 130%);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, .12),
+    inset 0 -1px rgba(0, 0, 0, .42),
+    0 18px 42px rgba(82, 18, 18, .18);
+}
+.qs-command::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, .09), transparent) 0 0 / 45% 1px no-repeat,
+    repeating-linear-gradient(135deg, transparent 0 12px, rgba(255, 255, 255, .018) 12px 13px);
+  pointer-events: none;
 }
 .qs-command pre {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   margin: 0;
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 11px;
+  background: rgba(5, 4, 7, .46);
   color: #fff;
   font-family: var(--mono);
   font-size: .92rem;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  box-shadow: inset 0 1px 5px rgba(0, 0, 0, .34);
 }
+.qs-command pre::before { content: ">"; margin-right: 12px; color: #ff8a5c; font-weight: 900; text-shadow: 0 0 14px rgba(255, 95, 60, .8); }
+.qs-command code { padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; }
 .qs-copy {
-  padding: 8px 11px;
-  border: 1px solid rgba(255, 255, 255, .36);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, .13);
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 92px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .09));
   color: #fff;
   font: inherit;
   font-size: .82rem;
   font-weight: 800;
   cursor: pointer;
-  transition: background .2s ease, transform .2s ease;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .16), 0 8px 18px rgba(0, 0, 0, .16);
+  transition: background .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease;
 }
-.qs-copy:hover { background: rgba(255, 255, 255, .23); transform: translateY(-1px); }
-.qs-copy:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.qs-copy::before { width: 11px; height: 11px; content: ""; border: 1.5px solid currentColor; border-radius: 2px; box-shadow: 3px -3px 0 -1px #632219, 3px -3px 0 0 currentColor; opacity: .88; }
+.qs-copy:hover { border-color: rgba(255, 255, 255, .52); background: linear-gradient(180deg, rgba(255, 255, 255, .25), rgba(255, 255, 255, .13)); transform: translateY(-2px); box-shadow: inset 0 1px rgba(255, 255, 255, .2), 0 12px 24px rgba(0, 0, 0, .22); }
+.qs-copy:active { transform: translateY(0); }
+.qs-copy:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
 .qs-copy.copied { background: #1f8f62; border-color: #92edc2; }
 
 /* --- examples tabbed --- */
