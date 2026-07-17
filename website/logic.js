@@ -77,6 +77,63 @@
     });
   });
 
+  /* ---------------- hero type narrative ---------------- */
+  const heroLead = document.querySelector("[data-hero-lead]");
+  const heroAccent = document.querySelector("[data-hero-accent]");
+  const heroTarget = document.querySelector("[data-hero-target]");
+  const heroSourceLine = heroLead?.closest(".hero-line");
+  const heroTargetLine = heroTarget?.closest(".hero-line");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  if (heroLead && heroAccent && heroTarget && heroSourceLine && heroTargetLine && !reducedMotion.matches) {
+    const heroPhrases = [
+      { lead: "Human", accent: "Language", target: "Code" },
+      { lead: "Reviewed", accent: "Intent", target: "Safe Patches" },
+      { lead: "Plain", accent: "Requests", target: "Safe Changes" },
+      { lead: "Change", accent: "Contracts", target: "Grounded Code" },
+    ];
+    const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+    const sourceText = (phrase) => `${phrase.lead} ${phrase.accent}`;
+    const paintSource = (phrase, length) => {
+      const leadLength = Math.min(length, phrase.lead.length);
+      heroLead.textContent = phrase.lead.slice(0, leadLength);
+      const accentLength = Math.max(0, length - phrase.lead.length - 1);
+      heroAccent.textContent = phrase.accent.slice(0, accentLength);
+    };
+    const paintTarget = (phrase, length) => {
+      heroTarget.textContent = phrase.target.slice(0, length);
+    };
+    const typeRange = async (line, from, to, paint, speed) => {
+      line.classList.add("is-typing");
+      const direction = to >= from ? 1 : -1;
+      for (let length = from; length !== to; length += direction) {
+        paint(length);
+        await pause(speed + (length % 4) * 7);
+      }
+      paint(to);
+      line.classList.remove("is-typing");
+    };
+
+    const runHeroNarrative = async () => {
+      await pause(650);
+      let index = 0;
+      paintSource(heroPhrases[0], 0);
+      paintTarget(heroPhrases[0], 0);
+      while (true) {
+        const phrase = heroPhrases[index];
+        await typeRange(heroSourceLine, 0, sourceText(phrase).length, (length) => paintSource(phrase, length), 43);
+        await pause(120);
+        await typeRange(heroTargetLine, 0, phrase.target.length, (length) => paintTarget(phrase, length), 48);
+        await pause(2600);
+        await typeRange(heroTargetLine, phrase.target.length, 0, (length) => paintTarget(phrase, length), 24);
+        await typeRange(heroSourceLine, sourceText(phrase).length, 0, (length) => paintSource(phrase, length), 20);
+        index = (index + 1) % heroPhrases.length;
+        await pause(260);
+      }
+    };
+    runHeroNarrative();
+  }
+
   /* ---------------- hero editor language tabs ---------------- */
   const demoTabs = [...document.querySelectorAll("[data-demo-tab]")];
   const demoPanels = [...document.querySelectorAll("[data-demo-panel]")];
