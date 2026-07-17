@@ -391,6 +391,7 @@ export function renderReceipt(
   provider: string,
   model: string,
   language: string,
+  engine: "agent" | "simple" = "simple",
 ): string {
   const profile = languageProfile(language);
   const lines: string[] = [];
@@ -399,7 +400,13 @@ export function renderReceipt(
   lines.push(`  Language : ${profile.label} (.${profile.ext})`);
   lines.push(`  Provider : ${provider}`);
   lines.push(`  Model    : ${model}`);
-  lines.push(`  Requests : ${units.length} (one model request per prompt)`);
+  if (engine === "agent") {
+    lines.push(`  Engine   : deep agent (plans and issues its own model requests)`);
+    lines.push(`  Worklist : ${units.length} item(s)`);
+  } else {
+    lines.push(`  Engine   : simple (one model request per prompt)`);
+    lines.push(`  Requests : ${units.length}`);
+  }
   lines.push("");
   if (units.length === 0) {
     lines.push("  No .human files or @human markers were found.");

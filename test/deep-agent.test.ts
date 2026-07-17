@@ -54,6 +54,7 @@ test("runDeepAgentConversion drives the agent to completion and returns its plan
     assert.equal(units.length, 2);
 
     const model = new FakeListChatModel({ responses: ["All requested conversions are complete."] });
+    const events: string[] = [];
     const outcome = await runDeepAgentConversion({
       root,
       language: "typescript",
@@ -62,11 +63,14 @@ test("runDeepAgentConversion drives the agent to completion and returns its plan
       units,
       model_override: model,
       recursionLimit: 20,
+      onProgress: (event) => events.push(event.kind),
     });
 
     assert.ok(Array.isArray(outcome.todos));
     assert.ok(outcome.messageCount >= 1);
     assert.equal(outcome.summary, "All requested conversions are complete.");
+    // The run streams progress: the final assistant summary is emitted live.
+    assert.ok(events.includes("assistant"), `expected an assistant progress event, saw ${events.join(",")}`);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

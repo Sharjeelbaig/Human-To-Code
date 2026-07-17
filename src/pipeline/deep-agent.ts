@@ -45,6 +45,8 @@ export interface DeepAgentRunOptions extends DeepAgentModelOptions {
   model_override?: BaseChatModel;
   /** Hard cap on agent graph steps so a loop cannot run unbounded. */
   recursionLimit?: number;
+  /** Live progress sink for interactive output (planning, tool calls, delegation). */
+  onProgress?: (event: DeepAgentProgress) => void;
   signal?: AbortSignal;
 }
 
@@ -52,6 +54,12 @@ export interface DeepAgentTodo {
   content: string;
   status: string;
 }
+
+/** A live event emitted while the agent runs, for interactive rendering. */
+export type DeepAgentProgress =
+  | { kind: "plan"; todos: DeepAgentTodo[] }
+  | { kind: "tool"; name: string; detail?: string }
+  | { kind: "assistant"; text: string };
 
 export interface DeepAgentRunResult {
   /** Final plan the agent produced (the Planning pillar's output). */
@@ -92,13 +100,13 @@ function mainSystemPrompt(languageLabel: string): string {
     "  1. Whole `.human` files (never `*.strict.human`): generate a sibling source file with the same base name and the language's extension, containing only real code.",
     "  2. Inline `@human` markers inside existing source files: replace the marker comment in place with the code it asks for, preserving all surrounding code.",
     "",
-    "Working method:",
-    "- First call write_todos to record an ordered plan covering every worklist item.",
-    "- Use the filesystem tools (ls, glob, grep, read_file) to ground yourself in the actual file contents before editing. Every path is absolute and rooted at the project: it must start with `/` (e.g. `/src/a.ts`).",
-    "- For each item, delegate the actual code writing to the `implementer` subagent via the task tool, then have the `reviewer` subagent check the result against the instruction.",
-    "- Apply edits with write_file (for `.human` file outputs) or edit_file (for inline markers). Never remove or rewrite code that a marker did not ask you to change.",
-    "- Reuse declarations that already exist in the file instead of redeclaring them.",
-    "- Keep todos updated: mark each in_progress before you start it and completed when its code is written and reviewed.",
+    "Working method — be efficient; every step is a slow model call, so avoid unnecessary ones:",
+    "- First call write_todos once to record a short ordered plan covering every worklist item.",
+    "- Read each target file once with read_file to ground yourself before editing. Every path is absolute and rooted at the project: it must start with `/` (e.g. `/src/a.ts`).",
+    "- For simple items, write the code yourself directly with write_file (for `.human` file outputs) or edit_file (for inline markers). Only delegate to the `implementer` subagent for genuinely complex items, and only use the `reviewer` subagent when correctness is non-obvious. Do not delegate or review trivial one-liners.",
+    "- Never remove or rewrite code that a marker did not ask you to change. Reuse declarations that already exist in the file instead of redeclaring them.",
+    "- Keep todos updated: mark each in_progress when you start it and completed when its code is written.",
+    "- When every item is done, stop and give a one-line summary. Do not re-read or re-verify files you have already written.",
     "",
     "Output only real, compilable code into files. Do not add comments describing what you changed. Do not touch dependency, VCS, secret, or configuration files.",
   ].join("\n");
@@ -171,7 +179,7 @@ function taskPrompt(units: readonly ConversionUnit[], languageLabel: string): st
     "",
     worklist,
     "",
-    "Plan first with write_todos, ground yourself by reading the files, delegate code to the implementer subagent, review with the reviewer subagent, then write the files with write_file or edit_file. Report a short summary of what you wrote when done.",
+    "Plan once with write_todos, read each target file once, then write the code directly with write_file or edit_file (only delegating complex items to the implementer subagent). Report a short summary of what you wrote when done.",
   ].join("\n");
 }
 
@@ -227,45 +235,103 @@ export async function buildDeepAgent(options: DeepAgentRunOptions) {
   });
 }
 
-interface AgentInvokeState {
-  messages?: unknown[];
-  todos?: Array<{ content?: unknown; status?: unknown }>;
+interface StreamedMessage {
+  id?: string;
+  content?: unknown;
+  name?: unknown;
+  getType?: () => string;
+  tool_calls?: Array<{ name?: unknown; args?: Record<string, unknown> }>;
 }
 
-function summarizeMessages(messages: unknown[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index] as { content?: unknown; getType?: () => string } | undefined;
-    const type = typeof message?.getType === "function" ? message.getType() : undefined;
-    if (type === "ai" && typeof message?.content === "string" && message.content.trim().length > 0) {
-      return message.content.trim();
-    }
+interface StreamedTodo {
+  content?: unknown;
+  status?: unknown;
+}
+
+function normalizeTodos(raw: readonly StreamedTodo[]): DeepAgentTodo[] {
+  return raw.map((todo) => ({
+    content: typeof todo.content === "string" ? todo.content : String(todo.content ?? ""),
+    status: typeof todo.status === "string" ? todo.status : String(todo.status ?? ""),
+  }));
+}
+
+/** Short human detail for a tool call (the path it touches or subagent it invokes). */
+function toolDetail(name: string, args: Record<string, unknown> | undefined): string | undefined {
+  if (!args) return undefined;
+  if (name === "task") {
+    const sub = args.subagent_type ?? args.subagentType ?? args.name ?? args.description;
+    return typeof sub === "string" ? sub.split(/\s+/u).slice(0, 6).join(" ") : undefined;
   }
-  return "";
+  for (const key of ["file_path", "filePath", "path", "file"]) {
+    const value = args[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
 }
 
 /**
- * Run the deep agent against the discovered worklist. The agent edits files on
- * disk through its filesystem backend; this returns the plan and summary it
- * produced for the receipt/report.
+ * Run the deep agent against the discovered worklist, streaming live progress
+ * (planning, tool calls, delegation) through `onProgress`. The agent edits
+ * files on disk through its filesystem backend; this returns the final plan and
+ * summary it produced for the report.
  */
 export async function runDeepAgentConversion(options: DeepAgentRunOptions): Promise<DeepAgentRunResult> {
   const agent = await buildDeepAgent(options);
   const label = languageProfile(options.language).label;
-  const result = (await agent.invoke(
-    { messages: [{ role: "user", content: taskPrompt(options.units, label) }] },
-    {
-      recursionLimit: options.recursionLimit ?? 150,
-      ...(options.signal ? { signal: options.signal } : {}),
-    },
-  )) as AgentInvokeState;
-  const messages = Array.isArray(result.messages) ? result.messages : [];
-  const todos: DeepAgentTodo[] = (result.todos ?? []).map((todo) => ({
-    content: typeof todo.content === "string" ? todo.content : String(todo.content ?? ""),
-    status: typeof todo.status === "string" ? todo.status : String(todo.status ?? ""),
-  }));
-  return {
-    todos,
-    messageCount: messages.length,
-    summary: summarizeMessages(messages),
+  const input = { messages: [{ role: "user", content: taskPrompt(options.units, label) }] };
+  const config = {
+    recursionLimit: options.recursionLimit ?? 150,
+    ...(options.signal ? { signal: options.signal } : {}),
   };
+
+  const seenMessages = new Set<string>();
+  let todos: DeepAgentTodo[] = [];
+  let lastTodosKey = "";
+  let summary = "";
+  let messageCount = 0;
+
+  const stream = await agent.stream(input, { ...config, streamMode: "updates" as const });
+  for await (const chunk of stream as AsyncIterable<Record<string, unknown>>) {
+    for (const update of Object.values(chunk)) {
+      if (!update || typeof update !== "object") continue;
+      const node = update as { messages?: unknown; todos?: unknown };
+
+      if (Array.isArray(node.todos)) {
+        const next = normalizeTodos(node.todos as StreamedTodo[]);
+        const key = JSON.stringify(next);
+        if (key !== lastTodosKey) {
+          lastTodosKey = key;
+          todos = next;
+          options.onProgress?.({ kind: "plan", todos: next });
+        }
+      }
+
+      if (Array.isArray(node.messages)) {
+        for (const raw of node.messages) {
+          const message = raw as StreamedMessage;
+          const id = typeof message.id === "string" ? message.id : undefined;
+          if (id) {
+            if (seenMessages.has(id)) continue;
+            seenMessages.add(id);
+          }
+          messageCount += 1;
+          const type = typeof message.getType === "function" ? message.getType() : undefined;
+          if (type === "ai") {
+            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+              for (const call of message.tool_calls) {
+                const name = typeof call.name === "string" ? call.name : "tool";
+                const detail = toolDetail(name, call.args);
+                options.onProgress?.({ kind: "tool", name, ...(detail ? { detail } : {}) });
+              }
+            } else if (typeof message.content === "string" && message.content.trim().length > 0) {
+              summary = message.content.trim();
+              options.onProgress?.({ kind: "assistant", text: summary });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return { todos, messageCount, summary };
 }

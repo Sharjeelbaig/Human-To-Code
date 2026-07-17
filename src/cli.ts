@@ -39,6 +39,7 @@ import {
   type ConversionUnit,
 } from "./pipeline/simple.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
+import type { DeepAgentProgress } from "./pipeline/deep-agent.ts";
 import {
   applyVerifiedRun,
   buildContextPreview,
@@ -474,6 +475,57 @@ async function confirmYes(promptText: string): Promise<boolean> {
   }
 }
 
+interface Spinner {
+  /** Clear the spinner, print a line to stdout, then let the spinner resume. */
+  note(line: string): void;
+  /** Update the text shown next to the animated frame. */
+  label(text: string): void;
+  /** Stop and clear the spinner. */
+  stop(): void;
+}
+
+/**
+ * A single-line elapsed-time spinner on stderr, so live agent activity is
+ * visible without corrupting stdout. Falls back to plain logging when stderr is
+ * not a TTY (piped/CI), and does nothing animated in `--json` mode.
+ */
+function createSpinner(active: boolean): Spinner {
+  if (!active || !process.stderr.isTTY) {
+    return { note: (line) => console.log(line), label: () => undefined, stop: () => undefined };
+  }
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  const started = Date.now();
+  let index = 0;
+  let text = "working";
+  const clear = (): void => { process.stderr.write("\r[K"); };
+  const tick = (): void => {
+    index = (index + 1) % frames.length;
+    const seconds = Math.round((Date.now() - started) / 1000);
+    process.stderr.write(`\r[K${frames[index] ?? ""} ${text} · ${seconds}s`);
+  };
+  const timer = setInterval(tick, 120);
+  if (typeof timer.unref === "function") timer.unref();
+  return {
+    note: (line) => { clear(); console.log(line); },
+    label: (value) => { text = value; },
+    stop: () => { clearInterval(timer); clear(); },
+  };
+}
+
+function todoIcon(status: string): string {
+  if (status === "completed") return "[✓]";
+  if (status === "in_progress") return "[~]";
+  return "[ ]";
+}
+
+/** Rewrite an incapable-model tool-call failure into an actionable hint. */
+function deepAgentErrorHint(message: string): string {
+  const looksLikeToolFormatFailure = /xml syntax error|<\/?(?:function|parameter|tool_call)>|failed to parse|does not support tools|no tool/iu.test(message);
+  return looksLikeToolFormatFailure
+    ? " — the model likely cannot emit valid tool calls. Use a larger tool-calling model (for example qwen2.5-coder:7b or bigger), or run with --simple."
+    : "";
+}
+
 /**
  * Simple `.human`/`@human` -> code flow: discover units, show a receipt, and on
  * confirmation write real code files. This is the default `human-to-code .`
@@ -502,7 +554,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       return units.length === 0 ? 3 : cli.yes ? 0 : 3;
     }
   } else {
-    output(renderReceipt(units, providerName, model, language), false);
+    output(renderReceipt(units, providerName, model, language, cli.simple ? "simple" : "agent"), false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
@@ -534,6 +586,39 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   // prompts). `--simple` selects the deterministic, dependency-free generator.
   if (!cli.simple) {
     const { runDeepAgentConversion } = await import("./pipeline/deep-agent.ts");
+    const interactive = !cli.json;
+    const spinner = createSpinner(interactive);
+    const started = Date.now();
+    const todoStatus = new Map<string, string>();
+    let planPrinted = false;
+    const onProgress = interactive
+      ? (event: DeepAgentProgress): void => {
+          if (event.kind === "plan") {
+            if (!planPrinted) {
+              spinner.note("\nPlan:");
+              for (const todo of event.todos) {
+                spinner.note(`  ${todoIcon(todo.status)} ${todo.content}`);
+                todoStatus.set(todo.content, todo.status);
+              }
+              planPrinted = true;
+              return;
+            }
+            for (const todo of event.todos) {
+              if (todoStatus.get(todo.content) !== todo.status) {
+                if (todo.status === "completed") spinner.note(`  ✓ ${todo.content}`);
+                else if (todo.status === "in_progress") spinner.label(todo.content);
+                todoStatus.set(todo.content, todo.status);
+              }
+            }
+          } else if (event.kind === "tool") {
+            const detail = event.detail ? ` ${event.detail}` : "";
+            spinner.note(`  → ${event.name}${detail}`);
+            spinner.label(`${event.name}${detail}`);
+          }
+        }
+      : undefined;
+
+    if (interactive) output("\nStarting deep agent… (planning, filesystem, subagents)", false);
     try {
       const outcome = await runDeepAgentConversion({
         root,
@@ -543,20 +628,23 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         units,
         ...(baseUrl ? { baseUrl } : {}),
         ...(apiKey ? { apiKey } : {}),
+        ...(onProgress ? { onProgress } : {}),
       });
+      spinner.stop();
+      const seconds = Math.round((Date.now() - started) / 1000);
       if (cli.json) {
         output({ status: "DONE", engine: "deep-agent", todos: outcome.todos, messages: outcome.messageCount, summary: outcome.summary }, true);
       } else {
-        output("", false);
-        for (const todo of outcome.todos) output(`  [${todo.status}] ${todo.content}`, false);
-        output(`\nDeep agent finished (${outcome.messageCount} messages).${outcome.summary ? `\n${outcome.summary}` : ""}`, false);
+        output(`\nDeep agent finished in ${seconds}s (${outcome.messageCount} steps).${outcome.summary ? `\n${outcome.summary}` : ""}`, false);
       }
       return 0;
     } catch (error) {
+      spinner.stop();
+      const message = error instanceof Error ? error.message : String(error);
       output(
         cli.json
-          ? { status: "FAILED", engine: "deep-agent", error: error instanceof Error ? error.message : String(error) }
-          : `\nDeep agent error: ${error instanceof Error ? error.message : String(error)}`,
+          ? { status: "FAILED", engine: "deep-agent", error: message }
+          : `\nDeep agent error: ${message}${deepAgentErrorHint(message)}`,
         cli.json,
       );
       return 5;

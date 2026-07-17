@@ -112,10 +112,18 @@ an autonomous engine: it edits files directly and does **not** produce
 `VERIFIED` runs, hash-verified patches, or run-store records. For the reviewed,
 sandbox-validated pipeline use `human-to-code guided`.
 
+While it runs, the agent streams live progress to the terminal: an animated
+elapsed-time spinner plus a line for the plan and each tool call
+(`→ read_file …`, `→ edit_file …`, `✓ <done step>`), so a long run is never a
+blank screen.
+
 The provider is bound through the OpenAI-compatible chat client. Ollama is
 reached at its `/v1` endpoint (the deep agent's structured tool messages are not
 supported by the native `/api/chat` surface), so the model you pass must be
-tool-calling capable — small models that cannot emit valid tool calls will fail.
+tool-calling capable. Small models that cannot emit valid tool calls fail with a
+tool-call/XML parse error; the CLI detects this and suggests a larger model or
+`--simple`. In practice a ~7B-or-larger coder model is the floor; sub-2B models
+do not work.
 
 Unlike the rest of the tool, this engine adds runtime dependencies
 (`deepagents`, `langchain`, `@langchain/core`, `@langchain/openai`,
