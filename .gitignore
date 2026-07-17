@@ -5,3 +5,5 @@ dist/
 # if this file is git-tracked (see src/discovery.ts).
 secrets.human
 prompt.txt
+
+.playwright-cli/

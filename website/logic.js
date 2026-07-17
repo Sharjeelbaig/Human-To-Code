@@ -76,6 +76,24 @@
       }
     });
   });
+  document.querySelectorAll("[data-copy-ide]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const lines = [...button.closest(".ide-window")?.querySelectorAll(".ide-line, .ide-terminal-line") ?? []];
+      const example = lines.map((line) => line.textContent).join("\n").trimEnd();
+      if (!example) return;
+      try {
+        await navigator.clipboard.writeText(example);
+        button.textContent = "Copied";
+        button.classList.add("copied");
+        setTimeout(() => {
+          button.textContent = "Copy";
+          button.classList.remove("copied");
+        }, 1200);
+      } catch {
+        /* Clipboard unavailable (for example on a non-secure local origin). */
+      }
+    });
+  });
 
   /* ---------------- hero type narrative ---------------- */
   const heroLead = document.querySelector("[data-hero-lead]");
