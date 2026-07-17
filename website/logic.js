@@ -59,6 +59,23 @@
       /* clipboard unavailable (e.g. http) — quietly ignore */
     }
   });
+  document.querySelectorAll("[data-copy-command]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const command = button.parentElement?.querySelector("code")?.textContent?.trim();
+      if (!command) return;
+      try {
+        await navigator.clipboard.writeText(command);
+        button.textContent = "Copied";
+        button.classList.add("copied");
+        setTimeout(() => {
+          button.textContent = "Copy";
+          button.classList.remove("copied");
+        }, 1200);
+      } catch {
+        /* Clipboard unavailable (e.g. http) — quietly ignore. */
+      }
+    });
+  });
 
   /* ---------------- hero editor language tabs ---------------- */
   const demoTabs = [...document.querySelectorAll("[data-demo-tab]")];
@@ -204,8 +221,11 @@
     };
 
     const applyProvider = (provider) => {
+      if (!(provider in providerLabels)) return;
       qs.querySelectorAll("[data-provider]").forEach((el) => {
-        el.hidden = el.dataset.provider !== provider;
+        const active = el.dataset.provider === provider;
+        el.hidden = !active;
+        el.setAttribute("aria-hidden", String(!active));
       });
       // renumber the shared "Generate" step (5 for ollama, 6 for openai)
       qs.querySelectorAll("[data-step-ollama]").forEach((el) => {
@@ -216,6 +236,7 @@
       });
       providerTrigger?.setAttribute("aria-label", providerLabels[provider]);
       providerTrigger?.querySelector(".qs-provider-logo")?.setAttribute("src", providerLogos[provider]);
+      qs.dataset.activeProvider = provider;
     };
 
     const closeProviderMenu = () => {
@@ -228,11 +249,13 @@
       providerOptions.hidden = false;
       providerTrigger?.setAttribute("aria-expanded", "true");
     };
-    providerTrigger?.addEventListener("click", () => {
+    providerTrigger?.addEventListener("click", (event) => {
+      event.stopPropagation();
       if (providerOptions?.hidden) openProviderMenu(); else closeProviderMenu();
     });
     providerChoices.forEach((choice) => {
-      choice.addEventListener("click", () => {
+      choice.addEventListener("click", (event) => {
+        event.stopPropagation();
         applyProvider(choice.dataset.providerOption);
         closeProviderMenu();
         providerTrigger?.focus();
@@ -242,6 +265,11 @@
       if (!event.target.closest("[data-provider-dropdown]")) closeProviderMenu();
     });
     document.addEventListener("keydown", (event) => {
+      if ((event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") && document.activeElement === providerTrigger) {
+        event.preventDefault();
+        openProviderMenu();
+        providerChoices.find((choice) => choice.getAttribute("aria-selected") === "true")?.focus();
+      }
       if (event.key === "Escape" && providerOptions && !providerOptions.hidden) {
         closeProviderMenu();
         providerTrigger?.focus();

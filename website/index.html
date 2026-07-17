@@ -395,104 +395,78 @@
       <h2 class="section-title reveal">Quick start</h2>
       <p class="section-sub reveal">Local &amp; private by default — no code leaves your machine until you choose a remote provider and consent.</p>
 
-      <div class="qs-controls reveal">
-        <div class="qs-provider-pick">
-          <span>Provider</span>
-          <div class="qs-provider-dropdown" data-provider-dropdown>
-            <button class="qs-provider-trigger" id="qsProvider" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="qsProviderOptions" aria-label="Ollama — local and free (recommended)">
-              <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt="">
-              <svg class="qs-provider-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
-            </button>
-            <div class="qs-provider-options" id="qsProviderOptions" role="listbox" aria-label="Provider" hidden>
-              <button class="qs-provider-option" type="button" role="option" aria-selected="true" data-provider-option="ollama" aria-label="Ollama — local and free (recommended)" title="Ollama — local and free (recommended)">
-                <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt="">
-                <span class="sr-only">Ollama — local and free (recommended)</span>
-              </button>
-              <button class="qs-provider-option" type="button" role="option" aria-selected="false" data-provider-option="openai" aria-label="OpenAI — remote" title="OpenAI — remote">
-                <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt="">
-                <span class="sr-only">OpenAI — remote</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <ol class="qs-steps reveal">
         <li class="qs-step">
-          <div class="qs-head"><span class="qs-n">1</span><h3>Choose a provider</h3></div>
-          <p>human-to-code runs on any platform supported by <strong>Node.js 24+</strong>. Make sure Node.js is installed on your system before continuing; no global installation of human-to-code is required.</p>
-        </li>
-
-        <li class="qs-step" data-provider="ollama">
-          <div class="qs-head"><span class="qs-n">2</span><h3>Install Ollama &amp; pull the model</h3></div>
-          <p>The default config targets your local Ollama on <code>http://localhost:11434</code> with <code>qwen2.5-coder:7b</code>. human-to-code never pulls a model for you, so pull it once.</p>
-          <p class="qs-inline">Install Ollama for your platform, then run:</p>
-          <pre class="code-block"><code>ollama pull qwen2.5-coder:7b</code></pre>
-        </li>
-
-        <li class="qs-step" data-provider="openai" hidden>
-          <div class="qs-head"><span class="qs-n">2</span><h3>Set your OpenAI key</h3></div>
-          <p>Credentials are <strong>environment-only</strong> — the config stores the variable <em>name</em> (<code>OPENAI_API_KEY</code>), never the key itself.</p>
-          <p class="qs-inline">Set <code>OPENAI_API_KEY</code> in your system environment using your platform's standard method.</p>
-        </li>
-
-        <li class="qs-step">
-          <div class="qs-head"><span class="qs-n">3</span><h3>Create the config</h3></div>
-          <p><code>--init</code> writes a complete, schema-versioned <code>human-to-code.config.json</code> and never overwrites an existing one. Treat it as a reviewable template.</p>
-          <pre class="code-block"><code>npx human-to-code --init .</code></pre>
-
-          <div data-provider="ollama">
-            <p class="qs-inline">The generated file already targets local Ollama — no edits needed:</p>
-            <pre class="code-block"><code>{
-  <span class="t-key">"schemaVersion"</span>: <span class="t-num">1</span>,
-  <span class="t-key">"provider"</span>: {
-    <span class="t-key">"name"</span>: <span class="t-str">"ollama"</span>,
-    <span class="t-key">"model"</span>: <span class="t-str">"qwen2.5-coder:7b"</span>
-  },
-  <span class="t-key">"privacy"</span>: { <span class="t-key">"remoteProviderConsent"</span>: <span class="t-num">false</span> }
-}</code></pre>
+          <div class="qs-visual">
+            <img src="assets/quickstart-informal.png" alt="Informal Western developer selecting an AI provider">
+            <div class="qs-provider-art" aria-hidden="true">
+              <span class="qs-provider-art-line"></span>
+              <span class="qs-provider-art-node qs-provider-art-node-ollama"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt=""></span>
+              <span class="qs-provider-art-node qs-provider-art-node-openai"><img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt=""></span>
+            </div>
           </div>
+          <div class="qs-content">
+            <div class="qs-head"><span class="qs-n">1</span><h3>Choose a provider</h3></div>
+            <p>human-to-code runs on any platform supported by <strong>Node.js 24+</strong>. Start local with Ollama, or choose OpenAI when you are ready to explicitly consent to remote generation.</p>
+            <div class="qs-controls">
+              <div class="qs-provider-pick">
+                <span>Provider</span>
+                <div class="qs-provider-dropdown" data-provider-dropdown>
+                  <button class="qs-provider-trigger" id="qsProvider" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="qsProviderOptions" aria-label="Ollama — local and free (recommended)">
+                    <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt="">
+                    <svg class="qs-provider-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
+                  </button>
+                  <div class="qs-provider-options" id="qsProviderOptions" role="listbox" aria-label="Provider" hidden>
+                    <button class="qs-provider-option" type="button" role="option" aria-selected="true" data-provider-option="ollama" aria-label="Ollama — local and free (recommended)" title="Ollama — local and free (recommended)"><img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt=""><span class="sr-only">Ollama — local and free (recommended)</span></button>
+                    <button class="qs-provider-option" type="button" role="option" aria-selected="false" data-provider-option="openai" aria-label="OpenAI — remote" title="OpenAI — remote"><img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt=""><span class="sr-only">OpenAI — remote</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </li>
 
-          <div data-provider="openai" hidden>
-            <p class="qs-inline">Edit the <code>provider</code> and <code>privacy</code> blocks. Remote generation is blocked until you set conservative pricing bounds <em>and</em> consent:</p>
-            <pre class="code-block"><code>{
-  <span class="t-key">"schemaVersion"</span>: <span class="t-num">1</span>,
-  <span class="t-key">"provider"</span>: {
-    <span class="t-key">"name"</span>: <span class="t-str">"openai"</span>,
-    <span class="t-key">"model"</span>: <span class="t-str">"gpt-4o-2024-08-06"</span>,
-    <span class="t-key">"apiKeyEnv"</span>: <span class="t-str">"OPENAI_API_KEY"</span>,
-    <span class="t-key">"pricing"</span>: {
-      <span class="t-key">"inputUsdPerMillionTokens"</span>: <span class="t-num">25</span>,
-      <span class="t-key">"outputUsdPerMillionTokens"</span>: <span class="t-num">100</span>
-    }
-  },
-  <span class="t-key">"privacy"</span>: { <span class="t-key">"remoteProviderConsent"</span>: <span class="t-num">true</span> },
-  <span class="t-key">"budgets"</span>: { <span class="t-key">"maxCostUsd"</span>: <span class="t-num">25</span> }
-}</code></pre>
-            <p class="qs-inline">Set the rates at or above the real published rates for your exact model — they are a fail-closed budget guard, not a live price feed.</p>
+        <li class="qs-step qs-step-reverse" data-provider="ollama">
+          <div class="qs-visual"><img src="assets/quickstart-install.png" alt="Pakistani developer in traditional clothing preparing a local model"></div>
+          <div class="qs-content">
+            <div class="qs-head"><span class="qs-n">2</span><h3>Install Ollama &amp; pull the model</h3></div>
+            <p>The default config targets local Ollama on <code>http://localhost:11434</code> with <code>qwen2.5-coder:7b</code>. Install Ollama for your platform, then pull the model once.</p>
+            <div class="qs-command"><pre><code>ollama pull qwen2.5-coder:7b</code></pre><button class="qs-copy" type="button" data-copy-command aria-label="Copy command">Copy</button></div>
+          </div>
+        </li>
+
+        <li class="qs-step qs-step-reverse" data-provider="openai" hidden>
+          <div class="qs-visual"><img src="assets/quickstart-install.png" alt="Pakistani developer in traditional clothing preparing a remote provider"></div>
+          <div class="qs-content">
+            <div class="qs-head"><span class="qs-n">2</span><h3>Set your OpenAI key</h3></div>
+            <p>Credentials are <strong>environment-only</strong> — the config stores the variable name (<code>OPENAI_API_KEY</code>), never the key itself.</p>
+            <div class="qs-command"><pre><code>export OPENAI_API_KEY="your_api_key"</code></pre><button class="qs-copy" type="button" data-copy-command aria-label="Copy command">Copy</button></div>
           </div>
         </li>
 
         <li class="qs-step">
-          <div class="qs-head"><span class="qs-n">4</span><h3>Write your first request</h3></div>
-          <p>Create a <code>.human</code> file, or drop an inline <code>@human</code> marker into an existing source file.</p>
-          <pre class="code-block"><code><span class="t-cmt"># sort-list.human</span>
-Create a function that returns a new sorted
-copy of a list, with a docstring.
-</code></pre>
+          <div class="qs-visual"><img src="assets/quickstart-config.png" alt="Business-dressed developer reviewing a configuration file"></div>
+          <div class="qs-content">
+            <div class="qs-head"><span class="qs-n">3</span><h3>Create the config</h3></div>
+            <p><code>--init</code> writes a complete, schema-versioned <code>human-to-code.config.json</code> and never overwrites an existing file.</p>
+            <div class="qs-command"><pre><code>npx human-to-code --init .</code></pre><button class="qs-copy" type="button" data-copy-command aria-label="Copy command">Copy</button></div>
+            <div data-provider="ollama">
+              <p class="qs-inline">The generated config already targets local Ollama — no edits needed.</p>
+            </div>
+            <div data-provider="openai" hidden>
+              <p class="qs-inline">Change the provider to OpenAI, add reviewed pricing bounds, and set <code>remoteProviderConsent</code> to <code>true</code> before generating.</p>
+            </div>
+          </div>
         </li>
 
-        <li class="qs-step" data-provider="openai" hidden>
-          <div class="qs-head"><span class="qs-n">5</span><h3>Review the outbound context</h3></div>
-          <p>Before sending anything to a remote provider, inspect the <em>complete</em> outbound envelope — every file, range, hash, and redaction. Remote providers get no follow-up requests, so this preview is the whole payload.</p>
-          <pre class="code-block"><code>npx human-to-code context sort-list.strict.human.json --explain</code></pre>
-        </li>
-
-        <li class="qs-step">
-          <div class="qs-head"><span class="qs-n" data-step-ollama="5" data-step-openai="6">5</span><h3>Generate</h3></div>
-          <p>Run the guided command. It analyzes the project, shows a receipt, and asks before writing — nothing is generated on <code>--dry-run</code>.</p>
-          <pre class="code-block"><code>npx human-to-code .</code></pre>
-          <p class="qs-inline">For a reviewed, sandbox-validated patch against a recognized React, NestJS, FastAPI, or Rust project, use <code>npx human-to-code guided .</code> instead — it drafts a change contract for your review first.</p>
+        <li class="qs-step qs-step-reverse">
+          <div class="qs-visual"><img src="assets/quickstart-generate.png" alt="Arab developer generating and reviewing a safe code patch"></div>
+          <div class="qs-content">
+            <div class="qs-head"><span class="qs-n">4</span><h3>Write &amp; generate</h3></div>
+            <p>Create a <code>.human</code> request, then run the guided command. It analyzes the project, shows a receipt, and asks before writing.</p>
+            <div class="qs-command"><pre><code>npx human-to-code guided .</code></pre><button class="qs-copy" type="button" data-copy-command aria-label="Copy command">Copy</button></div>
+            <div data-provider="openai" hidden><p class="qs-inline">Before remote generation, inspect the complete outbound context with <code>npx human-to-code context sort-list.strict.human.json --explain</code>.</p></div>
+          </div>
         </li>
       </ol>
     </section>
