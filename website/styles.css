@@ -632,14 +632,14 @@ html[data-theme="dark"] .icon-moon { display: block; }
   margin: 54px 0 0;
   padding: 0;
   display: grid;
-  gap: 32px;
+  gap: clamp(72px, 8vw, 128px);
 }
 .qs-step {
   position: relative;
   display: flex;
   align-items: center;
   isolation: isolate;
-  min-height: clamp(420px, 34vw, 520px);
+  min-height: clamp(470px, 38vw, 580px);
   padding: clamp(24px, 4vw, 56px);
   overflow: visible;
 }
@@ -647,17 +647,29 @@ html[data-theme="dark"] .icon-moon { display: block; }
 .qs-visual {
   position: absolute;
   z-index: 0;
-  inset: -6% auto -8% -17%;
-  width: 62%;
+  inset: -8% auto -11% -20%;
+  width: 67%;
   pointer-events: none;
   isolation: isolate;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 73%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 13%, #000 73%, transparent 100%);
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 13%, #000 74%, transparent 100%),
+    linear-gradient(180deg, #000 0%, #000 72%, transparent 98%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 13%, #000 74%, transparent 100%),
+    linear-gradient(180deg, #000 0%, #000 72%, transparent 98%);
+  mask-composite: intersect;
 }
 .qs-step-reverse .qs-visual {
-  inset: -6% -17% -8% auto;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 27%, #000 87%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 27%, #000 87%, transparent 100%);
+  inset: -8% -20% -11% auto;
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 26%, #000 87%, transparent 100%),
+    linear-gradient(180deg, #000 0%, #000 72%, transparent 98%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 26%, #000 87%, transparent 100%),
+    linear-gradient(180deg, #000 0%, #000 72%, transparent 98%);
+  mask-composite: intersect;
 }
 .qs-visual img {
   width: 100%;
@@ -681,9 +693,12 @@ html[data-theme="dark"] .icon-moon { display: block; }
   mix-blend-mode: soft-light;
 }
 .qs-visual::after {
+  inset: 7% 6% 13%;
   background:
     repeating-linear-gradient(0deg, color-mix(in srgb, var(--text) 10%, transparent) 0 1px, transparent 1px 7px),
     linear-gradient(90deg, transparent 55%, color-mix(in srgb, var(--bg) 48%, transparent) 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 18%, #000 68%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent, #000 18%, #000 68%, transparent 100%);
   mix-blend-mode: soft-light;
   opacity: .45;
 }
@@ -974,7 +989,7 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
   .qs-controls { width: 100%; margin-top: 24px; }
   .qs-provider-pick { width: 100%; min-width: 0; align-items: stretch; flex-direction: column; gap: 7px; }
   .qs-provider-dropdown { align-self: flex-start; }
-  .qs-steps { margin-top: 28px; }
+  .qs-steps { margin-top: 28px; gap: 48px; }
   .qs-step { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 22px; padding: 16px; overflow: hidden; }
   .qs-visual, .qs-step-reverse .qs-visual { position: relative; z-index: 0; inset: auto; width: 100%; min-height: 200px; order: 0; -webkit-mask-image: none; mask-image: none; }
   .qs-content, .qs-step-reverse .qs-content { width: 100%; margin: 0; order: 1; text-align: center; }
