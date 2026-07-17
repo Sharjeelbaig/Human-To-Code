@@ -27,9 +27,32 @@ test("FileMemory records deterministic replacement line ranges without persisten
     "line 2 to line 2:\nconst gap = true;",
   ].join("\n\n"));
   assert.deepEqual(memory.entries, [
-    { startLine: 1, endLine: 1, code: "const value = 5;" },
-    { startLine: 2, endLine: 2, code: "const gap = true;" },
+    { startLine: 1, endLine: 1, code: "const value = 5;", fragment: false },
+    { startLine: 2, endLine: 2, code: "const gap = true;", fragment: false },
   ]);
+});
+
+test("FileMemory marks signature-only spans as fragments", () => {
+  const memory = new FileMemory("example.ts", "const done = true;\nfunction run() {\n  return done;\n}\n");
+  assert.deepEqual(memory.entries, [
+    { startLine: 1, endLine: 1, code: "const done = true;", fragment: false },
+    { startLine: 2, endLine: 2, code: "function run() {", fragment: true },
+  ]);
+});
+
+test("FileMemory keeps a new function intact when its signature matches indexed evidence", () => {
+  const source = [
+    "function add(a: number, b: number) {",
+    "  return a + b;",
+    "}",
+    "",
+    '// @human create a function named "add" that takes two numbers as parameters and returns their sum.',
+    "",
+  ].join("\n");
+  const memory = new FileMemory("example.ts", source);
+  const generated = "function add(a: number, b: number) {\n  return a + b;\n}";
+
+  assert.equal(memory.normalizeReplacement(generated), generated);
 });
 
 test("FileMemory statically indexes declarations in every direct-path language", () => {
@@ -158,6 +181,49 @@ test("later inline markers receive FileMemory from earlier markers in the same f
       "const unrelated = 100;",
       "",
       "console.log(value);",
+      "",
+    ].join("\n"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("inline markers next to a pre-existing identical signature apply without decapitation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-fragment-"));
+  const path = join(root, "example.ts");
+  try {
+    await writeFile(path, [
+      "function add(a: number, b: number) {",
+      "  return a + b;",
+      "}",
+      "",
+      '// @human create a function named "add" that takes two numbers as parameters and returns their sum.',
+      "",
+      "/* @human use the function to add 1 and 1,",
+      "and logs the result to the console.",
+      "*/",
+      "",
+    ].join("\n"));
+    const units = await discoverUnits(root, "typescript");
+    const generated = await generateConversionUnits(units, async (unit) =>
+      unit.prompt.includes("create a function")
+        ? "function add(a: number, b: number) {\n  return a + b;\n}"
+        : "const result = add(1, 1);\nconsole.log(result);");
+
+    for (const item of [...generated].sort((left, right) => right.unit.range!.start - left.unit.range!.start)) {
+      await applyUnit(root, item.unit, item.code);
+    }
+    assert.equal(await readFile(path, "utf8"), [
+      "function add(a: number, b: number) {",
+      "  return a + b;",
+      "}",
+      "",
+      "function add(a: number, b: number) {",
+      "  return a + b;",
+      "}",
+      "",
+      "const result = add(1, 1);",
+      "console.log(result);",
       "",
     ].join("\n"));
   } finally {

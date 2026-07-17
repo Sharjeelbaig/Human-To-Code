@@ -151,7 +151,7 @@ export class FileMemory {
     const endLine = startLine + (replacement.match(/\n/g)?.length ?? 0);
     this.#virtualText = `${this.#virtualText.slice(0, start)}${replacement}${this.#virtualText.slice(end)}`;
     this.#characterDelta += replacement.length - (range.end - range.start);
-    this.#generatedEntries.push({ startLine, endLine, code: replacement });
+    this.#generatedEntries.push({ startLine, endLine, code: replacement, fragment: false });
     this.#staticEntries = extractStaticFileMemory(this.sourcePath, this.#virtualText);
   }
 
@@ -174,6 +174,10 @@ export class FileMemory {
    * Remove only exact repeated FileMemory prefixes from a model response, then
    * reject any remaining declaration that conflicts with remembered code.
    * This is deterministic host cleanup, not an AI rewrite.
+   *
+   * Signature-only fragments (e.g. `function add(a, b) {`) are never treated
+   * as repeats: a new block legitimately starts with the same signature, and
+   * stripping it would leave a decapitated body.
    */
   normalizeReplacement(code: string): string {
     const original = code.trim();
@@ -181,7 +185,7 @@ export class FileMemory {
     let removedPrefix = false;
     const entries = [...this.entries].sort((left, right) => right.code.length - left.code.length);
     for (;;) {
-      const repeated = entries.find((entry) => normalized.startsWith(entry.code));
+      const repeated = entries.find((entry) => !entry.fragment && normalized.startsWith(entry.code));
       if (!repeated) break;
       const remainder = normalized.slice(repeated.code.length);
       if (remainder.length === 0) {

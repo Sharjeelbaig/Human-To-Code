@@ -4,6 +4,12 @@ export interface StaticFileMemoryEntry {
   startLine: number;
   endLine: number;
   code: string;
+  /**
+   * True when `code` is signature-only evidence (e.g. `function add(a, b) {`)
+   * rather than a complete block. Fragments are shown as context but must
+   * never be stripped from a response as a "repeated" prefix.
+   */
+  fragment: boolean;
 }
 
 type LanguageFamily = "javascript" | "python" | "rust" | "go" | "ruby" | "typed-c";
@@ -204,21 +210,26 @@ function scanStructure(line: string, family: LanguageFamily, state: StructureSta
   return { topLevelSemicolon, topLevelHeaderEnd };
 }
 
-function spanEnd(lines: readonly string[], start: number, family: LanguageFamily, candidate: DeclarationCandidate): number {
+interface SpanResolution {
+  end: number;
+  fragment: boolean;
+}
+
+function spanEnd(lines: readonly string[], start: number, family: LanguageFamily, candidate: DeclarationCandidate): SpanResolution {
   const state: StructureState = { round: 0, square: 0, curly: 0, blockComment: false, escaped: false };
   for (let index = start; index < lines.length; index += 1) {
     const structure = scanStructure(lines[index]!, family, state);
     const balanced = state.round === 0 && state.square === 0 && state.curly === 0 && !state.quote && !state.triple && !state.blockComment;
     if (candidate.mode === "header" && (structure.topLevelHeaderEnd || structure.topLevelSemicolon) && !state.quote && !state.triple) {
-      return index;
+      return { end: index, fragment: !structure.topLevelSemicolon };
     }
-    if (candidate.mode === "header" && family === "ruby" && balanced) return index;
+    if (candidate.mode === "header" && family === "ruby" && balanced) return { end: index, fragment: true };
     if (candidate.mode === "statement") {
-      if (candidate.semicolon && structure.topLevelSemicolon && balanced) return index;
-      if (!candidate.semicolon && balanced && !lines[index]!.trimEnd().endsWith("\\") && !lines[index]!.trimEnd().endsWith(",")) return index;
+      if (candidate.semicolon && structure.topLevelSemicolon && balanced) return { end: index, fragment: false };
+      if (!candidate.semicolon && balanced && !lines[index]!.trimEnd().endsWith("\\") && !lines[index]!.trimEnd().endsWith(",")) return { end: index, fragment: false };
     }
   }
-  return start;
+  return { end: start, fragment: true };
 }
 
 /**
@@ -237,9 +248,9 @@ export function extractStaticFileMemory(sourcePath: string, sourceText: string):
     if (ignoredLine(trimmed, family)) continue;
     const candidate = declarationCandidate(trimmed, family);
     if (!candidate) continue;
-    const end = spanEnd(lines, index, family, candidate);
+    const { end, fragment } = spanEnd(lines, index, family, candidate);
     const code = lines.slice(index, end + 1).join("\n").trim();
-    if (code.length > 0) entries.push({ startLine: index + 1, endLine: end + 1, code });
+    if (code.length > 0) entries.push({ startLine: index + 1, endLine: end + 1, code, fragment });
     if (candidate.mode === "header") headerContinuationThrough = end;
   }
   return entries;
