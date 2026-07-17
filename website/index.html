@@ -396,13 +396,25 @@
       <p class="section-sub reveal">Local &amp; private by default — no code leaves your machine until you choose a remote provider and consent.</p>
 
       <div class="qs-controls reveal">
-        <label class="qs-provider-pick">
+        <div class="qs-provider-pick">
           <span>Provider</span>
-          <select id="qsProvider">
-            <option value="ollama" selected>Ollama · local &amp; free (recommended)</option>
-            <option value="openai">OpenAI · remote</option>
-          </select>
-        </label>
+          <div class="qs-provider-dropdown" data-provider-dropdown>
+            <button class="qs-provider-trigger" id="qsProvider" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="qsProviderOptions" aria-label="Ollama — local and free (recommended)">
+              <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt="">
+              <svg class="qs-provider-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
+            </button>
+            <div class="qs-provider-options" id="qsProviderOptions" role="listbox" aria-label="Provider" hidden>
+              <button class="qs-provider-option" type="button" role="option" aria-selected="true" data-provider-option="ollama" aria-label="Ollama — local and free (recommended)" title="Ollama — local and free (recommended)">
+                <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg" alt="">
+                <span class="sr-only">Ollama — local and free (recommended)</span>
+              </button>
+              <button class="qs-provider-option" type="button" role="option" aria-selected="false" data-provider-option="openai" aria-label="OpenAI — remote" title="OpenAI — remote">
+                <img class="qs-provider-logo" src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt="">
+                <span class="sr-only">OpenAI — remote</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <ol class="qs-steps reveal">

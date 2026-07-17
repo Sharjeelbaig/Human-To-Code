@@ -585,16 +585,49 @@ html[data-theme="dark"] .icon-moon { display: block; }
   color: var(--text-soft);
   font-size: 1rem;
 }
-.qs-provider-pick select {
-  font: inherit;
-  font-weight: 600;
-  color: var(--text);
+.qs-provider-dropdown { position: relative; }
+.qs-provider-trigger,
+.qs-provider-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-soft);
   border: none;
   border-radius: 12px;
-  padding: 10px 14px;
   cursor: pointer;
 }
+.qs-provider-trigger {
+  gap: 12px;
+  min-width: 76px;
+  padding: 10px 12px;
+  color: var(--text);
+}
+.qs-provider-trigger:hover,
+.qs-provider-trigger[aria-expanded="true"] { background: var(--card); }
+.qs-provider-trigger:focus-visible,
+.qs-provider-option:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 3px; }
+.qs-provider-logo { width: 24px; height: 24px; display: block; }
+.qs-provider-chevron { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transition: transform .18s ease; }
+.qs-provider-trigger[aria-expanded="true"] .qs-provider-chevron { transform: rotate(180deg); }
+.qs-provider-options {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  gap: 6px;
+  padding: 7px;
+  background: var(--card);
+  border: 1px solid var(--bg-soft);
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .18);
+}
+.qs-provider-options[hidden] { display: none; }
+.qs-provider-option { width: 42px; height: 42px; padding: 9px; }
+.qs-provider-option:hover,
+.qs-provider-option[aria-selected="true"] { background: var(--bg-soft); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+[data-theme="dark"] .qs-provider-logo { filter: invert(1); }
 
 .qs-steps {
   list-style: none;
@@ -820,7 +853,7 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
   .code-block { width: 100%; max-width: 100%; min-width: 0; padding: 13px 14px; font-size: 0.8rem; }
   .qs-controls { width: 100%; margin-top: 24px; }
   .qs-provider-pick { width: 100%; min-width: 0; align-items: stretch; flex-direction: column; gap: 7px; }
-  .qs-provider-pick select { width: 100%; min-width: 0; padding: 10px 11px; text-overflow: ellipsis; }
+  .qs-provider-dropdown { align-self: flex-start; }
   .qs-steps { margin-top: 28px; }
   .qs-head { min-width: 0; align-items: flex-start; gap: 10px; }
   .qs-n { width: 30px; height: 30px; font-size: 0.92rem; }

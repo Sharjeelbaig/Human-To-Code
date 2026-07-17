@@ -188,10 +188,20 @@
     }
   }
 
-/* ---------------- quick start ---------------- */
+  /* ---------------- quick start ---------------- */
   const qs = document.getElementById("quickstart");
   if (qs) {
-    const providerSelect = document.getElementById("qsProvider");
+    const providerTrigger = document.getElementById("qsProvider");
+    const providerOptions = document.getElementById("qsProviderOptions");
+    const providerChoices = [...qs.querySelectorAll("[data-provider-option]")];
+    const providerLogos = {
+      ollama: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ollama.svg",
+      openai: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg",
+    };
+    const providerLabels = {
+      ollama: "Ollama — local and free (recommended)",
+      openai: "OpenAI — remote",
+    };
 
     const applyProvider = (provider) => {
       qs.querySelectorAll("[data-provider]").forEach((el) => {
@@ -201,12 +211,45 @@
       qs.querySelectorAll("[data-step-ollama]").forEach((el) => {
         el.textContent = provider === "openai" ? el.dataset.stepOpenai : el.dataset.stepOllama;
       });
+      providerChoices.forEach((choice) => {
+        choice.setAttribute("aria-selected", String(choice.dataset.providerOption === provider));
+      });
+      providerTrigger?.setAttribute("aria-label", providerLabels[provider]);
+      providerTrigger?.querySelector(".qs-provider-logo")?.setAttribute("src", providerLogos[provider]);
     };
 
-    providerSelect?.addEventListener("change", () => applyProvider(providerSelect.value));
+    const closeProviderMenu = () => {
+      if (!providerOptions) return;
+      providerOptions.hidden = true;
+      providerTrigger?.setAttribute("aria-expanded", "false");
+    };
+    const openProviderMenu = () => {
+      if (!providerOptions) return;
+      providerOptions.hidden = false;
+      providerTrigger?.setAttribute("aria-expanded", "true");
+    };
+    providerTrigger?.addEventListener("click", () => {
+      if (providerOptions?.hidden) openProviderMenu(); else closeProviderMenu();
+    });
+    providerChoices.forEach((choice) => {
+      choice.addEventListener("click", () => {
+        applyProvider(choice.dataset.providerOption);
+        closeProviderMenu();
+        providerTrigger?.focus();
+      });
+    });
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest("[data-provider-dropdown]")) closeProviderMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && providerOptions && !providerOptions.hidden) {
+        closeProviderMenu();
+        providerTrigger?.focus();
+      }
+    });
 
     // Keep Ollama as the recommended provider.
-    applyProvider(providerSelect?.value ?? "ollama");
+    applyProvider("ollama");
   }
 
   /* ---------------- examples tabs ---------------- */
