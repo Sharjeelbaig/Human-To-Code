@@ -91,51 +91,56 @@ Node.js 24 or newer is required.
 
 ## Generation engines
 
-The default `npx human-to-code .` flow discovers work (whole `.human` files and
+The direct `npx human-to-code .` flow discovers work (whole `.human` files and
 inline `@human` markers), prints a receipt, and — after you confirm — converts
-it with a **LangChain/LangGraph deep agent** (the [`deepagents`](https://docs.langchain.com/oss/javascript/deepagents/overview)
-harness). The agent runs with the four deep-agent pillars:
+it. Two engines are available.
 
-- **Planning** — the built-in `write_todos` tool decomposes the run into an
-  ordered, status-tracked plan.
-- **File System** — a project-rooted `FilesystemBackend` gives the agent
-  `ls`/`glob`/`grep`/`read_file`/`write_file`/`edit_file` over the working tree.
-  Writes to VCS, dependency, config, and secret paths are denied by filesystem
-  permissions; the agent cannot escape the project root.
-- **Sub Agents** — a `planner`, `implementer`, and `reviewer` subagent are
-  reachable through the built-in `task` tool for isolated subtasks.
-- **Prompts** — a task-specific system prompt for the main agent and one per
-  subagent role.
+### Default: fast deterministic engine
 
-The model, not the host, drives scope, file edits, and delegation here. This is
-an autonomous engine: it edits files directly and does **not** produce
-`VERIFIED` runs, hash-verified patches, or run-store records. For the reviewed,
-sandbox-validated pipeline use `human-to-code guided`.
+The host does the orchestration; the model only writes code. For each unit the
+host issues **one plain model completion** (no tool calls) and applies the
+result by exact marker range. This is fast and works with small models — a 1.5B
+coder model converts a four-marker file in ~4 seconds. Because it needs no
+tool-calling, models that can only do plain text generation work fine.
 
-While it runs, the agent streams live progress to the terminal: an animated
-elapsed-time spinner plus a line for the plan and each tool call
-(`→ read_file …`, `→ edit_file …`, `✓ <done step>`), so a long run is never a
-blank screen.
+- **Per-marker isolation** — each `@human` marker is generated and applied
+  independently. If one marker's output is bad (e.g. a small model redeclares an
+  existing symbol), that marker is retried, then skipped with a printed reason;
+  the other markers still convert. One failure never aborts the run.
+- **FileMemory** — declarations already in the file are shown to the model as
+  read-only context (with few-shot examples) so it reuses rather than
+  re-declares them.
+- **Clear, stable output** — a single truncated status line per marker
+  (`✓ app.ts (inline @human, line 12)` / `⊘ skipped … : <reason>`), plus an
+  in-place elapsed spinner while a completion is in flight.
 
-The provider is bound through the OpenAI-compatible chat client. Ollama is
-reached at its `/v1` endpoint (the deep agent's structured tool messages are not
-supported by the native `/api/chat` surface), so the model you pass must be
-tool-calling capable. Small models that cannot emit valid tool calls fail with a
+This engine cannot produce `VERIFIED` runs; for the reviewed, sandbox-validated
+pipeline use `human-to-code guided`.
+
+### `--agent`: LangGraph deep agent
+
+`--agent` runs the [`deepagents`](https://docs.langchain.com/oss/javascript/deepagents/overview)
+harness with the four deep-agent pillars — **Planning** (`write_todos`),
+**File System** (a project-rooted `FilesystemBackend`, with writes denied on
+VCS/dependency/config/secret paths), **Sub Agents** (`planner`/`implementer`/
+`reviewer` via the `task` tool), and **Prompts** (per-role system prompts). The
+model drives scope, file edits, and delegation; live progress streams to the
+terminal.
+
+This engine needs a **tool-calling-capable model** (~7B+). It is reached through
+the OpenAI-compatible chat client (Ollama via its `/v1` endpoint, since the deep
+agent's structured tool messages are not supported by the native `/api/chat`
+surface). Small models that cannot emit valid tool calls fail with a
 tool-call/XML parse error; the CLI detects this and suggests a larger model or
-`--simple`. In practice a ~7B-or-larger coder model is the floor; sub-2B models
-do not work.
-
-Unlike the rest of the tool, this engine adds runtime dependencies
-(`deepagents`, `langchain`, `@langchain/core`, `@langchain/openai`,
-`@langchain/ollama`). Pass `--simple` to convert with the built-in-only
-generator instead, which keeps the run's supply-chain surface at Node itself.
+the default engine. It also pulls the runtime dependencies `deepagents`,
+`langchain`, `@langchain/core`, `@langchain/openai`, and `@langchain/ollama`.
 
 ```bash
-# Deep agent (default), with a tool-calling local model:
-npx human-to-code . --yes --model qwen2.5-coder:7b
+# Fast deterministic engine (default) — works with small models:
+npx human-to-code . --yes --model qwen2.5-coder:1.5b
 
-# Deterministic, dependency-free generator:
-npx human-to-code . --yes --simple
+# LangGraph deep agent — needs a tool-calling model:
+npx human-to-code . --yes --agent --model qwen2.5-coder:7b
 ```
 
 ## The reviewed change contract
@@ -156,8 +161,8 @@ The draft is deliberately conservative. Do not remove its review question until 
 
 | Command | Behavior |
 | --- | --- |
-| `human-to-code [root]` | Default direct flow: discover `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **deep-agent engine** (see below). `npx human-to-code .` is the normal entry point. |
-| `human-to-code [root] --simple` | Same direct flow using the deterministic, dependency-free generator instead of the deep agent. |
+| `human-to-code [root]` | Default direct flow: discover `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker; see below). `npx human-to-code .` is the normal entry point. |
+| `human-to-code [root] --agent` | Same direct flow using the **LangGraph deep agent** (planning/filesystem/subagents). Needs a tool-calling-capable model (~7B+). |
 | `human-to-code guided [root]` | Reviewed contract → grounding → sandbox-validation lifecycle. The only path that can reach `VERIFIED`. |
 | `human-to-code analyze [root] [--json]` | Produce a deterministic multi-workspace project profile and diagnostics. `SUPPORTED` means statically recognized, not certified. |
 | `human-to-code plan <file.human> [--root <root>]` | Write a review-blocked `ChangeContractV1` draft. |

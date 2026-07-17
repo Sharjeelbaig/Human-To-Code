@@ -242,6 +242,54 @@ test("FileMemory fails closed when a provider redeclares a remembered identifier
   );
 });
 
+test("one failing marker is skipped with a reason while the others still convert", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-resilience-"));
+  const path = join(root, "example.ts");
+  try {
+    await writeFile(path, [
+      "// @human first",
+      "// @human second",
+      "// @human third",
+      "",
+    ].join("\n"));
+    const units = await discoverUnits(root, "typescript");
+    const generated = await generateConversionUnits(
+      units,
+      async (unit) => {
+        if (unit.prompt === "second") throw new Error("provider exploded");
+        return `const ${unit.prompt} = 1;`;
+      },
+      { retries: 0 },
+    );
+
+    const bySecond = generated.find((item) => item.unit.prompt === "second");
+    assert.equal(bySecond?.code, "");
+    assert.match(bySecond?.error ?? "", /provider exploded/u);
+    // The other two markers are unaffected.
+    assert.equal(generated.find((item) => item.unit.prompt === "first")?.code, "const first = 1;");
+    assert.equal(generated.find((item) => item.unit.prompt === "third")?.code, "const third = 1;");
+    assert.equal(generated.filter((item) => item.error === undefined).length, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a security stop still aborts the whole conversion run", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-security-abort-"));
+  try {
+    await writeFile(join(root, "example.ts"), "// @human one\n// @human two\n");
+    const units = await discoverUnits(root, "typescript");
+    await assert.rejects(
+      () => generateConversionUnits(units, async () => {
+        throw new ContextSecurityError("SECRET_DETECTED", "credential-like content");
+      }),
+      (error: unknown) => error instanceof ContextSecurityError,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("inline provider prompts attach FileMemory as read-only earlier code", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: { messages?: Array<{ role?: string; content?: string }> } | undefined;
@@ -261,7 +309,7 @@ test("inline provider prompts attach FileMemory as read-only earlier code", asyn
       fileMemory: "line 1 to line 1:\nconst value = 5;",
     });
     assert.equal(result, "console.log(value);");
-    assert.match(requestBody?.messages?.[0]?.content ?? "", /Reuse relevant FileMemory declarations/u);
+    assert.match(requestBody?.messages?.[0]?.content ?? "", /NEVER redeclare, repeat, or re-output them/u);
     assert.match(requestBody?.messages?.[1]?.content ?? "", /line 1 to line 1:\nconst value = 5;/u);
     assert.match(requestBody?.messages?.[1]?.content ?? "", /Current @human instruction:\nconsole log the const/u);
   } finally {

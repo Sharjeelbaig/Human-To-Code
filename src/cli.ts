@@ -37,6 +37,7 @@ import {
   generateCode,
   renderReceipt,
   type ConversionUnit,
+  type ConversionProgress,
 } from "./pipeline/simple.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
 import type { DeepAgentProgress } from "./pipeline/deep-agent.ts";
@@ -53,8 +54,8 @@ import {
 const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
 
 Usage:
-  human-to-code [root] [-y]                    Convert .human files and @human markers to code (default; LangGraph deep agent)
-  human-to-code [root] [-y] --simple           Use the deterministic, dependency-free generator instead of the deep agent
+  human-to-code [root] [-y]                    Convert .human files and @human markers to code (default; fast deterministic engine)
+  human-to-code [root] [-y] --agent            Use the LangGraph deep agent (planning/filesystem/subagents; needs a tool-calling model)
   human-to-code build [root] [-y]              Alias of the default convert flow
   human-to-code guided [root]                  Reviewed/grounded/validated compiler pipeline
   human-to-code analyze [root] [--json]
@@ -85,7 +86,8 @@ Other options:
   --explain                      Show outbound context provenance and exact selected content
   --json                         Machine-readable output
   -y, --yes                      Skip the confirmation prompt and write files
-  --simple                       Use the deterministic generator instead of the deep agent (default flow only)
+  --agent                        Use the LangGraph deep agent instead of the default deterministic engine
+  --simple                       Deprecated no-op; the deterministic engine is now the default
   --dry-run                      Analyze and preview only; perform no generation
   --manual-passed                Explicitly attest all reviewed manual acceptance checks
   --sandbox-image <image>        Trusted image reference that must already exist locally
@@ -115,6 +117,7 @@ interface CliOptions {
   trustCustomEndpoint: boolean;
   yes: boolean;
   simple: boolean;
+  agent: boolean;
   init: boolean;
   help: boolean;
   root?: string;
@@ -144,6 +147,7 @@ function parse(argv: string[]): CliOptions {
       "trust-custom-endpoint": { type: "boolean", default: false },
       yes: { type: "boolean", short: "y", default: false },
       simple: { type: "boolean", default: false },
+      agent: { type: "boolean", default: false },
       init: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       root: { type: "string" },
@@ -169,6 +173,7 @@ function parse(argv: string[]): CliOptions {
     trustCustomEndpoint: values["trust-custom-endpoint"] === true,
     yes: values.yes === true,
     simple: values.simple === true,
+    agent: values.agent === true,
     init: values.init === true,
     help: values.help === true,
     ...(typeof values.root === "string" ? { root: values.root } : {}),
@@ -497,11 +502,18 @@ function createSpinner(active: boolean): Spinner {
   const started = Date.now();
   let index = 0;
   let text = "working";
+  const columns = (): number => (typeof process.stderr.columns === "number" && process.stderr.columns > 12 ? process.stderr.columns : 80);
   const clear = (): void => { process.stderr.write("\r[K"); };
   const tick = (): void => {
     index = (index + 1) % frames.length;
     const seconds = Math.round((Date.now() - started) / 1000);
-    process.stderr.write(`\r[K${frames[index] ?? ""} ${text} · ${seconds}s`);
+    let line = `${frames[index] ?? ""} ${text} · ${seconds}s`;
+    // Truncate to one terminal row: a wider line wraps, and the carriage-return
+    // clear then cannot erase the wrapped remainder — that is what made the
+    // spinner spew a new line per frame.
+    const max = columns() - 1;
+    if (line.length > max) line = `${line.slice(0, max - 1)}…`;
+    process.stderr.write(`\r\x1b[K${line}`);
   };
   const timer = setInterval(tick, 120);
   if (typeof timer.unref === "function") timer.unref();
@@ -516,6 +528,13 @@ function todoIcon(status: string): string {
   if (status === "completed") return "[✓]";
   if (status === "in_progress") return "[~]";
   return "[ ]";
+}
+
+/** Project-relative, forward-slash path for display; falls back to the input. */
+function shortPath(target: string, root: string): string {
+  const rel = relative(root, target);
+  if (rel.length > 0 && !rel.startsWith("..")) return rel.split(sep).join("/");
+  return target;
 }
 
 /** Rewrite an incapable-model tool-call failure into an actionable hint. */
@@ -554,7 +573,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       return units.length === 0 ? 3 : cli.yes ? 0 : 3;
     }
   } else {
-    output(renderReceipt(units, providerName, model, language, cli.simple ? "simple" : "agent"), false);
+    output(renderReceipt(units, providerName, model, language, cli.agent ? "agent" : "simple"), false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
@@ -582,9 +601,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     );
   }
 
-  // Default engine: a LangGraph deep agent (planning, filesystem, subagents,
-  // prompts). `--simple` selects the deterministic, dependency-free generator.
-  if (!cli.simple) {
+  // `--agent` opts into the LangGraph deep agent (planning, filesystem,
+  // subagents, prompts); it needs a tool-calling-capable model. The default is
+  // the deterministic per-marker generator below: fast and small-model-friendly.
+  if (cli.agent) {
     const { runDeepAgentConversion } = await import("./pipeline/deep-agent.ts");
     const interactive = !cli.json;
     const spinner = createSpinner(interactive);
@@ -611,9 +631,11 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
               }
             }
           } else if (event.kind === "tool") {
-            const detail = event.detail ? ` ${event.detail}` : "";
-            spinner.note(`  → ${event.name}${detail}`);
-            spinner.label(`${event.name}${detail}`);
+            const rawDetail = event.detail ?? "";
+            const detail = rawDetail.startsWith("/") ? shortPath(resolve(root, `.${rawDetail}`), root) : rawDetail;
+            const suffix = detail ? ` ${detail}` : "";
+            spinner.note(`  → ${event.name}${suffix}`);
+            spinner.label(`${event.name}${suffix}`);
           }
         }
       : undefined;
@@ -651,40 +673,63 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     }
   }
 
-  let generated;
-  let generatingSource: string | undefined;
-  try {
-    generated = await generateConversionUnits(units, (unit, context) => {
-      generatingSource = unit.sourcePath;
-      if (context.fileMemory
-        && context.fileMemory.length > effective.privacy.maxContextTokens * 4) {
-        throw new ContextSecurityError(
-          "BUDGET_EXCEEDED",
-          `FileMemory for ${unit.sourcePath} exceeds the configured context budget.`,
-          unit.sourcePath,
-        );
+  // Default engine: deterministic per-marker generation. Each marker is one
+  // plain model completion (no tool calls), applied by exact range. One marker
+  // failing never aborts the others.
+  const describeUnit = (unit: ConversionUnit): string =>
+    unit.kind === "file"
+      ? `${unit.sourcePath} → ${unit.outputPath}`
+      : `${unit.sourcePath} (inline @human, line ${unit.line ?? "?"})`;
+  const interactive = !cli.json;
+  const spinner = createSpinner(interactive);
+  const started = Date.now();
+  const onProgress = interactive
+    ? (event: ConversionProgress): void => {
+        if (event.kind === "start") {
+          const retry = event.attempt > 1 ? ` (retry ${event.attempt - 1})` : "";
+          spinner.label(`generating ${describeUnit(event.unit)}${retry}`);
+        } else if (event.kind === "skip") {
+          spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
+        }
       }
-      return generateCode(unit.prompt, {
-        language,
-        provider: providerName,
-        model,
-        ...(baseUrl ? { baseUrl } : {}),
-        ...(apiKey ? { apiKey } : {}),
-        ...context,
-      });
-    });
-  } catch (error) {
-    if (error instanceof ContextSecurityError) throw error;
-    output(
-      cli.json
-        ? { status: "FAILED", ...(generatingSource ? { source: generatingSource } : {}), error: String(error) }
-        : `\nProvider error${generatingSource ? ` for ${generatingSource}` : ""}: ${error instanceof Error ? error.message : String(error)}`,
-      cli.json,
+    : undefined;
+
+  if (interactive) output(`\nConverting ${units.length} item(s) with ${model}…`, false);
+  let generated;
+  try {
+    generated = await generateConversionUnits(
+      units,
+      (unit, context) => {
+        if (context.fileMemory
+          && context.fileMemory.length > effective.privacy.maxContextTokens * 4) {
+          throw new ContextSecurityError(
+            "BUDGET_EXCEEDED",
+            `FileMemory for ${unit.sourcePath} exceeds the configured context budget.`,
+            unit.sourcePath,
+          );
+        }
+        return generateCode(unit.prompt, {
+          language,
+          provider: providerName,
+          model,
+          ...(baseUrl ? { baseUrl } : {}),
+          ...(apiKey ? { apiKey } : {}),
+          ...context,
+        });
+      },
+      { retries: 1, ...(onProgress ? { onProgress } : {}) },
     );
+  } catch (error) {
+    spinner.stop();
+    if (error instanceof ContextSecurityError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
     return 5;
   }
-  // Generation is top-to-bottom so FileMemory is meaningful. Application stays
-  // bottom-to-top so replacing later markers cannot invalidate earlier ranges.
+  spinner.stop();
+
+  // Apply bottom-to-top so replacing a later marker cannot invalidate an
+  // earlier marker's range.
   const ordered = [...generated].sort((left, right) => {
     if (left.unit.kind !== right.unit.kind) return left.unit.kind === "file" ? -1 : 1;
     const byPath = left.unit.sourcePath.localeCompare(right.unit.sourcePath);
@@ -692,17 +737,28 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     return (right.unit.range?.start ?? 0) - (left.unit.range?.start ?? 0);
   });
   const written: string[] = [];
-  for (const { unit, code } of ordered) {
+  const skipped: Array<{ source: string; reason: string }> = [];
+  for (const { unit, code, error } of ordered) {
+    if (error !== undefined) {
+      skipped.push({ source: unit.sourcePath, reason: error });
+      continue; // already reported live via onProgress
+    }
     if (code.trim().length === 0) {
-      if (!cli.json) output(`  ! empty model output for ${unit.sourcePath}; skipped`, false);
+      skipped.push({ source: unit.sourcePath, reason: "empty model output" });
+      if (!cli.json) output(`  ⊘ skipped ${describeUnit(unit)}: empty model output`, false);
       continue;
     }
     const path = await applyUnit(root, unit, code);
     written.push(path);
-    if (!cli.json) output(`  ✓ wrote ${path}`, false);
+    if (!cli.json) output(`  ✓ ${describeUnit(unit)}`, false);
   }
-  output(cli.json ? { status: "DONE", written } : `\nDone. ${written.length} file(s) written.`, cli.json);
-  return 0;
+  const seconds = Math.round((Date.now() - started) / 1000);
+  if (cli.json) {
+    output({ status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE", engine: "simple", written, skipped }, true);
+  } else {
+    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}.`, false);
+  }
+  return written.length === 0 && skipped.length > 0 ? 5 : 0;
 }
 
 async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
