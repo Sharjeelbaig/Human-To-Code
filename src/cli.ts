@@ -52,7 +52,8 @@ import {
 const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
 
 Usage:
-  human-to-code [root] [-y]                    Convert .human files and @human markers to code (default)
+  human-to-code [root] [-y]                    Convert .human files and @human markers to code (default; LangGraph deep agent)
+  human-to-code [root] [-y] --simple           Use the deterministic, dependency-free generator instead of the deep agent
   human-to-code build [root] [-y]              Alias of the default convert flow
   human-to-code guided [root]                  Reviewed/grounded/validated compiler pipeline
   human-to-code analyze [root] [--json]
@@ -83,6 +84,7 @@ Other options:
   --explain                      Show outbound context provenance and exact selected content
   --json                         Machine-readable output
   -y, --yes                      Skip the confirmation prompt and write files
+  --simple                       Use the deterministic generator instead of the deep agent (default flow only)
   --dry-run                      Analyze and preview only; perform no generation
   --manual-passed                Explicitly attest all reviewed manual acceptance checks
   --sandbox-image <image>        Trusted image reference that must already exist locally
@@ -111,6 +113,7 @@ interface CliOptions {
   manualPassed: boolean;
   trustCustomEndpoint: boolean;
   yes: boolean;
+  simple: boolean;
   init: boolean;
   help: boolean;
   root?: string;
@@ -139,6 +142,7 @@ function parse(argv: string[]): CliOptions {
       "manual-passed": { type: "boolean", default: false },
       "trust-custom-endpoint": { type: "boolean", default: false },
       yes: { type: "boolean", short: "y", default: false },
+      simple: { type: "boolean", default: false },
       init: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       root: { type: "string" },
@@ -163,6 +167,7 @@ function parse(argv: string[]): CliOptions {
     manualPassed: values["manual-passed"] === true,
     trustCustomEndpoint: values["trust-custom-endpoint"] === true,
     yes: values.yes === true,
+    simple: values.simple === true,
     init: values.init === true,
     help: values.help === true,
     ...(typeof values.root === "string" ? { root: values.root } : {}),
@@ -524,6 +529,40 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       "Inline FileMemory would send statically indexed source declarations to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
     );
   }
+
+  // Default engine: a LangGraph deep agent (planning, filesystem, subagents,
+  // prompts). `--simple` selects the deterministic, dependency-free generator.
+  if (!cli.simple) {
+    const { runDeepAgentConversion } = await import("./pipeline/deep-agent.ts");
+    try {
+      const outcome = await runDeepAgentConversion({
+        root,
+        language,
+        provider: providerName,
+        model,
+        units,
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(apiKey ? { apiKey } : {}),
+      });
+      if (cli.json) {
+        output({ status: "DONE", engine: "deep-agent", todos: outcome.todos, messages: outcome.messageCount, summary: outcome.summary }, true);
+      } else {
+        output("", false);
+        for (const todo of outcome.todos) output(`  [${todo.status}] ${todo.content}`, false);
+        output(`\nDeep agent finished (${outcome.messageCount} messages).${outcome.summary ? `\n${outcome.summary}` : ""}`, false);
+      }
+      return 0;
+    } catch (error) {
+      output(
+        cli.json
+          ? { status: "FAILED", engine: "deep-agent", error: error instanceof Error ? error.message : String(error) }
+          : `\nDeep agent error: ${error instanceof Error ? error.message : String(error)}`,
+        cli.json,
+      );
+      return 5;
+    }
+  }
+
   let generated;
   let generatingSource: string | undefined;
   try {

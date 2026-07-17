@@ -76,7 +76,7 @@ graph TD
 | `src/security/` | `secret-scan.ts`, `pinned-http.ts` | Cross-cutting fail-closed guards: repository-wide credential scanning before any provider access, and a DNS-vetted address-pinned HTTPS client used for any outbound fetch. |
 | `src/context/` | `context.ts`, `documentation.ts`, `compiler-skills.ts`, `compiler-tools.ts` | Everything the model is allowed to see: provenance-bound context selection, allowlisted exact-version documentation, immutable policy skills, and the bounded read-only context tool executor. |
 | `src/providers/` | `provider.ts`, `providers.ts`, `certification.ts`, `schemas.ts` | Everything the model is allowed to do: the provider-neutral adapter contract, the bundled OpenAI/Ollama HTTP adapters, the JSON output schemas providers must satisfy, and the evidence-based certification gate that decides whether a provider/model result may ever become `VERIFIED`. |
-| `src/pipeline/` | `planner.ts`, `snapshot.ts`, `patch.ts`, `validation.ts`, `run-store.ts`, `workflow.ts`, `file-memory.ts`, `simple.ts` | Run orchestration: contract drafting, immutable snapshots, patch safety and atomic apply/rollback, strong-sandbox baseline/candidate validation, the private run store, and the guided workflow that ties the stages together. `file-memory.ts` statically indexes declarations for the separate lightweight direct-generation path in `simple.ts`. |
+| `src/pipeline/` | `planner.ts`, `snapshot.ts`, `patch.ts`, `validation.ts`, `run-store.ts`, `workflow.ts`, `file-memory.ts`, `simple.ts` | Run orchestration: contract drafting, immutable snapshots, patch safety and atomic apply/rollback, strong-sandbox baseline/candidate validation, the private run store, and the guided workflow that ties the stages together. `file-memory.ts` statically indexes declarations for the separate lightweight direct-generation path in `simple.ts`. `deep-agent.ts` is the default direct-flow engine: it builds and runs a LangChain/LangGraph deep agent (planning, filesystem, subagents, prompts) and is the only module permitted to import the `deepagents`/`langchain` runtime dependencies. |
 | root | `index.ts`, `cli.ts` | Entry points only. `index.ts` re-exports the stable embedding API grouped by layer; `cli.ts` maps commands, flags, and exit codes onto that same surface. They stay at the source root so the published `dist/index.js` and `dist/cli.js` paths never move. |
 
 Two intentional wrinkles in the layering:
@@ -115,20 +115,37 @@ validation `INCONCLUSIVE`; an empty certification registry means no run can be
 diagnostics, dependency source, and fetched documentation are wrapped as
 evidence and cannot change policy, commands, scope, tests, or budgets.
 
-**Zero runtime dependencies.** The package ships with no production
-dependencies; HTTP adapters, hashing, and JSON handling use Node built-ins.
-This keeps the supply-chain surface equal to Node itself.
+**Minimal-dependency host, agent engine aside.** The guided pipeline, the
+`--simple` generator, and all host safety code (hashing, patch validation,
+sandbox validation, HTTP adapters, secret scanning) use only Node built-ins —
+their supply-chain surface is Node itself. The default `npx human-to-code .`
+engine is the exception: it runs a LangChain/LangGraph deep agent and therefore
+depends on `deepagents`, `langchain`, `@langchain/core`, `@langchain/openai`,
+and `@langchain/ollama`. Choosing `--simple` keeps a run on the built-in-only
+path. Do not add runtime dependencies to any layer other than the deep-agent
+engine (`pipeline/deep-agent.ts`).
 
-## The two generation paths
+## The generation paths
 
-1. **Guided pipeline** (`workflow.ts`, the default `npx human-to-code .`
-   flow): full contract → grounding → sandbox validation lifecycle described
-   above. This is the production-architecture path.
-2. **Simple path** (`pipeline/simple.ts`): a deliberately small
-   receipt-and-confirm generator for whole `.human` files or inline `@human`
-   markers against a local Ollama endpoint. It shares no state with the
-   guided pipeline and never gains its trust: it cannot produce `VERIFIED`
-   runs, apply patches, or use the run store.
+1. **Deep-agent engine** (`pipeline/deep-agent.ts`, the default
+   `npx human-to-code .` flow): a LangChain/LangGraph "deep agent"
+   (`deepagents` harness) that decomposes the discovered worklist with the four
+   deep-agent pillars — **Planning** (`write_todos`), **File System** (a
+   real-disk `FilesystemBackend` rooted at the project), **Sub Agents** (a
+   `planner`/`implementer`/`reviewer` reachable via the `task` tool), and
+   **Prompts** (per-role system prompts). Here the model drives scope, file
+   reads/writes, and delegation. The blast radius is bounded to the project root
+   by the backend and by deny-write filesystem permissions on VCS, dependency,
+   config, and secret paths — but this is an autonomous agent, not the
+   hash-verified patch pipeline, and it never produces `VERIFIED` runs.
+2. **Simple path** (`pipeline/simple.ts`, selected with `--simple`): a
+   deliberately small, dependency-free receipt-and-confirm generator for whole
+   `.human` files or inline `@human` markers against a local Ollama endpoint. It
+   statically indexes declarations into ephemeral FileMemory and replaces marker
+   ranges deterministically. It shares no state with the guided pipeline.
+3. **Guided pipeline** (`workflow.ts`, the `guided` subcommand): full
+   contract → grounding → sandbox validation lifecycle described above. This is
+   the production-architecture path and the only one that can reach `VERIFIED`.
 
 ## Where things live at runtime
 

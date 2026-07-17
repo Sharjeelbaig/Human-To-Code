@@ -89,6 +89,47 @@ node dist/cli.js .
 
 Node.js 24 or newer is required.
 
+## Generation engines
+
+The default `npx human-to-code .` flow discovers work (whole `.human` files and
+inline `@human` markers), prints a receipt, and — after you confirm — converts
+it with a **LangChain/LangGraph deep agent** (the [`deepagents`](https://docs.langchain.com/oss/javascript/deepagents/overview)
+harness). The agent runs with the four deep-agent pillars:
+
+- **Planning** — the built-in `write_todos` tool decomposes the run into an
+  ordered, status-tracked plan.
+- **File System** — a project-rooted `FilesystemBackend` gives the agent
+  `ls`/`glob`/`grep`/`read_file`/`write_file`/`edit_file` over the working tree.
+  Writes to VCS, dependency, config, and secret paths are denied by filesystem
+  permissions; the agent cannot escape the project root.
+- **Sub Agents** — a `planner`, `implementer`, and `reviewer` subagent are
+  reachable through the built-in `task` tool for isolated subtasks.
+- **Prompts** — a task-specific system prompt for the main agent and one per
+  subagent role.
+
+The model, not the host, drives scope, file edits, and delegation here. This is
+an autonomous engine: it edits files directly and does **not** produce
+`VERIFIED` runs, hash-verified patches, or run-store records. For the reviewed,
+sandbox-validated pipeline use `human-to-code guided`.
+
+The provider is bound through the OpenAI-compatible chat client. Ollama is
+reached at its `/v1` endpoint (the deep agent's structured tool messages are not
+supported by the native `/api/chat` surface), so the model you pass must be
+tool-calling capable — small models that cannot emit valid tool calls will fail.
+
+Unlike the rest of the tool, this engine adds runtime dependencies
+(`deepagents`, `langchain`, `@langchain/core`, `@langchain/openai`,
+`@langchain/ollama`). Pass `--simple` to convert with the built-in-only
+generator instead, which keeps the run's supply-chain surface at Node itself.
+
+```bash
+# Deep agent (default), with a tool-calling local model:
+npx human-to-code . --yes --model qwen2.5-coder:7b
+
+# Deterministic, dependency-free generator:
+npx human-to-code . --yes --simple
+```
+
 ## The reviewed change contract
 
 `foo.strict.human.json` is a `ChangeContractV1`, not a prompt and not an executable language. It binds the request to the SHA-256 of `foo.human` and the current project-profile fingerprint. It also records:
@@ -107,7 +148,9 @@ The draft is deliberately conservative. Do not remove its review question until 
 
 | Command | Behavior |
 | --- | --- |
-| `human-to-code [root]` | Guided analyze → plan → generate → validate flow. `npx human-to-code .` is the normal entry point. |
+| `human-to-code [root]` | Default direct flow: discover `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **deep-agent engine** (see below). `npx human-to-code .` is the normal entry point. |
+| `human-to-code [root] --simple` | Same direct flow using the deterministic, dependency-free generator instead of the deep agent. |
+| `human-to-code guided [root]` | Reviewed contract → grounding → sandbox-validation lifecycle. The only path that can reach `VERIFIED`. |
 | `human-to-code analyze [root] [--json]` | Produce a deterministic multi-workspace project profile and diagnostics. `SUPPORTED` means statically recognized, not certified. |
 | `human-to-code plan <file.human> [--root <root>]` | Write a review-blocked `ChangeContractV1` draft. |
 | `human-to-code context <contract> --explain [--offline] [--json]` | Show the complete remote-provider outbound context envelope with ranges, hashes, reasons, redactions, and exclusions. `--explain` is mandatory. |

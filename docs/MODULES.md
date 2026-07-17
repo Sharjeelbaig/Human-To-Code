@@ -74,7 +74,8 @@ mirror these modules by name.
 | `run-store.ts` | `RunStore`: durable, private, crash-safe run metadata (contracts, patches, reports, rollback artifacts) with recursive secret gating on every write. |
 | `workflow.ts` | The guided end-to-end orchestrator (`generateRun` and the apply/rollback/repair flows): ties analysis, certification, secret scan, context, provider, snapshot, validation, run store, and patch together with crash-safe budget checkpoints and at most two diagnostic repairs. |
 | `file-memory.ts` | Dependency-free static declaration/signature indexing for every language scanned by the direct path. Produces exact line-range evidence without executing project code. |
-| `simple.ts` | The lightweight direct path: whole-`.human`-file or inline-`@human`-marker generation against local Ollama, with a receipt-and-confirm step. Shares no trust with the guided pipeline; cannot produce `VERIFIED` or apply patches. |
+| `simple.ts` | The lightweight direct path (`--simple`): whole-`.human`-file or inline-`@human`-marker generation against local Ollama, with a receipt-and-confirm step. Shares no trust with the guided pipeline; cannot produce `VERIFIED` or apply patches. |
+| `deep-agent.ts` | The default direct-flow engine: builds and runs a LangChain/LangGraph deep agent (`deepagents` harness) with planning (`write_todos`), a project-rooted `FilesystemBackend`, `planner`/`implementer`/`reviewer` subagents, and per-role prompts. `buildDeepAgentModel` binds the provider through the OpenAI-compatible chat client (Ollama via its `/v1` endpoint). The only module that imports the `deepagents`/`langchain` runtime dependencies. |
 
 ## Test map
 
@@ -88,5 +89,7 @@ mirror these modules by name.
 | `test/provider.test.ts`, `test/providers.test.ts` | Provider contract, budgets, and HTTP adapters (injected fetch/DNS). |
 | `test/certification.test.ts`, `test/release-gate.test.ts` | Certification evidence gate and release-status honesty. |
 | `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/workflow.test.ts` | The pipeline stage by stage, including apply/rollback and repair limits. |
+| `test/simple.test.ts` | Ephemeral FileMemory indexing/normalization and the `--simple` direct path. |
+| `test/deep-agent.test.ts` | Deep-agent engine: provider model binding and an end-to-end run against a fake chat model (no network). |
 | `test/cli.test.ts` | Command surface and exit codes. |
 | `test/package-smoke.mjs` | Packed-tarball install, public import, installed-CLI invocation (`npm run package:check`). |

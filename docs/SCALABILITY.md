@@ -83,9 +83,11 @@ between releases:
 - **TypeScript strict, no escape hatches.** `strict` and
   `noUncheckedIndexedAccess` stay on; avoid `any` and non-null assertions —
   validate at the boundary and let types flow.
-- **Zero production dependencies.** HTTP, hashing, JSON, and process handling
-  use Node built-ins. Adding a runtime dependency changes the supply-chain
-  posture and needs a design discussion first.
+- **Minimal production dependencies.** HTTP, hashing, JSON, and process
+  handling use Node built-ins. The one exception is the deep-agent engine
+  (`pipeline/deep-agent.ts`), which depends on `deepagents`/`langchain`; those
+  imports are confined to that module. Adding a runtime dependency anywhere else
+  changes the supply-chain posture and needs a design discussion first.
 - **Errors are typed and named.** Each layer exports its own error classes
   (`ArtifactValidationError`, `ProviderError`, `PatchSafetyError`, …) so the
   CLI can map failures to exit codes without string matching. Error messages
