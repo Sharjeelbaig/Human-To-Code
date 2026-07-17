@@ -93,17 +93,20 @@ a { color: inherit; }
   letter-spacing: -0.02em;
 }
 .brand-mark {
+  position: relative;
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  background: var(--text);
-  color: var(--bg);
-  font-family: var(--mono);
-  font-size: 0.95rem;
-  font-weight: 700;
+  flex: none;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border), 0 8px 20px color-mix(in srgb, var(--text) 8%, transparent);
 }
+.brand-logo { position: absolute; inset: 5px; width: 34px; height: 34px; }
+.brand-logo-dark { display: none; }
+html[data-theme="dark"] .brand-logo-light { display: none; }
+html[data-theme="dark"] .brand-logo-dark { display: block; }
 .nav-links {
   display: flex;
   gap: 4px;
@@ -671,13 +674,13 @@ html[data-theme="dark"] .icon-moon { display: block; }
     linear-gradient(180deg, #000 0%, #000 72%, transparent 98%);
   mask-composite: intersect;
 }
-.qs-visual img {
+.qs-visual > img {
   width: 100%;
   height: 100%;
   display: block;
   object-fit: contain;
   object-position: center;
-  filter: saturate(.9) contrast(1.05) drop-shadow(0 26px 32px color-mix(in srgb, var(--text) 18%, transparent));
+  filter: grayscale(.2) saturate(.82) contrast(1.06) drop-shadow(0 26px 32px color-mix(in srgb, var(--text) 18%, transparent));
 }
 .qs-visual::before,
 .qs-visual::after {
@@ -702,7 +705,7 @@ html[data-theme="dark"] .icon-moon { display: block; }
   mix-blend-mode: soft-light;
   opacity: .45;
 }
-html[data-theme="dark"] .qs-visual img { filter: saturate(.82) contrast(1.1) brightness(.95) drop-shadow(0 28px 40px rgba(0, 0, 0, .48)); }
+html[data-theme="dark"] .qs-visual > img { filter: grayscale(.24) saturate(.76) contrast(1.1) brightness(.95) drop-shadow(0 28px 40px rgba(0, 0, 0, .48)); }
 html[data-theme="dark"] .qs-visual::before { background: radial-gradient(circle at 43% 50%, color-mix(in srgb, var(--accent-a) 32%, transparent), transparent 46%), linear-gradient(110deg, transparent 28%, rgba(13, 13, 17, .78) 88%); }
 .qs-content {
   position: relative;

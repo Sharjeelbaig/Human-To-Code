@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">human-to-code logo mark for dark backgrounds</title>
+  <desc id="desc">Opposing warm-white code chevrons joined by a coral prompt cursor.</desc>
+  <path d="M51 25 17 64l34 39" fill="none" stroke="#f7f4ef" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m77 25 34 39-34 39" fill="none" stroke="#f7f4ef" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="58" y="45" width="12" height="38" rx="6" fill="#ff5f3c"/>
+</svg>
