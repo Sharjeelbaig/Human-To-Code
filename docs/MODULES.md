@@ -23,7 +23,7 @@ mirror these modules by name.
 
 | Module | Purpose |
 | --- | --- |
-| `config.ts` | Strict schema-v1 `human-to-code.config.json`: `validateConfig`, `DEFAULT_CONFIG`, `CONFIG_FILENAME`, enabled languages, exact `humanFileExtensions` routing, provider/pricing/privacy/sandbox/budget policy, endpoint trust rules, and explicit alpha-config migration. Unknown keys and credential-like values are rejected; credentials are environment-variable names only. |
+| `config.ts` | Strict schema-v1 `human-to-code.config.json`: `validateConfig`, `DEFAULT_CONFIG`, `CONFIG_FILENAME`, enabled languages, exact `humanFileExtensions` routing, provider/pricing/privacy/sandbox/budget policy, the default-off `direct.reconcileIntegrations` switch, endpoint trust rules, and explicit alpha-config migration. Unknown keys and credential-like values are rejected; credentials are environment-variable names only. |
 | `discovery.ts` | Fail-closed discovery of `.human` sources and protected secret files (`discover`, `DiscoveryError`, `secretsTrackedError`). Never follows symlinks; never turns a partial scan into an empty success. |
 
 ## `src/analysis/` — static project intelligence
@@ -71,8 +71,9 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 
 | Module | Purpose |
 | --- | --- |
-| `direct-conversion.ts` | System and user messages for whole-file and inline direct conversion, including FileMemory rules and examples. |
-| `direct-repair.ts` | Bounded cross-file repair messages for one generated JS/TS unit: original instruction, current candidate, normalized compiler diagnostics, and related generated files, all framed as untrusted data. |
+| `direct-conversion.ts` | One-target system and user messages for whole-file and inline direct conversion. The prompt contract separates the authoritative current task from untrusted FileMemory/ProjectMemory evidence, requires exact project-relative integration paths, freezes output scope to one target, and ends with a small-model-friendly silent checklist. |
+| `direct-integration.ts` | Cross-language integration prompts: a read-only strict-JSON audit over bounded generated contracts/relationships, plus a separate one-target raw-code repair. File purposes, contracts, audit messages, related candidates, and ProjectMemory remain untrusted evidence. |
+| `direct-repair.ts` | Bounded cross-file repair messages for one generated JS/TS unit: original instruction, current candidate, normalized compiler diagnostics, related generated files, and the same target-specific ProjectMemory, all framed as untrusted data. |
 | `guided-patch.ts` | Structured patch-generation messages: reviewed contract, target profile, immutable snapshot hash, compiler skills, and wrapped untrusted evidence. |
 | `guided-repair.ts` | Bounded repair messages that freeze contract, snapshot, validation plan, paths, operations, and scope. |
 | `provider-output.ts` | Host-enforced JSON output-contract message used only when a provider lacks native JSON Schema support. |
@@ -92,13 +93,17 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `replacement.ts` | Exact inline-marker byte verification plus newline-preserving indentation formatting shared by memory and application. |
 | `candidate-validation.ts` | Baseline-aware pre-write syntax gate: TypeScript parser diagnostics for JS/TS, deterministic structure checks for other programming languages, and non-empty/fence gates for HTML/CSS. Inline units are rejected only for newly introduced diagnostics. It does not claim semantic or sandbox verification. |
 | `candidate-overlay.ts` | In-memory candidate overlay combining whole-file outputs and inline replacements for staged validation; the working tree stays unchanged and stale or conflicting units are excluded fail-closed. |
-| `program-diagnostics.ts` | Combined TypeScript Compiler API validation over the candidate overlay: permissive fixed compiler options, an overlay-aware compiler host, bundled `node:` builtin typings, and multiplicity/location-aware baseline-vs-candidate diagnostic comparison. Static compilation only — it never imports or executes project code. |
+| `program-diagnostics.ts` | Combined TypeScript Compiler API validation over the candidate overlay: TypeScript is checked semantically; JavaScript follows explicit project `checkJs` or file `@ts-check` policy. Includes an overlay-aware compiler host, bundled `node:` typings, and multiplicity/location-aware baseline comparison. |
 | `dependency-graph.ts` | Resolved-import dependency grouping of candidate files and bounded diagnostic-to-unit attribution; diagnostics that cannot be safely attributed fail the whole staged batch. |
+| `integration-validation.ts` | Default-off cross-language audit orchestration. It groups generated files using structured ProjectMemory relationships, validates exact audit JSON against real group paths, permits one repair per named target, verifies once, and rejects unresolved groups. Large components are split into bounded relationship neighborhoods. |
 | `staged-validation.ts` | Orchestrates overlay build, combined program validation, group rejection, and the bounded per-unit repair budget (secret-scanned repair context, injected repair callback). Produces per-unit accept/reject results for the CLI. |
 | `file-memory.ts` | Ephemeral declaration memory, replacement normalization, candidate-validation retry isolation, and sequential per-file generation. |
-| `generation-client.ts` | Direct provider requests through OpenAI-compatible chat or Ollama: one conversion request per unit plus bounded cross-file repair requests, always using the central prompt builders. |
+| `project-memory.ts` | Ephemeral codebase context for direct generation. Stores current and projected path inventories, planned source-to-output mappings, target-relative companion/asset paths, language package-module guidance, and secret-aware compact contracts. Renders a deterministic bounded subset per target and learns accepted candidate contracts for later generation/repair requests; it never executes source or persists a cache. |
+| `project-contracts.ts` | Static language-aware summarizers used by ProjectMemory: imports/includes/declarations, HTML references/ids/classes/elements/inline handler calls/control labels, CSS imports/URLs/custom properties/selectors, JavaScript DOM selectors, and limited package metadata. Credential-bearing content produces no contract. |
+| `language-relationships.ts` | Declarative/extensible language relationship profiles for scripts/modules, Python, Rust, Go, Java, C/C++, C#, Ruby, HTML/CSS/assets, and same-language fallbacks. Integration orchestration consumes only their structured role/path/reference output. |
+| `generation-client.ts` | Direct provider requests through OpenAI-compatible chat or Ollama: one conversion request per unit plus optional bounded integration and compiler-repair requests, always using the central prompt builders. |
 | `presentation.ts` | Stable conversion receipt and unambiguous single-code-block extraction; rejects multiple or unterminated fences. |
-| `application.ts` | Stale-safe inline replacement and exclusive whole-file creation that never overwrites a sibling. |
+| `application.ts` | Stale-safe inline replacement plus exclusive, rollback-protected whole-file batch creation that never overwrites a sibling or knowingly leaves an earlier batch create behind after a later failure. |
 | `index.ts` | Direct-agent export surface used by the CLI and package entry point. |
 
 ### `src/agents/guided/`
@@ -138,6 +143,8 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `test/certification.test.ts`, `test/release-gate.test.ts` | Certification evidence gate and release-status honesty. |
 | `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/guided-agent.test.ts` | Guided mechanics and lifecycle stage by stage, including apply/rollback and repair limits. |
 | `test/direct-agent.test.ts` | Lexical marker discovery, FileMemory indexing/normalization, provider prompts, retry isolation, and application. |
+| `test/project-memory.test.ts` | Current/projected inventory, exact web companion references, structured Python/Rust relationships, cross-request generated-contract learning, privacy filtering, hard rendering bounds, and conversion/repair prompt policy. |
+| `test/integration-validation.test.ts` | Opt-in static-web link diagnostics, zero-request success, bounded reconciliation, group rejection, and integration-prompt isolation. |
 | `test/direct-reliability.test.ts` | Regression coverage for direct issues 02 and 04–11: JSDoc, output cleanup, validation, overwrite/staleness/indent guards, regex memory, C-family declarations, and discovery notices. |
 | `test/staged-validation.test.ts` | Issue 12 coverage: calculator-style cross-file rejection, consistent-candidate acceptance, bounded repair success and exhaustion, named-import/member/union/arity detection, baseline tolerance and multiplicity comparison, dependency-group isolation, and overlay write guards. |
 | `test/cli.test.ts` | Command surface and exit codes. |

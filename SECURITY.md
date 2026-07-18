@@ -2,7 +2,7 @@
 
 `human-to-code` reads attacker-controlled repositories, sends selected evidence to an LLM provider, and may execute project validation commands. The project therefore treats repository content, model output, documentation, provider endpoints, and build/test tooling as untrusted.
 
-Version `0.1.20` is a preview. The shipped ecosystem and provider/model combinations are not certified, so guided generated runs do not reach `VERIFIED` through the CLI and guided automatic application/rollback remain unreachable for normal generated runs. The default direct converter is a separate convenience path that writes accepted units to the working tree after confirmation; it never claims `VERIFIED`. Do not weaken either boundary to make a preview run appear successful.
+Version `0.1.21` is a preview. The shipped ecosystem and provider/model combinations are not certified, so guided generated runs do not reach `VERIFIED` through the CLI and guided automatic application/rollback remain unreachable for normal generated runs. The default direct converter is a separate convenience path that writes accepted units to the working tree after confirmation; it never claims `VERIFIED`. Do not weaken either boundary to make a preview run appear successful.
 
 ## Trust boundaries
 
@@ -35,18 +35,54 @@ and preserves marker indentation. Invalid or stale units are retried within the
 bounded generation policy and then skipped without mutation.
 
 JavaScript/TypeScript units additionally pass staged combined validation: the
-generated files form an in-memory candidate overlay, the working tree stays
-unchanged, and the TypeScript Compiler API type-checks the combined candidate
-project against the unchanged baseline. Newly introduced cross-file
+generated files form an in-memory candidate overlay and the working tree stays
+unchanged. The TypeScript Compiler API type-checks TypeScript, while JavaScript
+semantic checking runs only when `checkJs` or `@ts-check` explicitly opts in;
+plain JavaScript is not rewritten to satisfy an unrequested TypeScript policy.
+Newly introduced cross-file
 diagnostics (wrong imports/exports, missing members, argument counts, literal
 unions, object shapes, readonly violations, incompatible calls) reject the
 whole dependency-connected group during validation; if safe isolation cannot
 be proven, the entire staged batch is rejected before application. A failing
 whole-file unit may receive one bounded repair request using the same provider and model;
 repair context contains only generated candidate content and normalized
-compiler diagnostics, both treated as untrusted data. Generated candidate
+compiler diagnostics plus bounded ProjectMemory, all treated as untrusted
+data. Generated candidate
 content is secret-scanned before it may leave the host. No project code is
 imported or executed and no project scripts run during this validation.
+
+Whole-file direct outputs have a final batch barrier. Any failed whole-file
+candidate withholds every whole-file output in that run. Successful candidates
+are then exclusively created as a rollback-protected batch; if a later create
+fails, only files created by that batch are removed. Inline markers retain
+their separate stale-range and per-marker behavior.
+
+Direct ProjectMemory is rebuilt from the static discovery inventory for each
+run. It may send project-relative filenames and compact source-derived
+contracts (declarations/imports/includes, modules/packages/namespaces,
+language-specific references, markup/style/asset contracts where relevant,
+and limited package metadata) to the selected model. It also
+contains the planned post-conversion output tree and other `.human` purposes so
+the model can coordinate files. Protected paths, configured ignored/excluded
+paths, oversized/unreadable files, and credential-bearing contracts are
+omitted; individual renders are bounded and source is never executed. This is
+not the provenance-rich guided `ContextManifestV1`, and the direct engine has
+no `context --explain` preview. Remote direct conversion therefore remains
+blocked until explicit project-level remote-provider consent; use local Ollama
+or the guided flow when this compact context is not appropriate to transmit.
+
+Post-generation integration reconciliation is a separate explicit opt-in
+(`direct.reconcileIntegrations`, default `false`). When disabled, it performs
+no audit and sends no additional request. When enabled, ProjectMemory supplies
+structured language relationships and the generic orchestrator forms bounded
+generated-file groups. A read-only audit must return strict JSON whose target
+and related paths are members of that exact group. Each reported target may
+receive one bounded repair followed by one verification audit. Audit/repair
+bundles are credential-scanned; file purposes, contracts, diagnostics, and
+source are prompt-isolated as untrusted evidence. Malformed output, invented
+paths, exhausted context, or unresolved issues reject the connected opt-in
+group before writing. This is model-assisted static consistency checking, not
+compiler, runtime, or sandbox verification.
 
 These controls prevent the specific malformed-output, overwrite, stale-range,
 indentation, and cross-file-contract failures they check. Static compilation
@@ -54,9 +90,10 @@ is stronger than syntax parsing, but it does not prove runtime behavior,
 external-API grounding, project-wide security properties, or test success,
 and it never executes the candidate in a sandbox or claims `VERIFIED`. Other
 direct programming languages keep their per-file structural validation level;
-HTML and CSS use only the non-empty and code-fence gates. Use the
-guided contract and validation path when those stronger boundaries are
-required.
+Non-JS/TS languages normally keep their per-file syntax/structure gates; the
+optional generic reconciliation adds the bounded contract audit described
+above. Use the guided contract and validation path when stronger boundaries
+are required.
 
 ### The reviewed contract owns authority
 

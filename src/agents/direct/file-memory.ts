@@ -144,6 +144,7 @@ export async function generateConversionUnits(
   const memories = new Map<string, FileMemory>();
   const generated: GeneratedConversionUnit[] = [];
   const maxAttempts = 1 + Math.max(0, options.retries ?? 1);
+  const contextCharBudget = options.contextCharBudget ?? Number.MAX_SAFE_INTEGER;
 
   for (const unit of ordered) {
     let memory: FileMemory | undefined;
@@ -161,9 +162,19 @@ export async function generateConversionUnits(
       options.onProgress?.({ kind: "start", unit, attempt });
       try {
         const renderedMemory = memory?.render();
+        if ((renderedMemory?.length ?? 0) > contextCharBudget) {
+          throw new ContextSecurityError(
+            "BUDGET_EXCEEDED",
+            `FileMemory for ${unit.sourcePath} exceeds the configured context budget.`,
+            unit.sourcePath,
+          );
+        }
+        const remaining = Math.max(0, contextCharBudget - (renderedMemory?.length ?? 0));
+        const renderedProjectMemory = options.projectMemory?.renderFor(unit, remaining);
         const rawCode = await generator(unit, {
           inline: unit.kind === "inline",
           ...(renderedMemory ? { fileMemory: renderedMemory } : {}),
+          ...(renderedProjectMemory ? { projectMemory: renderedProjectMemory } : {}),
         });
         code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
         await options.validate?.(unit, code);
@@ -183,6 +194,7 @@ export async function generateConversionUnits(
     }
     generated.push({ unit, code });
     if (memory && code.trim().length > 0) memory.rememberReplacement(unit.range!, code);
+    if (code.trim().length > 0) options.projectMemory?.remember(unit, code);
     options.onProgress?.({ kind: "done", unit });
   }
 

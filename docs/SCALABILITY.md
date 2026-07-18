@@ -89,14 +89,32 @@ between releases:
 - **Minimal production dependencies.** HTTP, hashing, JSON, process handling,
   provider access, and orchestration use Node built-ins. TypeScript is the one
   deliberate runtime compiler dependency for direct JS/TS candidate validation,
-  both per-file syntax checks and the combined candidate-project type check;
+  both per-file syntax checks and the combined TypeScript/opted-in-JavaScript check;
   `@types/node` ships with it so `node:` builtin imports resolve in target
   projects without their own type dependencies. Combined validation builds a
-  TypeScript program over the project's JS/TS files per staged pass, so its
+  TypeScript program over the project's JS/TS files per staged pass (without
+  forcing semantic `checkJs` on plain JavaScript), so its
   cost grows with project size — the walk is bounded and `skipLibCheck` is
   forced, but very large repositories pay a real compile cost per conversion
   run. Adding another runtime dependency changes the supply-chain posture and
   needs a design discussion first.
+- **Project context stays indexed and bounded.** Direct ProjectMemory reuses
+  the discovery inventory, prioritizes a fixed maximum of nearby/contracts
+  files, indexes current files by directory for relationship lookup, and caps
+  every rendered tree and prompt block. Add new language contract extractors
+  as deterministic summaries in `agents/direct/project-contracts.ts`; do not send
+  whole repositories or introduce a persistent embedding cache as a shortcut.
+  A new relationship rule must provide an exact relative path, remain evidence
+  rather than authority, and ship with an adversarial false-relationship test.
+- **Integration reconciliation stays generic, opt-in, and bounded.** The
+  default direct path relies on ProjectMemory and adds no second provider pass.
+  With `direct.reconcileIntegrations` enabled, language profiles provide
+  structured relationship edges, small connected components are audited
+  together, and large components split into bounded target neighborhoods.
+  Strict audit JSON may name only supplied paths; each target is repaired at
+  most once and each group is verified at most once. Conservative audit/repair
+  ceilings appear before confirmation. New ecosystems extend relationship and
+  contract profiles rather than adding scenario branches to orchestration.
 - **Errors are typed and named.** Each layer exports its own error classes
   (`ArtifactValidationError`, `ProviderError`, `PatchSafetyError`, …) so the
   CLI can map failures to exit codes without string matching. Error messages

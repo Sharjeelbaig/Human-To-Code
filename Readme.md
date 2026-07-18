@@ -57,10 +57,11 @@ By default this runs the **direct converter**, not an instruction to rewrite the
 2. Reports marker-shaped requests in unsupported file types and refuses a `.human` request whose sibling output already exists. Intentionally ignored directories and symlinks remain outside discovery.
 3. Prints a receipt (the output languages actually selected for this worklist, provider, model, and exact source-to-output paths) and asks for confirmation. Nothing is written until you confirm — or pass `-y`/`--yes`. If no request is found it returns `NEEDS_INPUT`.
 4. On confirmation, converts each item with one model completion per unit, extracts one unambiguous code block, and validates the complete candidate before writing. JavaScript and TypeScript use the TypeScript parser; supported programming languages receive a deterministic structural syntax check. HTML and CSS receive the non-empty and code-fence gates because generic delimiter balancing misreads valid markup and stylesheet text. Inline validation compares the candidate with the original file and rejects only syntax errors introduced by that replacement, without blaming it for unchanged baseline errors.
-5. For JavaScript/TypeScript output, additionally stages every accepted unit into an in-memory candidate overlay and type-checks the combined candidate project with the TypeScript Compiler API — imports/exports, methods and properties, argument counts, literal unions, object shapes, readonly rules, and call compatibility across the generated files together. Diagnostics are compared against the unchanged baseline, so pre-existing project errors are never blamed on generated units. A dependency-connected group that introduces new cross-file errors receives at most one bounded repair request per whole-file unit (same provider and model); if it still fails, every generated unit in that group is rejected before application while units proven independent may still apply. Other direct languages keep their per-file validation level.
-6. Applies each accepted item defensively: new sibling files use exclusive creation, inline markers must still match the bytes found during discovery, and multi-line replacements inherit the marker's indentation. A failing or stale item is skipped with a reason rather than aborting the rest.
+5. When `direct.reconcileIntegrations` is explicitly enabled, audits ProjectMemory-evidenced groups of generated files across every supported language. A strict-JSON, read-only audit checks concrete imports/includes, modules/packages/namespaces, exports/signatures/calls, schemas/configuration, routes/templates/assets/selectors, and other evidenced contracts. Reported issues receive one target-scoped repair each and one verification audit; an unresolved connected group is rejected before application. This phase is off by default, so it adds no requests or rejection behavior to an ordinary upgrade.
+6. Stages JavaScript/TypeScript output in an in-memory candidate overlay. TypeScript receives combined semantic checking with the TypeScript Compiler API. JavaScript receives the same checking only when the project explicitly enables `checkJs` in `jsconfig.json`/`tsconfig.json` or the file uses `// @ts-check`; ordinary JavaScript is not rejected or rewritten for TypeScript-only inference diagnostics. Diagnostics are compared against the unchanged baseline, and an opted-in dependency group receives at most one bounded repair request per whole-file unit.
+7. Applies output defensively. All successful whole `.human` outputs form one rollback-protected batch: if any whole-file candidate failed generation or validation, none of the batch is written; if exclusive creation fails partway, files created by that batch are removed. Inline markers retain per-marker isolation, exact stale-byte checks, and indentation preservation.
 
-The direct converter writes code straight to the working tree. Its combined static compiler validation for JS/TS is stronger than syntax parsing, but it is still static analysis: it does **not** execute or import project code, run project builds or tests, prove runtime behavior or external-API grounding, execute code in a sandbox, create a `.strict.human.json` change contract, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan — only the indexed declarations it attaches to an inline prompt as context are secret-scanned (a finding is `SECURITY_BLOCKED`). For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
+The direct converter writes code straight to the working tree. Its static compiler validation for TypeScript and explicitly type-checked JavaScript is stronger than syntax parsing, but it is still static analysis: it does **not** execute or import project code, run project builds or tests, prove runtime behavior or external-API grounding, execute code in a sandbox, create a `.strict.human.json` change contract, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan. Direct outbound FileMemory and optional integration-reconciliation candidate bundles are credential-scanned, while ProjectMemory omits credential-bearing contracts; these narrower gates are not a repository-wide proof. For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
 
 No configured provider is needed to scan and preview. A default run selects loopback-local Ollama with `qwen2.5-coder:7b`, so a fresh `npx human-to-code .` never transmits code remotely by default. The model must already be installed; the tool never pulls it implicitly. To use another local model, OpenAI, or Ollama Cloud, create and edit a config (the command never overwrites one):
 
@@ -129,7 +130,7 @@ indentation.
 
 The host does the orchestration; the model only writes code. For each unit the
 host issues **one plain model completion** (no tool calls) and applies the
-result by exact marker range; when combined JS/TS project validation finds a
+result by exact marker range; when TypeScript or explicitly enabled JavaScript project validation finds a
 repairable cross-file error, a whole-file unit may receive **one additional
 bounded repair completion** with the same provider and model. This is fast and
 works with small models — a 1.5B coder model converts a four-marker file in
@@ -141,25 +142,69 @@ text generation work fine.
   existing symbol), that marker is retried, then skipped with a printed reason;
   the other markers still convert. One failure never aborts the run.
 - **FileMemory** — declarations already in the file are shown to the model as
-  read-only context (with few-shot examples) so it reuses rather than
+  read-only context so it reuses rather than
   re-declares them. Its static scanner understands JavaScript regex literals,
   and the redeclaration guard covers type-led C, C++, C#, and Java forms.
+- **ProjectMemory** — every request receives a compact, target-specific view of
+  the codebase. It distinguishes the current tree from the projected tree after
+  all planned outputs succeed, stores the complete conversion plan and renders
+  its target-relevant bounded subset with an explicit omitted count, supplies
+  exact relative references to likely companion files, and summarizes relevant
+  imports/includes, exports/declarations, modules/packages/namespaces,
+  language-specific references and manifests, plus markup ids/classes/assets/inline handler calls,
+  stylesheet selectors/custom properties, and DOM selectors where relevant.
+  Ecosystem rules live in extensible profiles; the ProjectMemory and optional
+  reconciliation orchestration do not assume a web application. It is
+  rebuilt for each run rather than persisted, so it cannot become a stale cache.
+  Accepted candidates update the shared in-memory contracts before later files
+  are generated.
 - **Candidate and write guards** — ambiguous fenced responses and malformed
   candidates are retried; existing sibling files, stale inline markers, and
-  unsafe indentation changes are refused before mutation.
+  unsafe indentation changes are refused before mutation. Whole `.human`
+  outputs commit as one rollback-protected batch, so one failed candidate or
+  late exclusive-create failure cannot leave a knowingly partial generated
+  codebase.
 - **Combined project validation (JS/TS)** — all accepted JavaScript/TypeScript
-  units are staged into an in-memory overlay and type-checked together with
-  the TypeScript Compiler API before any write. Newly introduced cross-file
-  diagnostics reject the whole dependency-connected group (after at most one
-  bounded repair attempt per whole-file unit); independent units still apply.
+  units are staged into an in-memory overlay. TypeScript is type-checked
+  together before any write; JavaScript semantic checking runs only when the
+  project or file opts into `checkJs`/`@ts-check`. Newly introduced cross-file
+  diagnostics reject the dependency-connected group after at most one bounded
+  repair attempt per whole-file unit.
   Pre-existing baseline errors are never attributed to generated code. This is
   static compilation, not sandbox execution, runtime testing, or API grounding.
+- **Optional cross-language reconciliation** —
+  `direct.reconcileIntegrations` defaults to `false`. When enabled, the host
+  forms bounded relationship groups from ProjectMemory, asks for one strict
+  read-only audit, repairs only named generated targets, and verifies once.
+  Independent files are not coupled merely because they share a run. The
+  receipt discloses conservative audit and target-repair ceilings.
 - **Clear, stable output** — a single truncated status line per marker
   (`✓ app.ts (inline @human, line 12)` / `⊘ skipped … : <reason>`), plus an
   in-place elapsed spinner while a completion is in flight.
 
 This engine cannot produce `VERIFIED` runs; for the reviewed, sandbox-validated
 pipeline use `human-to-code guided`.
+
+For example, when one run plans `index.html`, `styles.css`, and `script.js`, the
+HTML request sees the latter two as projected siblings with the exact
+references `styles.css` and `script.js`. After HTML is accepted, the CSS and
+JavaScript requests see its generated ids and classes as a compact contract.
+For a nested target, ProjectMemory computes the correct relative reference
+such as `../styles.css`; it does not assume every file lives at the root.
+The same mechanism describes Python modules, Rust crate modules, Go packages,
+Java/C# namespaces and types, C/C++ headers, Ruby loaders, and same-language
+companions. Those conventions are profile data; the grouping, audit, repair,
+and verification control flow is shared.
+
+ProjectMemory is evidence for generation, not proof of correctness. Its prompt
+contract tells the model to connect genuine companions without importing every
+file it sees. JS/TS relationships still receive combined compiler validation.
+Cross-file relationships are not runtime-tested by the direct engine. The
+optional `direct.reconcileIntegrations` pass audits compact contracts across
+supported languages and verifies any target-scoped model repair once, but it is
+deliberately off by default and is not a compiler, runtime, or sandbox proof for
+Python, Rust, web projects, or any other ecosystem. Use the guided path when
+integration must be sandbox-verified.
 
 ```bash
 # Deterministic engine — works with small models:
@@ -264,6 +309,9 @@ This complete local-Ollama example shows the policy fields:
     "maxRequests": 12,
     "maxRepairs": 2,
     "timeoutMs": 900000
+  },
+  "direct": {
+    "reconcileIntegrations": false
   }
 }
 ```
@@ -271,6 +319,29 @@ This complete local-Ollama example shows the policy fields:
 `languages` lists every output language enabled for direct conversion (`typescript`, `javascript`, `python`, `rust`, `html`, `css`); its first entry is the default. The receipt lists only the languages selected by the discovered units, not every configured possibility.
 
 `humanFileExtensions` provides the strongest routing signal. Each entry binds one exact, portable project-relative `.human` path to an output extension; a leading dot is optional, and the extension's language must appear in `languages`. This prevents prompt vocabulary from changing the output: the example always routes `script.human` to `script.js`, even if its instruction repeatedly mentions stylesheets, CSS classes, colors, or themes. Recognized inner extensions are replaced when an explicit mapping is present, so mapping `page.html.human` to `js` produces `page.js`.
+
+`direct.reconcileIntegrations` is an opt-in post-generation safety net. The
+default `false` keeps the established ProjectMemory first pass unchanged and
+adds no provider calls, checks, group coupling, or receipt fields. With `true`,
+the receipt/JSON plan discloses conservative audit and target-repair ceilings.
+ProjectMemory supplies structured relationships using extensible language
+profiles; the generic orchestrator audits only connected generated groups,
+validates strict JSON against real generated paths, repairs each named target at
+most once, and performs at most one verification audit. A failed bounded cycle
+rejects that evidenced group instead of writing a known-inconsistent partial
+result.
+
+The direct engine uses `privacy.maxContextTokens` as the combined upper bound
+for FileMemory and ProjectMemory. ProjectMemory additionally caps each rendered
+block at 24,000 characters, reads at most 240 high-priority files for compact
+contracts, and shows at most 72 paths per current/projected tree section, 48
+planned targets, 16 relationships, and 8 compact contracts per request. It
+omits protected paths, `filesToIgnore`, `privacy.excludedPaths`, oversized
+files, unreadable files, and any contract containing credential-like content.
+Other-file prompts and source-derived contracts are explicitly framed as
+untrusted evidence. With a remote provider, this compact direct context is sent
+only after `privacy.remoteProviderConsent` is enabled; local Ollama keeps it on
+the configured loopback endpoint.
 
 A `.human` file may instead declare its extension on its first nonblank line. The declaration is removed before the remaining instruction is sent to the model:
 

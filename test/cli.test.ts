@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -157,22 +158,274 @@ test("multi-language receipt reports the inferred outputs instead of the configu
     assert.match(receipt.stdout, /script\.human\s+->\s+script\.js/u);
     assert.match(receipt.stdout, /styles\.human\s+->\s+styles\.css/u);
     assert.match(receipt.stdout, /3 planned \(up to 1 extra bounded repair request for JavaScript\)/u);
+    assert.match(receipt.stdout, /Context\s+: compact current\/projected ProjectMemory/u);
+    assert.doesNotMatch(receipt.stdout, /integration reconciliation|generated cross-file links/u);
     assert.doesNotMatch(receipt.stdout, /TypeScript|\.ts\b/u);
     await assert.rejects(access(join(root, "index.html")));
 
     const json = await cli([root, "--json"]);
     assert.equal(json.code, 3, json.stderr || json.stdout);
     const plan = JSON.parse(json.stdout) as {
+      context: string;
       languages: string[];
       units: Array<{ output: string; language: string }>;
+      additionalRequests?: unknown;
     };
+    assert.equal(plan.context, "project-memory-v1");
     assert.deepEqual(plan.languages, ["typescript", "html", "css", "javascript"]);
     assert.deepEqual(plan.units.map(({ output, language }) => ({ output, language })), [
       { output: "index.html", language: "html" },
       { output: "script.js", language: "javascript" },
       { output: "styles.css", language: "css" },
     ]);
+    assert.equal(plan.additionalRequests, undefined);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plain browser JavaScript is not rewritten for an unrequested TypeScript check", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-plain-js-policy-"));
+  let requests = 0;
+  let repairs = 0;
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      requests += 1;
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
+      if (system.includes("repairing previously generated code")) repairs += 1;
+      const content = system.includes("target: index.html")
+        ? '<link rel="stylesheet" href="styles.css"><div class="status"></div><script src="script.js"></script>'
+        : system.includes("target: script.js")
+          ? 'const status = document.querySelector(".status");\nif (status) status.innerText = "Ready";'
+          : ".status { color: green; }";
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["html", "javascript", "css"],
+      humanFileExtensions: [
+        { path: "index.human", extension: "html" },
+        { path: "script.human", extension: "js" },
+        { path: "styles.human", extension: "css" },
+      ],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+    }));
+    await put(root, "index.human", "Build the page.\n");
+    await put(root, "script.human", "Build the browser behavior.\n");
+    await put(root, "styles.human", "Build the styles.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as { written: string[]; repairRequests: number };
+    assert.deepEqual(done.written, ["index.html", "script.js", "styles.css"]);
+    assert.equal(done.repairRequests, 0);
+    assert.equal(repairs, 0);
+    assert.equal(requests, 3);
+    assert.match(await readFile(join(root, "script.js"), "utf8"), /innerText/u);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a failed whole-file candidate withholds the complete conversion batch", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-whole-batch-"));
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
+      const content = system.includes("target: index.html")
+        ? '<main>Ready</main><script src="script.js"></script>'
+        : "const broken = ;";
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["html", "javascript"],
+      humanFileExtensions: [
+        { path: "index.human", extension: "html" },
+        { path: "script.human", extension: "js" },
+      ],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+    }));
+    await put(root, "index.human", "Build the page.\n");
+    await put(root, "script.human", "Build the browser behavior.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 5, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as { status: string; written: string[]; skipped: Array<{ reason: string }> };
+    assert.equal(done.status, "FAILED");
+    assert.deepEqual(done.written, []);
+    assert.equal(done.skipped.length, 2);
+    assert.ok(done.skipped.some(({ reason }) => /whole-file conversion batch was withheld/u.test(reason)));
+    await assert.rejects(access(join(root, "index.html")));
+    await assert.rejects(access(join(root, "script.js")));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("opt-in integration reconciliation is disclosed while the default receipt stays unchanged", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-integration-opt-in-"));
+  try {
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["html", "css", "javascript"],
+      humanFileExtensions: [
+        { path: "index.human", extension: "html" },
+        { path: "styles.human", extension: "css" },
+        { path: "script.human", extension: "js" },
+      ],
+      direct: { reconcileIntegrations: true },
+      provider: { name: "ollama", model: "fixture-model" },
+    }));
+    await put(root, "index.human", "Build a calculator page.\n");
+    await put(root, "styles.human", "Style the calculator.\n");
+    await put(root, "script.human", "Wire calculator button clicks in the browser.\n");
+
+    const receipt = await cli([root, "--dry-run"]);
+    assert.equal(receipt.code, 0, receipt.stderr || receipt.stdout);
+    assert.match(receipt.stdout, /Requests\s+: 3 planned/u);
+    assert.match(receipt.stdout, /Additional: opt-in cross-file reconciliation may issue up to 6 bounded audit requests and 3 target-repair requests/u);
+    assert.match(receipt.stdout, /ProjectMemory-evidenced generated relationships/u);
+
+    const json = await cli([root, "--json"]);
+    assert.equal(json.code, 3, json.stderr || json.stdout);
+    const plan = JSON.parse(json.stdout) as {
+      additionalRequests: {
+        conditional: boolean;
+        integrationAuditUpTo: number;
+        integrationRepairUpTo: number;
+        compilerRepairUpTo: number;
+      };
+    };
+    assert.deepEqual(plan.additionalRequests, {
+      conditional: true,
+      integrationAuditUpTo: 6,
+      integrationRepairUpTo: 3,
+      compilerRepairUpTo: 1,
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("opt-in CLI performs a generic audit, target repair, and verification cycle", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-integration-run-"));
+  let requests = 0;
+  let audits = 0;
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      requests += 1;
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
+      let content: string;
+      if (system.includes("read-only cross-language integration auditor")) {
+        audits += 1;
+        content = audits === 1
+          ? JSON.stringify({
+              status: "issues",
+              issues: [{
+                targetPath: "index.html",
+                relatedPaths: ["styles.css", "script.js"],
+                code: "MISSING_COMPANION_REFERENCES",
+                message: "The generated entry file does not reference its generated companions.",
+              }],
+            })
+          : '{"status":"consistent","issues":[]}';
+      } else if (system.includes("reconciling exactly one target: index.html")) {
+        content =
+          '<link rel="stylesheet" href="styles.css">\n<main class="calculator">Calculator</main>\n<script src="script.js"></script>';
+      } else {
+        content = system.includes("target: index.html")
+          ? '<main class="calculator">Calculator</main>'
+          : system.includes("target: script.js")
+            ? 'document.querySelector(".calculator")?.addEventListener("click", () => undefined);'
+            : ".calculator { display: grid; }";
+      }
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["html", "css", "javascript"],
+      humanFileExtensions: [
+        { path: "index.human", extension: "html" },
+        { path: "styles.human", extension: "css" },
+        { path: "script.human", extension: "js" },
+      ],
+      direct: { reconcileIntegrations: true },
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+    }));
+    await put(root, "index.human", "Build a calculator page.\n");
+    await put(root, "styles.human", "Style the calculator.\n");
+    await put(root, "script.human", "Wire calculator button clicks in the browser.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as {
+      status: string;
+      written: string[];
+      integrationRequests: number;
+      integrationAuditRequests: number;
+      integrationRepairRequests: number;
+      repairRequests: number;
+    };
+    assert.equal(done.status, "DONE");
+    assert.equal(done.written.length, 3);
+    assert.equal(done.integrationRequests, 3);
+    assert.equal(done.integrationAuditRequests, 2);
+    assert.equal(done.integrationRepairRequests, 1);
+    assert.equal(done.repairRequests, 0);
+    assert.equal(requests, 6);
+    const html = await readFile(join(root, "index.html"), "utf8");
+    assert.match(html, /href="styles\.css"/u);
+    assert.match(html, /src="script\.js"/u);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await rm(root, { recursive: true, force: true });
   }
 });

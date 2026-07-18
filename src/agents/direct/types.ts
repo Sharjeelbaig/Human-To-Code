@@ -35,6 +35,23 @@ export interface UnitGenerationContext {
   inline: boolean;
   /** Static declarations and earlier replacements in this unit's file. */
   fileMemory?: string;
+  /** Target-specific current/projected repository evidence. */
+  projectMemory?: string;
+}
+
+export interface ProjectRelationship {
+  path: string;
+  state: "current" | "planned" | "generated";
+  role: string;
+  reference: string;
+}
+
+/** Minimal seam used by generation and staged repair without coupling to storage. */
+export interface ProjectMemoryProvider {
+  renderFor(unit: ConversionUnit, charBudget?: number): string;
+  remember(unit: ConversionUnit, code: string): void;
+  /** Structured target relationships used by optional generic integration auditing. */
+  relationsFor?(unit: ConversionUnit): readonly ProjectRelationship[];
 }
 
 export interface GeneratedConversionUnit {
@@ -56,6 +73,10 @@ export interface GenerateUnitsOptions {
   onProgress?: (event: ConversionProgress) => void;
   /** Fail-closed candidate check run before a unit is remembered or applied. */
   validate?: (unit: ConversionUnit, code: string) => Promise<void>;
+  /** Shared current/projected repository memory updated after accepted units. */
+  projectMemory?: ProjectMemoryProvider;
+  /** Total FileMemory + ProjectMemory character allowance for one request. */
+  contextCharBudget?: number;
 }
 
 export interface DirectDiscoveryNotice {
@@ -71,18 +92,24 @@ export interface DirectDiscoveryNotice {
 export interface DirectDiscoveryResult {
   units: ConversionUnit[];
   notices: DirectDiscoveryNotice[];
+  /** Project-relative paths from the same deterministic discovery walk. */
+  scannedPaths: string[];
 }
 
 export interface GenerateOptions {
   language: string;
   provider: string;
   model: string;
+  /** Exact project-relative file receiving this output. */
+  targetPath?: string;
   baseUrl?: string;
   apiKey?: string;
   /** Whether this request replaces one inline @human marker. */
   inline?: boolean;
   /** Deterministic earlier replacements from the same file. */
   fileMemory?: string;
+  /** Compact current/projected repository evidence for this exact target. */
+  projectMemory?: string;
   signal?: AbortSignal;
 }
 

@@ -28,6 +28,7 @@ test("validateConfig fills v1 defaults", () => {
   assert.equal(config.sandbox.network, "none");
   assert.equal(config.privacy.remoteProviderConsent, false);
   assert.equal(config.budgets.maxRepairs, 2);
+  assert.equal(config.direct.reconcileIntegrations, false);
 });
 
 test("schema version is mandatory and unsupported versions fail", () => {
@@ -47,6 +48,7 @@ test("defaults are deeply frozen and every result is deeply cloned", () => {
   assert.equal(Object.isFrozen(DEFAULT_CONFIG.provider), true);
   assert.equal(Object.isFrozen(DEFAULT_CONFIG.filesToIgnore), true);
   assert.equal(Object.isFrozen(DEFAULT_CONFIG.humanFileExtensions), true);
+  assert.equal(Object.isFrozen(DEFAULT_CONFIG.direct), true);
 
   const first = validateConfig(V1);
   const second = validateConfig(V1);
@@ -56,6 +58,22 @@ test("defaults are deeply frozen and every result is deeply cloned", () => {
   assert.equal(second.provider.model, "qwen2.5-coder:7b");
   assert.ok(!second.filesToIgnore.includes("custom"));
   assert.deepEqual(second.privacy.excludedPaths, []);
+});
+
+test("post-generation integration reconciliation is explicit and defaults off", () => {
+  const enabled = validateConfig({
+    ...V1,
+    direct: { reconcileIntegrations: true },
+  });
+  assert.equal(enabled.direct.reconcileIntegrations, true);
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { reconcileIntegrations: "yes" } }),
+    ConfigError,
+  );
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { unknownIntegrationMode: true } }),
+    ConfigError,
+  );
 });
 
 test("validateConfig accepts known legacy-compatible fields", () => {

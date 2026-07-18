@@ -40,7 +40,7 @@ try {
     ),
   );
   assert.equal(installedPackage.bin["human-to-code"], "./dist/cli.js");
-  assert.equal(installedPackage.version, "0.1.20");
+  assert.equal(installedPackage.version, "0.1.25");
 
   // The staged JS/TS project validation path needs the TypeScript compiler and
   // bundled node builtin typings at runtime in a clean install.
@@ -60,6 +60,9 @@ try {
   assert.equal(typeof exported.loadConfig, "function");
   assert.equal(typeof exported.validateCandidateProject, "function");
   assert.equal(typeof exported.buildCandidateOverlay, "function");
+  assert.equal(typeof exported.buildProjectMemory, "function");
+  assert.equal(typeof exported.reconcileGeneratedIntegrations, "function");
+  assert.equal(typeof exported.compactFileContract, "function");
 
   const cli = join(
     installRoot,

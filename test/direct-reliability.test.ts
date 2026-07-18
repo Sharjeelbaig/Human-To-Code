@@ -9,6 +9,7 @@ import {
   FileMemory,
   FileMemoryConflictError,
   ModelOutputError,
+  applyWholeFileBatch,
   applyUnit,
   declaredIdentifiers,
   discoverDirectUnits,
@@ -275,6 +276,44 @@ test("issue 06: existing whole-file targets are diagnosed and never overwritten"
       (error: unknown) => error instanceof DirectApplicationError && /overwrite/u.test(error.message),
     );
     assert.equal(await readFile(target, "utf8"), "const handwritten = true;\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("whole-file batch application rolls back earlier creates when a later target cannot be created", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-whole-file-batch-"));
+  const firstHuman = join(root, "first.human");
+  const secondHuman = join(root, "second.human");
+  try {
+    await writeFile(firstHuman, "create first");
+    await writeFile(secondHuman, "create second");
+    await writeFile(join(root, "second.ts"), "export const existing = true;\n");
+    const first: ConversionUnit = {
+      kind: "file",
+      sourcePath: "first.human",
+      absoluteSource: firstHuman,
+      outputPath: "first.ts",
+      prompt: "create first",
+      describe: "first.human -> first.ts",
+    };
+    const second: ConversionUnit = {
+      kind: "file",
+      sourcePath: "second.human",
+      absoluteSource: secondHuman,
+      outputPath: "second.ts",
+      prompt: "create second",
+      describe: "second.human -> second.ts",
+    };
+    await assert.rejects(
+      () => applyWholeFileBatch(root, [
+        { unit: first, code: "export const first = true;" },
+        { unit: second, code: "export const second = true;" },
+      ]),
+      (error: unknown) => error instanceof DirectApplicationError && /batch was not applied.*overwrite/u.test(error.message),
+    );
+    await assert.rejects(readFile(join(root, "first.ts"), "utf8"));
+    assert.equal(await readFile(join(root, "second.ts"), "utf8"), "export const existing = true;\n");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

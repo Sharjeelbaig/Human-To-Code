@@ -1,8 +1,9 @@
 /**
  * Staged, project-aware validation for multi-file JS/TS direct conversions.
  * All successfully generated units enter an in-memory candidate overlay; the
- * combined candidate project is compiled with the TypeScript Compiler API and
- * compared against the unchanged baseline. Dependency-connected groups that
+ * TypeScript and explicitly opted-in JavaScript are compiled with the
+ * TypeScript Compiler API and compared against the unchanged baseline.
+ * Dependency-connected groups that
  * introduce new diagnostics are repaired within a bounded budget or rejected
  * whole, and only units proven independent of every failure are applied.
  *
@@ -10,6 +11,7 @@
  * or sandboxed here, and passing it is never presented as `VERIFIED`.
  */
 import { ContextSecurityError, scanSecrets } from "../../context/context.ts";
+import { extname } from "node:path";
 import { buildCandidateOverlay, type CandidateOverlay } from "./candidate-overlay.ts";
 import { validateGeneratedUnit } from "./candidate-validation.ts";
 import { attributeDiagnostics, buildOverlayDependencyGroups } from "./dependency-graph.ts";
@@ -19,7 +21,7 @@ import {
   newlyIntroducedProjectDiagnostics,
   type ProjectDiagnostic,
 } from "./program-diagnostics.ts";
-import type { ConversionUnit, GeneratedConversionUnit } from "./types.ts";
+import type { ConversionUnit, GeneratedConversionUnit, ProjectMemoryProvider } from "./types.ts";
 
 export interface StagedRepairRequest {
   unit: ConversionUnit;
@@ -29,8 +31,12 @@ export interface StagedRepairRequest {
   currentCode: string;
   /** Normalized new diagnostics attributed to this candidate's dependency group. */
   diagnostics: ProjectDiagnostic[];
+  /** Trusted deterministic guidance for recognized compiler diagnostics. */
+  hints: string[];
   /** Other generated candidate files in the same dependency group. */
   relatedFiles: Array<{ path: string; content: string }>;
+  /** Target-specific current/projected repository evidence within the same budget. */
+  projectMemory?: string;
 }
 
 export type StagedValidationProgress =
@@ -45,6 +51,8 @@ export interface StagedValidationOptions {
   maxRepairAttemptsPerUnit?: number;
   /** Character budget for one repair request's code-and-diagnostics context. */
   contextCharBudget?: number;
+  /** Shared project memory, refreshed when a repair changes a candidate. */
+  projectMemory?: ProjectMemoryProvider;
   onProgress?: (event: StagedValidationProgress) => void;
 }
 
@@ -79,6 +87,21 @@ function describeDiagnostics(diagnostics: readonly ProjectDiagnostic[]): string 
   });
   const more = diagnostics.length - shown.length;
   return `${shown.join("; ")}${more > 0 ? ` (+${more} more)` : ""}`;
+}
+
+function repairHints(unit: ConversionUnit, diagnostics: readonly ProjectDiagnostic[]): string[] {
+  const path = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+  const javascript = [".js", ".jsx", ".mjs", ".cjs"].includes(extname(path).toLowerCase());
+  if (!javascript) return [];
+  const hints = new Set<string>();
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code !== 2339) continue;
+    const match = /Property '([^']+)' does not exist on type '([^']+)'/u.exec(diagnostic.message);
+    if (!match) continue;
+    const [, member, inferredType] = match;
+    hints.add(`TS2339 means the inferred type ${inferredType} does not declare ${member}. Preserve the requested behavior by proving/narrowing the value to the correct subtype or by using an equivalent member that the inferred type actually declares; do not use an unsafe universal type or suppress validation.`);
+  }
+  return [...hints];
 }
 
 /**
@@ -160,7 +183,7 @@ export async function validateCandidateProject(
         const group = groups.groupOf.get(key)!;
         const request = buildRepairRequest(unit, item.code, overlay, key, groups.members.get(group) ?? [], [
           ...(groupDiagnostics.get(group) ?? diagnostics),
-        ], contextCharBudget);
+        ], contextCharBudget, options.projectMemory);
         if (scanSecrets(`${request.currentCode}\n${request.relatedFiles.map((entry) => entry.content).join("\n")}`).length > 0) {
           // Never send credential-like content in repair context; the unit
           // simply stays unrepaired and its group is rejected on the next pass.
@@ -174,6 +197,7 @@ export async function validateCandidateProject(
           if (repairedCode.trim().length === 0 || repairedCode === item.code) continue;
           await validateGeneratedUnit(unit, repairedCode);
           item.code = repairedCode;
+          options.projectMemory?.remember(unit, repairedCode);
           repaired = true;
         } catch (error) {
           if (error instanceof ContextSecurityError) throw error;
@@ -217,9 +241,15 @@ function buildRepairRequest(
   groupKeys: readonly string[],
   diagnostics: ProjectDiagnostic[],
   contextCharBudget: number,
+  projectMemory?: ProjectMemoryProvider,
 ): StagedRepairRequest {
   const normalized = diagnostics.slice(0, MAX_DIAGNOSTICS_PER_REQUEST).map(sanitizeDiagnostic);
-  let budget = Math.max(0, contextCharBudget - currentCode.length);
+  const hints = repairHints(unit, normalized);
+  const diagnosticChars = normalized.reduce((total, item) => total + item.message.length + (item.path?.length ?? 0) + 32, 0);
+  const hintChars = hints.reduce((total, hint) => total + hint.length + 4, 0);
+  let budget = Math.max(0, contextCharBudget - currentCode.length - diagnosticChars - hintChars);
+  const renderedProjectMemory = projectMemory?.renderFor(unit, Math.floor(budget / 2));
+  budget = Math.max(0, budget - (renderedProjectMemory?.length ?? 0));
   const relatedFiles: Array<{ path: string; content: string }> = [];
   const related = groupKeys
     .filter((key) => key !== ownKey)
@@ -235,6 +265,8 @@ function buildRepairRequest(
     targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
     currentCode,
     diagnostics: normalized,
+    hints,
     relatedFiles,
+    ...(renderedProjectMemory ? { projectMemory: renderedProjectMemory } : {}),
   };
 }

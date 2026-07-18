@@ -31,6 +31,19 @@ export interface ProjectDiagnostic {
  * resolution accepts extensionless, `.js`-suffixed, and (with noEmit)
  * `.ts`-suffixed relative imports, matching what direct models emit.
  */
+function projectExplicitlyChecksJavaScript(root: string): boolean {
+  for (const name of ["jsconfig.json", "tsconfig.json"]) {
+    const path = join(root, name);
+    if (!existsSync(path)) continue;
+    const parsed = ts.getParsedCommandLineOfConfigFile(path, {}, {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic: () => undefined,
+    });
+    if (parsed?.options.checkJs === true) return true;
+  }
+  return false;
+}
+
 function validationCompilerOptions(root: string): ts.CompilerOptions {
   const options: ts.CompilerOptions = {
     target: ts.ScriptTarget.ES2023,
@@ -38,7 +51,12 @@ function validationCompilerOptions(root: string): ts.CompilerOptions {
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     lib: ["lib.es2023.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
     allowJs: true,
-    checkJs: true,
+    // Plain JavaScript is not TypeScript. Forcing `checkJs` on projects that
+    // never opted into it produces false failures (especially for DOM values
+    // whose runtime subtype is evidenced by HTML but inferred as `Element`).
+    // Respect the project's jsconfig/tsconfig policy; a per-file `// @ts-check`
+    // directive continues to opt that individual JavaScript file in.
+    checkJs: projectExplicitlyChecksJavaScript(root),
     jsx: ts.JsxEmit.Preserve,
     noEmit: true,
     allowImportingTsExtensions: true,

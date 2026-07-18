@@ -7,6 +7,15 @@ use `<!-- @human ... -->`; JavaScript/CSS comments inside `<script>` and
 `<style>` are also recognized lexically. The remaining roadmap below is for a
 grounded, sandbox-validated `static-web` guided profile. React/Vite workspaces
 already cover component markup/styling through the existing node adapter.
+Direct ProjectMemory also exposes current and planned sibling CSS/JavaScript
+files to an HTML request with exact relative references, then carries accepted
+HTML ids/classes/references forward as compact contracts for later CSS and
+JavaScript requests. This is generation context, not the link-graph validation
+planned below. An optional direct safety net is also available through
+`direct.reconcileIntegrations`: the same generic cross-language auditor used for
+Python, Rust, JS/TS, and other supported relationships can audit the structured
+HTML/CSS/JavaScript edges supplied by ProjectMemory. It defaults off and remains
+narrower than the future deterministic complete static-web link graph.
 
 ## Target profile
 - `Ecosystem`: `static-web`.

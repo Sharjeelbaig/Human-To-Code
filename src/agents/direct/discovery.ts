@@ -69,6 +69,7 @@ export async function discoverDirectUnits(
     configuredExtensionByPath.set(mapping.path, extension);
   }
   const files = await walk(absoluteRoot, DEFAULT_IGNORES);
+  const scannedPaths = files.map((absolute) => relative(absoluteRoot, absolute).split(sep).join("/"));
   const units: ConversionUnit[] = [];
   const notices: DirectDiscoveryResult["notices"] = [];
 
@@ -209,7 +210,7 @@ export async function discoverDirectUnits(
       });
     }
   }
-  return { units, notices };
+  return { units, notices, scannedPaths };
 }
 
 /** Compatibility helper returning only runnable units. */

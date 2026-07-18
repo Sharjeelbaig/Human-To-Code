@@ -31,16 +31,23 @@ import { ProviderError, type ProviderAdapter } from "./providers/provider.ts";
 import { createOllamaProvider, createOpenAIProvider } from "./providers/providers.ts";
 import { RunStore } from "./pipeline/run-store.ts";
 import {
+  applyWholeFileBatch,
   applyUnit,
+  buildProjectMemory,
+  conditionalRequestAllowance,
   discoverDirectUnits,
   generateConversionUnits,
   generateCode,
+  generateIntegrationAudit,
+  generateIntegrationRepairCode,
   generateRepairCode,
+  reconcileGeneratedIntegrations,
   renderReceipt,
   validateCandidateProject,
   validateGeneratedUnit,
   type ConversionUnit,
   type ConversionProgress,
+  type IntegrationProgress,
   type StagedValidationProgress,
 } from "./agents/direct/index.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
@@ -537,6 +544,9 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const model = effective.provider.model;
   const discovery = await discoverDirectUnits(root, languages, effective.humanFileExtensions);
   const units = discovery.units;
+  const conditionalRequests = effective.direct.reconcileIntegrations
+    ? conditionalRequestAllowance(units, languages)
+    : undefined;
 
   if (cli.json) {
     const plan = {
@@ -545,7 +555,16 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       languages,
       provider: providerName,
       model,
+      context: "project-memory-v1",
       requests: units.length,
+      ...(conditionalRequests !== undefined ? {
+        additionalRequests: {
+          conditional: true,
+          integrationAuditUpTo: conditionalRequests.integrationAuditUpTo,
+          integrationRepairUpTo: conditionalRequests.integrationRepairUpTo,
+          compilerRepairUpTo: conditionalRequests.compilerRepairUpTo,
+        },
+      } : {}),
       units: units.map((unit) => ({
         kind: unit.kind,
         source: unit.sourcePath,
@@ -559,7 +578,9 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       return units.length === 0 ? 3 : cli.yes ? 0 : 3;
     }
   } else {
-    output(renderReceipt(units, providerName, model, languages), false);
+    output(renderReceipt(units, providerName, model, languages, {
+      reconcileIntegrations: effective.direct.reconcileIntegrations,
+    }), false);
     for (const notice of discovery.notices) output(`  ! ${notice.message}`, false);
   }
   if (units.length === 0) return 3;
@@ -585,6 +606,14 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       "Direct conversion would send change instructions and possibly source context to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
     );
   }
+
+  const contextCharBudget = effective.privacy.maxContextTokens * 4;
+  const projectMemory = await buildProjectMemory(root, units, {
+    scannedPaths: discovery.scannedPaths,
+    ignoredNames: effective.filesToIgnore,
+    excludedPaths: effective.privacy.excludedPaths,
+    maxFileBytes: effective.privacy.maxFileBytes,
+  });
 
   // Default engine: deterministic per-marker generation. Each marker is one
   // plain model completion (no tool calls), applied by exact range. One marker
@@ -613,11 +642,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     generated = await generateConversionUnits(
       units,
       (unit, context) => {
-        if (context.fileMemory
-          && context.fileMemory.length > effective.privacy.maxContextTokens * 4) {
+        if ((context.fileMemory?.length ?? 0) + (context.projectMemory?.length ?? 0) > contextCharBudget) {
           throw new ContextSecurityError(
             "BUDGET_EXCEEDED",
-            `FileMemory for ${unit.sourcePath} exceeds the configured context budget.`,
+            `Combined FileMemory and ProjectMemory for ${unit.sourcePath} exceed the configured context budget.`,
             unit.sourcePath,
           );
         }
@@ -625,12 +653,19 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
           language: unit.language ?? language,
           provider: providerName,
           model,
+          targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
           ...(baseUrl ? { baseUrl } : {}),
           ...(apiKey ? { apiKey } : {}),
           ...context,
         });
       },
-      { retries: 1, validate: validateGeneratedUnit, ...(onProgress ? { onProgress } : {}) },
+      {
+        retries: 1,
+        validate: validateGeneratedUnit,
+        projectMemory,
+        contextCharBudget,
+        ...(onProgress ? { onProgress } : {}),
+      },
     );
   } catch (error) {
     spinner.stop();
@@ -640,9 +675,72 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     return 5;
   }
 
+  // Optional and off by default. ProjectMemory supplies language-aware
+  // relationships; this orchestrator remains cross-language and performs a
+  // bounded audit -> target repair -> verification cycle over generated groups.
+  let integrationAuditRequests = 0;
+  let integrationRepairRequests = 0;
+  if (effective.direct.reconcileIntegrations) {
+    try {
+      const onIntegrationProgress = interactive
+        ? (event: IntegrationProgress): void => {
+            if (event.kind === "integration-audit") {
+              spinner.label(`auditing ${event.files} related generated file(s) (pass ${event.pass})`);
+            } else if (event.kind === "integration-repair") {
+              spinner.label(`reconciling ${describeUnit(event.unit)} (${event.issues} issue(s))`);
+            } else if (event.kind === "reject") {
+              spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
+            }
+          }
+        : undefined;
+      const integrated = await reconcileGeneratedIntegrations(generated, {
+        maxAuditPassesPerGroup: 2,
+        maxRepairAttemptsPerUnit: 1,
+        contextCharBudget,
+        audit: (request) => generateIntegrationAudit({
+          files: request.files,
+          relationships: request.relationships,
+          ...(request.projectMemory ? { projectMemory: request.projectMemory } : {}),
+        }, {
+          language: request.unit.language ?? language,
+          provider: providerName,
+          model,
+          ...(baseUrl ? { baseUrl } : {}),
+          ...(apiKey ? { apiKey } : {}),
+        }),
+        repair: (request) => generateIntegrationRepairCode({
+          targetPath: request.targetPath,
+          instruction: request.instruction,
+          currentCode: request.currentCode,
+          issues: request.issues,
+          relatedFiles: request.relatedFiles,
+          ...(request.projectMemory ? { projectMemory: request.projectMemory } : {}),
+        }, {
+          language: request.unit.language ?? language,
+          provider: providerName,
+          model,
+          targetPath: request.targetPath,
+          ...(baseUrl ? { baseUrl } : {}),
+          ...(apiKey ? { apiKey } : {}),
+        }),
+        projectMemory,
+        ...(onIntegrationProgress ? { onProgress: onIntegrationProgress } : {}),
+      });
+      generated = integrated.results;
+      integrationAuditRequests = integrated.auditRequests;
+      integrationRepairRequests = integrated.repairRequests;
+    } catch (error) {
+      spinner.stop();
+      if (error instanceof ContextSecurityError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
+      return 5;
+    }
+  }
+
   // Staged project-aware validation: every accepted JS/TS unit joins an
-  // in-memory candidate overlay that is type-checked as one TypeScript
-  // program against the unchanged baseline before any file is written.
+  // in-memory candidate overlay. TypeScript and explicitly opted-in JavaScript
+  // are type-checked against the unchanged baseline before any file is written.
   // Dependency-connected groups that introduce cross-file errors get one
   // bounded repair request per whole-file unit, then fail closed together.
   let repairRequests = 0;
@@ -667,14 +765,18 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         instruction: request.unit.prompt,
         currentCode: request.currentCode,
         diagnostics: request.diagnostics,
+        hints: request.hints,
         relatedFiles: request.relatedFiles,
+        ...(request.projectMemory ? { projectMemory: request.projectMemory } : {}),
       }, {
         language: request.unit.language ?? language,
         provider: providerName,
         model,
+        targetPath: request.targetPath,
         ...(baseUrl ? { baseUrl } : {}),
         ...(apiKey ? { apiKey } : {}),
       }),
+      projectMemory,
       ...(onStagedProgress ? { onProgress: onStagedProgress } : {}),
     });
     generated = staged.results;
@@ -698,7 +800,42 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   });
   const written: string[] = [];
   const skipped: Array<{ source: string; reason: string }> = [];
-  for (const { unit, code, error } of ordered) {
+  const wholeFiles = ordered.filter((item) => item.unit.kind === "file");
+  const incompleteWholeFiles = wholeFiles.filter((item) => item.error !== undefined || item.code.trim().length === 0);
+  if (incompleteWholeFiles.length > 0) {
+    const blocker = incompleteWholeFiles[0]!;
+    const blockerReason = blocker.error ?? "empty model output";
+    const batchReason = `whole-file conversion batch was withheld because ${blocker.unit.sourcePath} failed: ${blockerReason}`;
+    for (const item of wholeFiles) {
+      if (item.error !== undefined || item.code.trim().length === 0) continue;
+      item.error = batchReason;
+      item.code = "";
+      if (!cli.json) output(`  ⊘ skipped ${describeUnit(item.unit)}: ${batchReason}`, false);
+    }
+  }
+
+  const applicableWholeFiles = wholeFiles.filter((item) => item.error === undefined && item.code.trim().length > 0);
+  if (applicableWholeFiles.length > 0) {
+    try {
+      const paths = await applyWholeFileBatch(root, applicableWholeFiles);
+      written.push(...paths);
+      if (!cli.json) {
+        for (const item of applicableWholeFiles) output(`  ✓ ${describeUnit(item.unit)}`, false);
+      }
+    } catch (applyError) {
+      const reason = applyError instanceof Error ? applyError.message : String(applyError);
+      for (const item of applicableWholeFiles) {
+        skipped.push({ source: item.unit.sourcePath, reason });
+        if (!cli.json) output(`  ⊘ skipped ${describeUnit(item.unit)}: ${reason}`, false);
+      }
+    }
+  }
+  for (const item of wholeFiles) {
+    if (item.error !== undefined) skipped.push({ source: item.unit.sourcePath, reason: item.error });
+    else if (item.code.trim().length === 0) skipped.push({ source: item.unit.sourcePath, reason: "empty model output" });
+  }
+
+  for (const { unit, code, error } of ordered.filter((item) => item.unit.kind === "inline")) {
     if (error !== undefined) {
       skipped.push({ source: unit.sourcePath, reason: error });
       continue; // already reported live via onProgress
@@ -720,10 +857,25 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   }
   const seconds = Math.round((Date.now() - started) / 1000);
   if (cli.json) {
-    output({ status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE", engine: "simple", written, skipped, repairRequests }, true);
+    output({
+      status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE",
+      engine: "simple",
+      written,
+      skipped,
+      ...(effective.direct.reconcileIntegrations ? {
+        integrationAuditRequests,
+        integrationRepairRequests,
+        integrationRequests: integrationAuditRequests + integrationRepairRequests,
+      } : {}),
+      repairRequests,
+    }, true);
   } else {
+    const integrationRequests = integrationAuditRequests + integrationRepairRequests;
+    const integrations = integrationRequests > 0
+      ? `, ${integrationAuditRequests} integration audit request(s), ${integrationRepairRequests} integration repair request(s)`
+      : "";
     const repairs = repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
-    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${repairs}.`, false);
+    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${integrations}${repairs}.`, false);
   }
   return written.length === 0 && skipped.length > 0 ? 5 : 0;
 }

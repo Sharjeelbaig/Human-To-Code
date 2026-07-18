@@ -124,6 +124,11 @@ export interface BudgetConfigV1 {
   timeoutMs: number;
 }
 
+export interface DirectConfigV1 {
+  /** Opt in to bounded post-generation cross-file integration reconciliation. */
+  reconcileIntegrations: boolean;
+}
+
 export interface WorkspaceOverrideV1 {
   root: string;
   provider?: ProviderConfigV1;
@@ -145,6 +150,7 @@ export interface ConfigV1 extends Omit<Config, "provider"> {
   privacy: PrivacyConfigV1;
   sandbox: SandboxConfigV1;
   budgets: BudgetConfigV1;
+  direct: DirectConfigV1;
 }
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -204,6 +210,11 @@ const DEFAULT_CONFIG_VALUE: ConfigV1 = {
     maxRequests: 12,
     maxRepairs: 2,
     timeoutMs: 900_000,
+  },
+  direct: {
+    // ProjectMemory-based first-pass linking is always active. This separate
+    // repair phase is conservative opt-in so upgrades add no provider calls.
+    reconcileIntegrations: false,
   },
 };
 
@@ -853,6 +864,19 @@ function validateSandbox(raw: unknown, path: string): Partial<SandboxConfigV1> {
   return result;
 }
 
+function validateDirect(raw: unknown, path: string): Partial<DirectConfigV1> {
+  const value = expectObject(raw, path);
+  assertKnownKeys(value, ["reconcileIntegrations"], path);
+  const result: Partial<DirectConfigV1> = {};
+  if (value.reconcileIntegrations !== undefined) {
+    result.reconcileIntegrations = expectBoolean(
+      value.reconcileIntegrations,
+      `${path}.reconcileIntegrations`,
+    );
+  }
+  return result;
+}
+
 function validateWorkspace(raw: unknown, index: number): WorkspaceOverrideV1 {
   const path = `workspaces[${index}]`;
   const value = expectObject(raw, path);
@@ -895,6 +919,7 @@ export function validateConfig(raw: unknown): ConfigV1 {
       "privacy",
       "sandbox",
       "budgets",
+      "direct",
     ],
     "",
   );
@@ -1017,6 +1042,12 @@ export function validateConfig(raw: unknown): ConfigV1 {
     config.budgets = {
       ...config.budgets,
       ...validateBudgets(raw.budgets, "budgets", true),
+    };
+  }
+  if (raw.direct !== undefined) {
+    config.direct = {
+      ...config.direct,
+      ...validateDirect(raw.direct, "direct"),
     };
   }
 

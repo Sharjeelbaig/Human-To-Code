@@ -400,6 +400,62 @@ test("default JavaScript project validation accepts browser DOM APIs", async () 
   }
 });
 
+test("plain JavaScript is not repaired for TypeScript-only DOM inference diagnostics", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-js-narrowing-"));
+  try {
+    let repairs = 0;
+    const outcome = await validateCandidateProject(root, [{
+      unit: fileUnit(root, "script.human", "script.js"),
+      code: [
+        'const display = document.querySelector("#display");',
+        'if (display) display.innerText = "ready";',
+      ].join("\n"),
+    }], {
+      repair: async () => {
+        repairs += 1;
+        throw new Error("plain JavaScript must not receive a TypeScript-only repair");
+      },
+    });
+    assert.equal(repairs, 0);
+    assert.equal(outcome.repairRequests, 0);
+    assert.equal(outcome.results[0]?.error, undefined);
+    assert.match(outcome.results[0]?.code ?? "", /innerText/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("JavaScript TS2339 repair receives generic guidance when the project opts into checkJs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-js-checking-"));
+  try {
+    await writeFile(join(root, "jsconfig.json"), JSON.stringify({ compilerOptions: { checkJs: true } }));
+    let request: StagedRepairRequest | undefined;
+    const outcome = await validateCandidateProject(root, [{
+      unit: fileUnit(root, "script.human", "script.js"),
+      code: [
+        'const display = document.querySelector("#display");',
+        'if (display) display.innerText = "ready";',
+      ].join("\n"),
+    }], {
+      repair: async (value) => {
+        request = value;
+        return [
+          'const display = document.querySelector("#display");',
+          'if (display) display.textContent = "ready";',
+        ].join("\n");
+      },
+    });
+    assert.equal(outcome.repairRequests, 1);
+    assert.match(request?.diagnostics[0]?.message ?? "", /innerText.*Element/u);
+    assert.match(request?.hints.join(" ") ?? "", /inferred type Element does not declare innerText/u);
+    assert.match(request?.hints.join(" ") ?? "", /narrowing.*correct subtype|equivalent member/u);
+    assert.equal(outcome.results[0]?.error, undefined);
+    assert.match(outcome.results[0]?.code ?? "", /textContent/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("repair prompt wraps diagnostics and related files as untrusted data in src/prompts", () => {
   const prompt = buildDirectRepairPrompt({
     languageLabel: "TypeScript",
@@ -408,11 +464,14 @@ test("repair prompt wraps diagnostics and related files as untrusted data in src
     instruction: "wire the store",
     currentCode: 'import { hello } from "./shared.ts";',
     diagnostics: [{ path: "main.ts", line: 1, code: 2305, message: "Module has no exported member 'hello'." }],
+    hints: ["Use the symbol actually exported by the related module."],
     relatedFiles: [{ path: "shared.ts", content: "export function greet(): void {}" }],
   });
   assert.match(prompt.system, /untrusted data/u);
   assert.match(prompt.system, /no markdown fences/iu);
   assert.match(prompt.user, /main\.ts:1 TS2305/u);
   assert.match(prompt.user, /related generated file: shared\.ts/u);
+  assert.match(prompt.user, /HOST_REPAIR_HINTS[\s\S]*symbol actually exported/u);
+  assert.match(prompt.system, /trusted host guidance/u);
   assert.match(prompt.user, /wire the store/u);
 });

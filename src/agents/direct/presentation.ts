@@ -1,4 +1,5 @@
 import { languageProfile } from "./languages.ts";
+import { potentialIntegrationRequests } from "./integration-validation.ts";
 import type { ConversionUnit } from "./types.ts";
 
 export class ModelOutputError extends Error {
@@ -8,11 +9,36 @@ export class ModelOutputError extends Error {
   }
 }
 
+export interface ConditionalRequestAllowance {
+  integrationAuditUpTo: number;
+  integrationRepairUpTo: number;
+  compilerRepairUpTo: number;
+}
+
+/** Conservative opt-in request ceilings for pre-generation disclosure. */
+export function conditionalRequestAllowance(
+  units: readonly ConversionUnit[],
+  configuredLanguages: string | readonly string[],
+): ConditionalRequestAllowance {
+  const configured = typeof configuredLanguages === "string" ? [configuredLanguages] : configuredLanguages;
+  const primary = configured[0] ?? "typescript";
+  const integration = potentialIntegrationRequests(units);
+  return {
+    integrationAuditUpTo: integration.auditUpTo,
+    integrationRepairUpTo: integration.repairUpTo,
+    compilerRepairUpTo: units.filter((unit) => {
+      const language = unit.language ?? primary;
+      return unit.kind === "file" && (language === "typescript" || language === "javascript");
+    }).length,
+  };
+}
+
 export function renderReceipt(
   units: readonly ConversionUnit[],
   provider: string,
   model: string,
   configuredLanguages: string | readonly string[],
+  options: { reconcileIntegrations?: boolean } = {},
 ): string {
   const configured = typeof configuredLanguages === "string"
     ? [configuredLanguages]
@@ -37,6 +63,12 @@ export function renderReceipt(
   const repairAllowance = repairableUnits.length > 0
     ? ` (up to ${repairableUnits.length} extra bounded repair request${repairableUnits.length === 1 ? "" : "s"} for ${repairLanguages})`
     : "";
+  const conditional = options.reconcileIntegrations
+    ? conditionalRequestAllowance(units, configured)
+    : undefined;
+  const integrationDisclaimer = conditional !== undefined && conditional.integrationAuditUpTo > 0
+    ? `  Additional: opt-in cross-file reconciliation may issue up to ${conditional.integrationAuditUpTo} bounded audit request${conditional.integrationAuditUpTo === 1 ? "" : "s"} and ${conditional.integrationRepairUpTo} target-repair request${conditional.integrationRepairUpTo === 1 ? "" : "s"}; only ProjectMemory-evidenced generated relationships are audited.`
+    : undefined;
   const lines = [
     "human-to-code — conversion receipt",
     "",
@@ -44,7 +76,12 @@ export function renderReceipt(
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
     `  Engine   : direct (one model request per prompt; bounded cross-file repair may add requests)`,
-    `  Requests : ${units.length} planned${repairAllowance}`,
+    `  Context  : compact current/projected ProjectMemory (target-specific, bounded)`,
+    `  Requests : ${units.length} planned${options.reconcileIntegrations ? "" : repairAllowance}`,
+    ...(integrationDisclaimer ? [integrationDisclaimer] : []),
+    ...(conditional !== undefined && conditional.compilerRepairUpTo > 0
+      ? [`  Validation: up to ${conditional.compilerRepairUpTo} additional bounded JS/TS compiler-repair request${conditional.compilerRepairUpTo === 1 ? "" : "s"}, only if validation fails.`]
+      : []),
     "",
   ];
   if (units.length === 0) lines.push("  No .human files or @human markers were found.");

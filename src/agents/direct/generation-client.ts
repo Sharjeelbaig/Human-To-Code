@@ -1,5 +1,12 @@
 import { buildDirectConversionPrompt, type PromptMessages } from "../../prompts/direct-conversion.ts";
 import {
+  buildDirectIntegrationAuditPrompt,
+  buildDirectIntegrationRepairPrompt,
+  type DirectIntegrationAuditFile,
+  type DirectIntegrationIssue,
+  type DirectIntegrationRelationship,
+} from "../../prompts/direct-integration.ts";
+import {
   buildDirectRepairPrompt,
   type DirectRepairDiagnostic,
   type DirectRepairRelatedFile,
@@ -58,10 +65,46 @@ export async function generateCode(instruction: string, options: GenerateOptions
   const profile = languageProfile(options.language);
   const prompt = buildDirectConversionPrompt({
     languageLabel: profile.label,
+    ...(options.targetPath ? { targetPath: options.targetPath } : {}),
     instruction,
     inline: options.inline ?? false,
     ...(options.fileMemory ? { fileMemory: options.fileMemory } : {}),
+    ...(options.projectMemory ? { projectMemory: options.projectMemory } : {}),
   });
+  return requestChatCompletion(prompt, options);
+}
+
+export interface IntegrationAuditGenerationRequest {
+  files: readonly DirectIntegrationAuditFile[];
+  relationships: readonly DirectIntegrationRelationship[];
+  projectMemory?: string;
+}
+
+/** Send one opt-in, read-only, cross-language integration audit request. */
+export async function generateIntegrationAudit(
+  request: IntegrationAuditGenerationRequest,
+  options: GenerateOptions,
+): Promise<string> {
+  const prompt = buildDirectIntegrationAuditPrompt(request);
+  return requestChatCompletion(prompt, options);
+}
+
+export interface IntegrationRepairGenerationRequest {
+  targetPath: string;
+  instruction: string;
+  currentCode: string;
+  issues: readonly DirectIntegrationIssue[];
+  relatedFiles: ReadonlyArray<{ path: string; content: string }>;
+  projectMemory?: string;
+}
+
+/** Send one bounded target repair after a generic integration audit. */
+export async function generateIntegrationRepairCode(
+  request: IntegrationRepairGenerationRequest,
+  options: GenerateOptions,
+): Promise<string> {
+  const profile = languageProfile(options.language);
+  const prompt = buildDirectIntegrationRepairPrompt({ languageLabel: profile.label, ...request });
   return requestChatCompletion(prompt, options);
 }
 
@@ -71,7 +114,9 @@ export interface RepairGenerationRequest {
   instruction: string;
   currentCode: string;
   diagnostics: readonly DirectRepairDiagnostic[];
+  hints?: readonly string[];
   relatedFiles: readonly DirectRepairRelatedFile[];
+  projectMemory?: string;
 }
 
 /** Send one bounded cross-file repair request with the same provider and model. */

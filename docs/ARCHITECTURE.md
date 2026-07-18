@@ -86,9 +86,9 @@ graph TD
 | `src/security/` | `secret-scan.ts`, `pinned-http.ts` | Cross-cutting fail-closed guards: repository-wide credential scanning before any provider access, and a DNS-vetted address-pinned HTTPS client used for any outbound fetch. |
 | `src/context/` | `context.ts`, `documentation.ts`, `compiler-skills.ts`, `compiler-tools.ts` | Everything the model is allowed to see: provenance-bound context selection, allowlisted exact-version documentation, immutable policy skills, and the bounded read-only context tool executor. |
 | `src/providers/` | `provider.ts`, `providers.ts`, `certification.ts`, `schemas.ts` | Everything the model is allowed to do: the provider-neutral adapter contract, the bundled OpenAI/Ollama HTTP adapters, the JSON output schemas providers must satisfy, and the evidence-based certification gate that decides whether a provider/model result may ever become `VERIFIED`. |
-| `src/prompts/` | `direct-conversion.ts`, `guided-patch.ts`, `guided-repair.ts`, `provider-output.ts` | All model-facing message construction. Prompt builders accept typed inputs and return strings/messages; they perform no I/O, provider calls, or host mutation. |
+| `src/prompts/` | `direct-conversion.ts`, `direct-integration.ts`, `direct-repair.ts`, `guided-patch.ts`, `guided-repair.ts`, `provider-output.ts` | All model-facing message construction. Prompt builders accept typed inputs and return strings/messages; they perform no I/O, provider calls, or host mutation. |
 | `src/pipeline/` | `planner.ts`, `snapshot.ts`, `patch.ts`, `validation.ts`, `run-store.ts`, `file-memory.ts` | Deterministic execution mechanics: contract drafting, immutable snapshots, patch safety and atomic apply/rollback, strong-sandbox validation, private run storage, and static declaration indexing. `simple.ts` and `workflow.ts` remain compatibility re-exports only. |
-| `src/agents/` | `direct/`, `guided/` | The two model-using application services. `direct/` separates discovery, marker parsing, FileMemory, prompt invocation, presentation, and application. `guided/` owns reviewed-run policy and the auditable generate/validate/apply/rollback lifecycle. |
+| `src/agents/` | `direct/`, `guided/` | The two model-using application services. `direct/` separates discovery, marker parsing, local FileMemory, project-level ProjectMemory, optional post-generation integration reconciliation, prompt invocation, presentation, and application. `guided/` owns reviewed-run policy and the auditable generate/validate/apply/rollback lifecycle. |
 | root | `index.ts`, `cli.ts` | Entry points only. `index.ts` re-exports the stable embedding API grouped by layer; `cli.ts` maps commands, flags, and exit codes onto that same surface. They stay at the source root so the published `dist/index.js` and `dist/cli.js` paths never move. |
 
 Two intentional wrinkles in the layering:
@@ -136,8 +136,8 @@ pipeline mechanics do not embed prose instructions.
 patch validation, sandbox validation, HTTP adapters, secret scanning) use Node
 built-ins. The direct agent has two deliberate runtime dependencies: the
 TypeScript compiler, used both to reject malformed JavaScript/TypeScript
-candidates and to type-check the combined multi-file candidate project before
-any write, and `@types/node`, bundled so `node:` builtin imports in generated
+candidates and to type-check TypeScript plus explicitly opted-in JavaScript
+before any write, and `@types/node`, bundled so `node:` builtin imports in generated
 code resolve even in target projects with no type dependencies of their own.
 Other direct languages use host-owned structural checks; adding another
 runtime dependency still requires design review.
@@ -148,23 +148,35 @@ runtime dependency still requires design review.
    `npx human-to-code .` flow): host code discovers the worklist, and for each
    unit issues **one plain model completion** (no tool calls), applying the
    result only after output normalization and candidate syntax validation. It
-   statically indexes declarations into
-   ephemeral FileMemory (with few-shot prompting) so the model reuses rather
-   than re-declares symbols. Exclusive whole-file creation prevents sibling
-   overwrite, while exact marker-byte checks and shared indentation formatting
+   statically indexes declarations into ephemeral FileMemory so the model
+   reuses rather than re-declares symbols. A separate ephemeral ProjectMemory
+   models both the current repository and the projected successful post-run
+   tree. For each target it renders a bounded conversion plan, exact relative
+   companion paths, and compact language-aware contracts; accepted
+   candidates update those contracts for later requests. The memory is rebuilt
+   from the deterministic discovery inventory every run, so there is no stale
+   persistent model cache. Rollback-protected batch creation prevents sibling
+   overwrite and partial whole-file runs, while exact marker-byte checks and shared indentation formatting
    make inline application stale-safe. Each marker is isolated — a bad or
    failing unit is retried, then skipped with a reason, and the rest still
    convert; only a security stop aborts the run. Before anything is written,
    all accepted JavaScript/TypeScript units are staged into an in-memory
-   candidate overlay (`candidate-overlay.ts`) and the combined candidate
-   project is type-checked with the TypeScript Compiler API
+   candidate overlay (`candidate-overlay.ts`). TypeScript is type-checked with
+   the TypeScript Compiler API; JavaScript semantic checking follows an
+   explicit project `checkJs` or file `@ts-check` policy
    (`program-diagnostics.ts`) against the unchanged baseline, so pre-existing
    errors are never blamed on generated code. New cross-file diagnostics are
    attributed through the resolved import graph (`dependency-graph.ts`); a
    failing dependency-connected group gets at most one bounded repair
    completion per whole-file unit and is otherwise rejected whole
    (`staged-validation.ts`), while units proven independent still apply. This
-   is fast and works with small models that cannot do tool-calling. Combined
+   is fast and works with small models that cannot do tool-calling. When
+   `direct.reconcileIntegrations` is explicitly enabled, a separate generic
+   audit/repair/verification stage consumes structured relationships from
+   `language-relationships.ts`. Its orchestration contains no web-only branch:
+   ecosystem conventions for Python, Rust, Go, Java, C/C++, C#, Ruby,
+   JavaScript/TypeScript, HTML/CSS/assets, and future languages are isolated in
+   extensible relationship and contract profiles. Combined
    static compilation is stronger than per-file syntax checks, but it is not a
    project build, runtime test, sandbox execution, or API grounding; other
    direct languages keep per-file structural validation. It shares no state
