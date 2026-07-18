@@ -380,3 +380,49 @@ test("inline provider prompts attach FileMemory as read-only earlier code", asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test("multi-language discovery routes .human files by inner extension", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-multi-language-"));
+  try {
+    await writeFile(join(root, "index.html.human"), "build a landing page\n");
+    await writeFile(join(root, "styles.css.human"), "style the landing page\n");
+    await writeFile(join(root, "app.human"), "wire up the landing page\n");
+    await writeFile(join(root, "notes.py.human"), "unconfigured inner extension\n");
+
+    const units = await discoverUnits(root, ["typescript", "html", "css"]);
+    const byOutput = new Map(units.map((unit) => [unit.outputPath, unit.language]));
+
+    assert.equal(byOutput.get("index.html"), "html");
+    assert.equal(byOutput.get("styles.css"), "css");
+    assert.equal(byOutput.get("app.ts"), "typescript");
+    // Python is not configured, so the inner extension is not honored.
+    assert.equal(byOutput.get("notes.py.ts"), "typescript");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("single-language discovery keeps its legacy output naming", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-single-language-"));
+  try {
+    await writeFile(join(root, "index.html.human"), "build a landing page\n");
+
+    const units = await discoverUnits(root, "python");
+    assert.equal(units[0]?.outputPath, "index.html.py");
+    assert.equal(units[0]?.language, "python");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("inline units carry the host file's language", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-inline-language-"));
+  try {
+    await writeFile(join(root, "script.py"), "# @human print hello\n");
+
+    const units = await discoverUnits(root, ["typescript", "python"]);
+    assert.equal(units[0]?.language, "python");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

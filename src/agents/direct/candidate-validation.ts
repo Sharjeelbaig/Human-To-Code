@@ -14,6 +14,11 @@ export class DirectCandidateValidationError extends Error {
 
 const TYPESCRIPT_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
+// Delimiter balancing misreads prose-bearing markup: apostrophes in HTML text
+// and unquoted `url(https://…)` in CSS are legal but read as unterminated
+// strings/comments. These outputs keep only the fence and non-empty gates.
+const UNBALANCED_TEXT_EXTENSIONS = new Set([".html", ".htm", ".css", ".svg", ".md", ".markdown"]);
+
 interface CandidateSyntaxDiagnostic {
   key: string;
   message: string;
@@ -154,6 +159,7 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
     throw new DirectCandidateValidationError(`${unit.sourcePath}: model formatting remained in generated source.`);
   }
   const sourcePath = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+  if (UNBALANCED_TEXT_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;
   const { baseline, candidate } = await sourceAndCandidateForUnit(unit, code);
   const typescript = TYPESCRIPT_EXTENSIONS.has(extname(sourcePath).toLowerCase());
   const baselineDiagnostics = baseline === undefined

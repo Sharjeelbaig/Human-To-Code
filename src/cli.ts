@@ -532,15 +532,17 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const { config } = await loadConfig(root);
   const effective = overrideConfig(config, cli);
   const language = effective.language;
+  const languages = effective.languages;
   const providerName = effective.provider.name;
   const model = effective.provider.model;
-  const discovery = await discoverDirectUnits(root, language);
+  const discovery = await discoverDirectUnits(root, languages);
   const units = discovery.units;
 
   if (cli.json) {
     const plan = {
       status: units.length === 0 ? "NEEDS_INPUT" : cli.yes ? "GENERATING" : "NEEDS_CONFIRMATION",
       language,
+      languages,
       provider: providerName,
       model,
       requests: units.length,
@@ -552,7 +554,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       return units.length === 0 ? 3 : cli.yes ? 0 : 3;
     }
   } else {
-    output(renderReceipt(units, providerName, model, language), false);
+    output(renderReceipt(units, providerName, model, languages), false);
     for (const notice of discovery.notices) output(`  ! ${notice.message}`, false);
   }
   if (units.length === 0) return 3;
@@ -615,7 +617,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
           );
         }
         return generateCode(unit.prompt, {
-          language,
+          language: unit.language ?? language,
           provider: providerName,
           model,
           ...(baseUrl ? { baseUrl } : {}),
@@ -662,7 +664,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         diagnostics: request.diagnostics,
         relatedFiles: request.relatedFiles,
       }, {
-        language,
+        language: request.unit.language ?? language,
         provider: providerName,
         model,
         ...(baseUrl ? { baseUrl } : {}),

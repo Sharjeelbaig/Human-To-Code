@@ -5,7 +5,13 @@
  * patch -> isolated validation -> explicit application.
  */
 
-export type TargetLanguage = "typescript" | "javascript" | "python" | "rust";
+export type TargetLanguage =
+  | "typescript"
+  | "javascript"
+  | "python"
+  | "rust"
+  | "html"
+  | "css";
 
 export type ProviderName =
   | "openai"
@@ -26,6 +32,12 @@ export interface ProviderConfig {
 export interface Config {
   /** Legacy single-language hint; static workspace analysis is authoritative. */
   language: TargetLanguage;
+  /**
+   * Output languages enabled for direct conversion. The primary (`language`)
+   * is the default; other entries are reachable through a `.human` file's
+   * inner extension, e.g. `index.html.human` -> `index.html`.
+   */
+  languages: TargetLanguage[];
   /** Glob-free directory/file names to skip during discovery (a denylist). */
   filesToIgnore: string[];
   /**

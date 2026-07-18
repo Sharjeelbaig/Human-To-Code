@@ -12,13 +12,19 @@ export function renderReceipt(
   units: readonly ConversionUnit[],
   provider: string,
   model: string,
-  language: string,
+  language: string | readonly string[],
 ): string {
-  const profile = languageProfile(language);
+  const list = typeof language === "string" ? [language] : language;
+  const rendered = list
+    .map((entry) => {
+      const profile = languageProfile(entry);
+      return `${profile.label} (.${profile.ext})`;
+    })
+    .join(", ");
   const lines = [
     "human-to-code — conversion receipt",
     "",
-    `  Language : ${profile.label} (.${profile.ext})`,
+    `  ${list.length > 1 ? "Languages:" : "Language :"} ${rendered}`,
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
     `  Engine   : direct (one model request per prompt; bounded cross-file repair may add requests)`,

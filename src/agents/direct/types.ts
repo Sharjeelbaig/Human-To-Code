@@ -15,6 +15,8 @@ export interface ConversionUnit {
   absoluteSource: string;
   /** The extracted human-language instruction. */
   prompt: string;
+  /** Resolved output language for this unit (config language name). */
+  language?: string;
   /** For `file` units, the project-relative output path to write. */
   outputPath?: string;
   /** For `inline` units, the character range of the marker to replace. */

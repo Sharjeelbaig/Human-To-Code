@@ -70,6 +70,32 @@ test("validateConfig accepts known legacy-compatible fields", () => {
   assert.equal(config.provider.model, "pinned-model");
 });
 
+test("languages accepts multiple targets and drives the primary language", () => {
+  const config = validateConfig({ ...V1, languages: ["html", "css", "typescript"] });
+  assert.deepEqual(config.languages, ["html", "css", "typescript"]);
+  assert.equal(config.language, "html");
+});
+
+test("a lone legacy language becomes the languages list", () => {
+  const config = validateConfig({ ...V1, language: "python" });
+  assert.deepEqual(config.languages, ["python"]);
+});
+
+test("language must be a member of languages when both are set", () => {
+  const config = validateConfig({ ...V1, language: "css", languages: ["html", "css"] });
+  assert.equal(config.language, "css");
+  assert.throws(
+    () => validateConfig({ ...V1, language: "python", languages: ["html"] }),
+    ConfigError,
+  );
+});
+
+test("languages rejects empty lists, unknown entries, and duplicates", () => {
+  assert.throws(() => validateConfig({ ...V1, languages: [] }), ConfigError);
+  assert.throws(() => validateConfig({ ...V1, languages: ["cobol"] }), ConfigError);
+  assert.throws(() => validateConfig({ ...V1, languages: ["html", "html"] }), ConfigError);
+});
+
 test("provider model defaults per provider", () => {
   const config = validateConfig({ ...V1, provider: { name: "openai" } });
   assert.equal(config.provider.model, "gpt-4o");

@@ -27,6 +27,8 @@ const LANGUAGES: readonly TargetLanguage[] = [
   "javascript",
   "python",
   "rust",
+  "html",
+  "css",
 ];
 
 const PROVIDERS: readonly ProviderName[] = [
@@ -154,6 +156,7 @@ function deepFreeze<T>(value: T): DeepReadonly<T> {
 const DEFAULT_CONFIG_VALUE: ConfigV1 = {
   schemaVersion: CONFIG_SCHEMA_VERSION,
   language: "typescript",
+  languages: ["typescript"],
   filesToIgnore: ["node_modules", ".git", "dist"],
   allowNonHumanFiles: false,
   provider: {
@@ -846,6 +849,7 @@ export function validateConfig(raw: unknown): ConfigV1 {
     [
       "schemaVersion",
       "language",
+      "languages",
       "filesToIgnore",
       "allowNonHumanFiles",
       "provider",
@@ -878,6 +882,32 @@ export function validateConfig(raw: unknown): ConfigV1 {
       throw new ConfigError(`\`language\` must be one of: ${LANGUAGES.join(", ")}.`);
     }
     config.language = raw.language as TargetLanguage;
+  }
+  if (raw.languages !== undefined) {
+    if (!Array.isArray(raw.languages) || raw.languages.length === 0) {
+      throw new ConfigError("`languages` must be a non-empty array.");
+    }
+    const languages = raw.languages.map((entry, index) => {
+      if (typeof entry !== "string" || !LANGUAGES.includes(entry as TargetLanguage)) {
+        throw new ConfigError(
+          `\`languages[${index}]\` must be one of: ${LANGUAGES.join(", ")}.`,
+        );
+      }
+      return entry as TargetLanguage;
+    });
+    if (new Set(languages).size !== languages.length) {
+      throw new ConfigError("`languages` must not contain duplicates.");
+    }
+    config.languages = languages;
+    if (raw.language === undefined) {
+      config.language = languages[0]!;
+    } else if (!languages.includes(config.language)) {
+      throw new ConfigError(
+        "`language` must be listed in `languages` when both are set.",
+      );
+    }
+  } else if (raw.language !== undefined) {
+    config.languages = [config.language];
   }
   if (raw.filesToIgnore !== undefined) {
     config.filesToIgnore = expectStringArray(

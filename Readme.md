@@ -216,7 +216,7 @@ This complete local-Ollama example shows the policy fields:
 ```json
 {
   "schemaVersion": 1,
-  "language": "typescript",
+  "languages": ["typescript", "html", "css"],
   "filesToIgnore": ["node_modules", ".git", "dist"],
   "allowNonHumanFiles": false,
   "provider": {
@@ -253,7 +253,7 @@ This complete local-Ollama example shows the policy fields:
 }
 ```
 
-`language` is retained for alpha compatibility; static workspace analysis is authoritative in mixed-language repositories. `filesToIgnore` accepts exact file/directory names, not glob expressions. With `sandbox.engine: "auto"`, validation probes Docker first and then Podman; `"docker"` and `"podman"` select one explicitly. Neither runtime being available makes validation `INCONCLUSIVE` and runs no project command.
+`languages` lists every output language enabled for direct conversion (`typescript`, `javascript`, `python`, `rust`, `html`, `css`); its first entry is the default. A `.human` file selects a non-default entry through its inner extension: with the example above, `index.html.human` writes `index.html` and `styles.css.human` writes `styles.css`, while `app.human` falls back to the first entry and writes `app.ts`. An inner extension whose language is not configured is treated as part of the file name. The singular `language` is retained for alpha compatibility and, when set alongside `languages`, must be one of its entries; static workspace analysis is authoritative in mixed-language repositories. `filesToIgnore` accepts exact file/directory names, not glob expressions. With `sandbox.engine: "auto"`, validation probes Docker first and then Podman; `"docker"` and `"podman"` select one explicitly. Neither runtime being available makes validation `INCONCLUSIVE` and runs no project command.
 
 ### Budget semantics
 

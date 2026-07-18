@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
-import { languageProfile } from "./languages.ts";
+import { inferUnitLanguage } from "./language-inference.ts";
+import { languageForExtension, languageProfile } from "./languages.ts";
 import { extractInlineMarkers } from "./marker-parser.ts";
 import type { ConversionUnit, DirectDiscoveryResult } from "./types.ts";
 
@@ -43,9 +44,15 @@ export async function walkDirectFiles(root: string): Promise<string[]> {
 }
 
 /** Discover units plus actionable notices for marker text that cannot run safely. */
-export async function discoverDirectUnits(root: string, language: string): Promise<DirectDiscoveryResult> {
+export async function discoverDirectUnits(
+  root: string,
+  language: string | readonly string[],
+): Promise<DirectDiscoveryResult> {
   const absoluteRoot = resolve(root);
-  const profile = languageProfile(language);
+  const languages = (typeof language === "string" ? [language] : [...language])
+    .map((entry) => entry.trim().toLowerCase());
+  const primary = languages[0] ?? "typescript";
+  const configured = new Set(languages);
   const files = await walk(absoluteRoot, DEFAULT_IGNORES);
   const units: ConversionUnit[] = [];
   const notices: DirectDiscoveryResult["notices"] = [];
@@ -63,7 +70,19 @@ export async function discoverDirectUnits(root: string, language: string): Promi
       }
       const prompt = content.trim();
       if (prompt.length === 0) continue;
-      const outputPath = `${rel.slice(0, -".human".length)}.${profile.ext}`;
+      // An explicit inner extension is authoritative: `index.html.human` ->
+      // `index.html`. Otherwise, a multi-language configuration infers the
+      // target from the request text and filename before falling back to the
+      // primary language, so `styles.human` is not written as `styles.ts`.
+      const stem = rel.slice(0, -".human".length);
+      const innerLanguage = languageForExtension(extname(stem));
+      const routed = innerLanguage !== undefined && configured.has(innerLanguage);
+      const unitLanguage = routed
+        ? innerLanguage
+        : inferUnitLanguage(basename(stem), prompt, languages);
+      const outputPath = routed
+        ? stem
+        : `${stem}.${languageProfile(unitLanguage).ext}`;
       try {
         await stat(join(absoluteRoot, ...outputPath.split("/")));
         notices.push({
@@ -81,6 +100,7 @@ export async function discoverDirectUnits(root: string, language: string): Promi
         absoluteSource: absolute,
         prompt,
         outputPath,
+        language: unitLanguage,
         describe: `${rel}  ->  ${outputPath}`,
       });
       continue;
@@ -123,6 +143,7 @@ export async function discoverDirectUnits(root: string, language: string): Promi
         sourcePath: rel,
         absoluteSource: absolute,
         prompt: marker.prompt,
+        language: languageForExtension(extname(absolute)) ?? primary,
         range: { start: marker.start, end: marker.end },
         expectedMarker: content.slice(marker.start, marker.end),
         line,
@@ -134,6 +155,9 @@ export async function discoverDirectUnits(root: string, language: string): Promi
 }
 
 /** Compatibility helper returning only runnable units. */
-export async function discoverUnits(root: string, language: string): Promise<ConversionUnit[]> {
+export async function discoverUnits(
+  root: string,
+  language: string | readonly string[],
+): Promise<ConversionUnit[]> {
   return (await discoverDirectUnits(root, language)).units;
 }
