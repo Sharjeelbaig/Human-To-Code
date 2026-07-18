@@ -9,7 +9,12 @@
   <a href="CONTRIBUTING.md"><img alt="contributions welcome" src="https://img.shields.io/badge/contributions-welcome-brightgreen"></a>
 </p>
 
-`human-to-code` is a security-constrained compiler agent for turning a reviewed natural-language change request into a grounded, structured patch. It statically analyzes the host project, requires a versioned JSON change contract, limits what an LLM can see and request, validates the candidate in an isolated snapshot, and keeps application as a separate explicit action.
+`human-to-code` turns natural-language change requests — whole `.human` files or inline `@human` markers — into code. It has two entry points:
+
+- **Direct converter** (the default `npx human-to-code .`): discovers each request and turns it straight into code, with a receipt and confirmation. Fast, works with small local models, and writes to the working tree **without** a change contract or sandbox validation.
+- **Guided pipeline** (`human-to-code guided`): the security-constrained, production-architecture path. It statically analyzes the host project, binds the request to a versioned JSON change contract, limits what an LLM can see and request, validates the candidate in an isolated snapshot, and keeps application as a separate explicit action.
+
+The guided pipeline is shown below:
 
 ```text
 static project analysis
@@ -25,12 +30,12 @@ unchanged baseline vs candidate in a strong sandbox
 reviewed diff ── explicit apply only after VERIFIED ── exact rollback artifact
 ```
 
-This is not a universal deterministic source-to-source compiler. The LLM writes framework-specific patch operations, but it does not choose its own scope, validation commands, credentials, documentation sources, or acceptance criteria.
+This is not a universal deterministic source-to-source compiler. The LLM writes framework-specific patch operations, but it does not choose its own scope, validation commands, credentials, documentation sources, or acceptance criteria. The `.strict.human.json` change contract, `VERIFIED` status, and `apply`/`rollback` machinery all belong to the guided pipeline — the default direct converter does not use them.
 
 ## Release status
 
 > [!WARNING]
-> Version `0.1.0` is a production-architecture **preview**, not a certified production release.
+> This `0.1.x` release is a production-architecture **preview**, not a certified production release.
 
 The shipped React, NestJS, FastAPI, and Rust profiles are currently `preview` (CRA is `legacy`), and no provider/model certification benchmark entry is enabled by the CLI. Therefore generated runs in this release cannot honestly become `VERIFIED`; even a clean strong-sandbox validation remains `INCONCLUSIVE`, and `apply` (therefore `rollback`) stays unreachable through a normal preview CLI run. This fail-closed behavior is intentional.
 
@@ -46,26 +51,32 @@ The published-package entry point is:
 npx human-to-code .
 ```
 
-The command is a guided workflow, not an instruction to edit the current directory immediately:
+By default this runs the **direct converter**, not an instruction to rewrite the whole directory. It:
 
-1. It statically analyzes the repository without importing application modules or executing project configuration.
-2. It finds one `.human` change request. If none or several are found, it returns `NEEDS_INPUT`.
-3. On the first run, it writes a review draft named `foo.strict.human.json` next to `foo.human` and exits with code `3`.
-4. You review the target workspaces and symbols, allowed paths and operations, acceptance criteria, risks, and unresolved questions. A material unresolved question blocks generation.
-5. Before any provider request, it scans first-party repository files—including ignored/untracked fixtures and logs—for credential-like content. A finding returns `SECURITY_BLOCKED`; an incomplete scan fails closed.
-6. On the next run, it builds an outbound context manifest, requests a structured patch from the selected provider, and validates an isolated baseline and candidate.
-7. It prints a diff and report. It never applies the patch as part of the guided command.
+1. Loads config and scans the project for `.human` files and inline `@human` markers, without importing application modules or executing project configuration.
+2. Prints a receipt (language, provider, model, and the exact worklist) and asks for confirmation. Nothing is written until you confirm — or pass `-y`/`--yes`. If no request is found it returns `NEEDS_INPUT`.
+3. On confirmation, converts each item with one model completion per unit and writes the result: a whole `.human` file becomes a sibling source file; an inline `@human` marker is replaced in place. Each item is independent — a failing one is skipped with a reason rather than aborting the rest.
 
-No configured provider is needed for the first analysis/draft pass. A no-file/default run selects loopback-local Ollama with `qwen2.5-coder:7b`, so a fresh `npx human-to-code .` never transmits code remotely by default. The model must already be installed; the tool never pulls it implicitly. To use another local model, OpenAI, or Ollama Cloud, create and edit a config (the command never overwrites one):
+The direct converter writes code straight to the working tree. It does **not** create a `.strict.human.json` change contract, run sandbox validation, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan — only the indexed declarations it attaches to an inline prompt as context are secret-scanned (a finding is `SECURITY_BLOCKED`). For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
+
+No configured provider is needed to scan and preview. A default run selects loopback-local Ollama with `qwen2.5-coder:7b`, so a fresh `npx human-to-code .` never transmits code remotely by default. The model must already be installed; the tool never pulls it implicitly. To use another local model, OpenAI, or Ollama Cloud, create and edit a config (the command never overwrites one):
 
 ```bash
 npx human-to-code --init .
 # Edit human-to-code.config.json: select OpenAI, local Ollama, or Ollama Cloud.
 ```
 
-Or pass `--provider ollama --model <installed-model>` on every guided local-Ollama run. Remote OpenAI/Ollama Cloud generation needs a config because `privacy.remoteProviderConsent` defaults to `false` and has no consent-enabling CLI flag.
+Remote OpenAI/Ollama Cloud generation needs a config because `privacy.remoteProviderConsent` defaults to `false` and has no consent-enabling CLI flag.
 
-For example:
+Direct-converter example (inline marker converted in place):
+
+```bash
+printf '// @human add a function named health that returns { status: 200 }\n' > health.ts
+npx human-to-code . --yes --model qwen2.5-coder:7b
+# health.ts now contains the generated function in place of the marker.
+```
+
+Guided-pipeline example (reviewed contract, no code written until VERIFIED):
 
 ```bash
 cat > add-health-route.human <<'EOF'
@@ -73,9 +84,8 @@ Add a health endpoint using the existing routing, response, authentication,
 logging, and test conventions. It must not expose secrets or tenant data.
 EOF
 
-npx human-to-code . --provider ollama --model qwen2.5-coder:14b
-# Review add-health-route.strict.human.json, resolve REVIEW-1, then rerun:
-npx human-to-code . --file add-health-route.human --provider ollama --model qwen2.5-coder:14b
+npx human-to-code guided . --provider ollama --model qwen2.5-coder:14b
+# Review add-health-route.strict.human.json, resolve REVIEW-1, then rerun the same command.
 ```
 
 From a source checkout:
@@ -420,7 +430,7 @@ Captured stdout and stderr are scanned before report persistence. If either cont
 
 No strong sandbox means no project command runs and the result is `INCONCLUSIVE`. Baseline failures, fail-then-pass flakiness, pending manual checks, unavailable toolchains/services, or mixed ecosystems without an explicit multi-toolchain image also prevent verification.
 
-The guided `npx human-to-code .` flow may ask the same provider/model for at most two diagnostic repairs, further limited by `budgets.maxRepairs`. Repairs run only for deterministic candidate regressions after a healthy baseline in the strong sandbox. They cannot run for security findings, infrastructure/toolchain failures, timeouts, flaky/truncated output, or unavailable services, and they cannot change paths/operation kinds, provenance, requirement coverage, dependencies, lockfiles, test operations, validation configuration, or remove existing proposed test obligations. Every accepted repair is safety-checked and validated from fresh baseline/candidate copies.
+The `human-to-code guided` flow may ask the same provider/model for at most two diagnostic repairs, further limited by `budgets.maxRepairs`. Repairs run only for deterministic candidate regressions after a healthy baseline in the strong sandbox. They cannot run for security findings, infrastructure/toolchain failures, timeouts, flaky/truncated output, or unavailable services, and they cannot change paths/operation kinds, provenance, requirement coverage, dependencies, lockfiles, test operations, validation configuration, or remove existing proposed test obligations. Every accepted repair is safety-checked and validated from fresh baseline/candidate copies.
 
 Repair checkpoints preserve cumulative request/token/cost/repair usage, provider identity, request IDs, immutable input hashes, attempt patches/diffs, and reports. A crash cannot reset the allowance. The standalone `validate <run-id>` command deliberately has no provider credentials and therefore only revalidates the stored patch; an embedding caller can continue any remaining repair allowance only by supplying the exact original provider and persisted configuration.
 
