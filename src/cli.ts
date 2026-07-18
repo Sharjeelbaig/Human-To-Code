@@ -38,7 +38,7 @@ import {
   renderReceipt,
   type ConversionUnit,
   type ConversionProgress,
-} from "./pipeline/simple.ts";
+} from "./agents/direct/index.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
 import {
   applyVerifiedRun,
@@ -48,7 +48,7 @@ import {
   rollbackAppliedRun,
   validateStoredRun,
   type WorkflowOutcome,
-} from "./pipeline/workflow.ts";
+} from "./agents/guided/index.ts";
 
 const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
 

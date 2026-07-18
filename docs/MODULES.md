@@ -9,7 +9,7 @@ mirror these modules by name.
 | Module | Purpose |
 | --- | --- |
 | `index.ts` | Stable public API for embedding the pipeline. Re-exports each layer's surface, grouped and commented by layer. Published as `dist/index.js`. |
-| `cli.ts` | The `human-to-code` binary: guided flow plus `analyze`, `plan`, `context`, `generate`, `validate`, `apply`, `rollback`, `check`, `migrate-config`, `--init`. Owns argument parsing, exit codes (0–6), and human-readable output; all real work is delegated to the layers below. Published as `dist/cli.js`. |
+| `cli.ts` | The `human-to-code` binary: direct conversion plus guided `analyze`, `plan`, `context`, `generate`, `validate`, `apply`, `rollback`, `check`, `migrate-config`, and `--init`. Owns argument parsing, exit codes (0–6), and human-readable output; all real work is delegated to agents and deterministic services. Published as `dist/cli.js`. |
 
 ## `src/core/` — shared primitives
 
@@ -63,7 +63,47 @@ mirror these modules by name.
 | `certification.ts` | The fail-closed WRITE gate (`evaluateProviderCertification`, `providerProfileId`, `CERTIFIED_EVIDENCE`): a run may become `VERIFIED` only with host-owned, re-scored benchmark evidence for the exact provider/model profile and ecosystem. Ships empty in the preview, so `VERIFIED` is unreachable by design. |
 | `schemas.ts` | JSON Schema documents for every persisted v1 artifact, including `PATCH_SET_SCHEMA_V1` — the provider-bound wire schema for structured patch output. |
 
-## `src/pipeline/` — run orchestration
+## `src/prompts/` — what the model is told
+
+All model-facing prose is constructed here by pure functions. Prompt modules
+accept typed, already-reviewed data and perform no I/O or mutation.
+
+| Module | Purpose |
+| --- | --- |
+| `direct-conversion.ts` | System and user messages for whole-file and inline direct conversion, including FileMemory rules and examples. |
+| `guided-patch.ts` | Structured patch-generation messages: reviewed contract, target profile, immutable snapshot hash, compiler skills, and wrapped untrusted evidence. |
+| `guided-repair.ts` | Bounded repair messages that freeze contract, snapshot, validation plan, paths, operations, and scope. |
+| `provider-output.ts` | Host-enforced JSON output-contract message used only when a provider lacks native JSON Schema support. |
+| `index.ts` | Prompt-builder export surface. |
+
+## `src/agents/` — model-using application services
+
+### `src/agents/direct/`
+
+| Module | Purpose |
+| --- | --- |
+| `types.ts` | Direct-agent request, unit, progress, result, and provider-option types. |
+| `languages.ts` | Language-to-extension and human-readable prompt-label mapping. |
+| `marker-parser.ts` | Lightweight lexical scanner for real `@human` comment markers; quoted and already-commented examples stay inert. |
+| `discovery.ts` | Bounded file walking and conversion-unit creation for `.human` files and inline markers. |
+| `file-memory.ts` | Ephemeral declaration memory, replacement normalization, retry isolation, and sequential per-file generation. |
+| `generation-client.ts` | One direct provider request through OpenAI-compatible chat or Ollama, using the central direct prompt builder. |
+| `presentation.ts` | Stable conversion receipt and code-fence cleanup. |
+| `application.ts` | Exact-range inline replacement and whole-file writes. |
+| `index.ts` | Direct-agent export surface used by the CLI and package entry point. |
+
+### `src/agents/guided/`
+
+| Module | Purpose |
+| --- | --- |
+| `types.ts` | Guided run inputs, outputs, certification, and stored-validation options. |
+| `workspace-policy.ts` | Conservative workspace selection, override merging, and validation-plan construction. |
+| `patch-diff.ts` | Stable review-oriented rendering for structured patch operations. |
+| `api-grounding.ts` | Static detection and evidence checks for external APIs introduced by a patch. |
+| `workflow.ts` | Auditable `generateRun`, validate/repair, verified apply, and exact rollback lifecycle. Coordinates deterministic services but contains no prompt prose. |
+| `index.ts` | Guided-agent export surface used by the CLI and package entry point. |
+
+## `src/pipeline/` — deterministic execution mechanics
 
 | Module | Purpose |
 | --- | --- |
@@ -72,9 +112,9 @@ mirror these modules by name.
 | `patch.ts` | Constrained patch validation and atomic application (`preparePatch`, `applyPatchAtomic`, `PatchSafetyError`, `PatchPolicy`): scope/hash/anchor checks, protected/generated/lockfile refusal, traversal/symlink/binary/collision rejection, per-file atomic writes, rollback artifacts. |
 | `validation.ts` | Strong container-only validation (`validateBaselineAndCandidate`, `strongSandboxAvailable`): Docker/Podman sandbox with no network, read-only root, scrubbed environment, resource limits; unchanged baseline first, then candidate; secret-scanned output. |
 | `run-store.ts` | `RunStore`: durable, private, crash-safe run metadata (contracts, patches, reports, rollback artifacts) with recursive secret gating on every write. |
-| `workflow.ts` | The guided end-to-end orchestrator (`generateRun` and the apply/rollback/repair flows): ties analysis, certification, secret scan, context, provider, snapshot, validation, run store, and patch together with crash-safe budget checkpoints and at most two diagnostic repairs. |
 | `file-memory.ts` | Dependency-free static declaration/signature indexing for every language scanned by the direct path. Produces exact line-range evidence without executing project code. |
-| `simple.ts` | The default direct-flow engine: deterministic per-marker generation. One plain model completion per unit (no tool calls), applied by exact marker range, with ephemeral FileMemory and few-shot prompting. Per-marker isolation with retry-then-skip; a security stop is the only whole-run abort. Fast and small-model-friendly. Shares no trust with the guided pipeline; cannot produce `VERIFIED`. |
+| `simple.ts` | Deprecated source-compatibility re-export for `agents/direct/`; contains no implementation. |
+| `workflow.ts` | Deprecated source-compatibility re-export for `agents/guided/`; contains no implementation. |
 
 ## Test map
 
@@ -87,7 +127,7 @@ mirror these modules by name.
 | `test/secret-scan.test.ts` | Repository credential scanning. |
 | `test/provider.test.ts`, `test/providers.test.ts` | Provider contract, budgets, and HTTP adapters (injected fetch/DNS). |
 | `test/certification.test.ts`, `test/release-gate.test.ts` | Certification evidence gate and release-status honesty. |
-| `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/workflow.test.ts` | The pipeline stage by stage, including apply/rollback and repair limits. |
-| `test/simple.test.ts` | Ephemeral FileMemory indexing/normalization and the `--simple` direct path. |
+| `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/guided-agent.test.ts` | Guided mechanics and lifecycle stage by stage, including apply/rollback and repair limits. |
+| `test/direct-agent.test.ts` | Lexical marker discovery, FileMemory indexing/normalization, provider prompts, retry isolation, and application. |
 | `test/cli.test.ts` | Command surface and exit codes. |
 | `test/package-smoke.mjs` | Packed-tarball install, public import, installed-CLI invocation (`npm run package:check`). |

@@ -18,7 +18,7 @@ import type {
   ProviderGenerationResultV1,
 } from "../src/providers/provider.ts";
 import { RunStore } from "../src/pipeline/run-store.ts";
-import { generateRun } from "../src/pipeline/workflow.ts";
+import { generateRun } from "../src/agents/guided/index.ts";
 
 class GeneralMockProvider implements ProviderAdapter {
   readonly name = "general-mock";

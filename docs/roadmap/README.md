@@ -9,7 +9,7 @@ and a plan graduates out of this folder when its profile ships.
 Support in human-to-code is layered; "supporting a language" means moving it
 up this ladder deliberately:
 
-1. **Direct path** (`src/pipeline/simple.ts`) — the language has an entry in
+1. **Direct path** (`src/agents/direct/`) — the language has an entry in
    `LANGUAGE_PROFILES` (output extension + prompt label) and, if it has an
    inline-comment form, its source extensions are in `SCANNED_EXTENSIONS` for
    `@human` markers. No grounding, no validation; receipt-and-confirm only.

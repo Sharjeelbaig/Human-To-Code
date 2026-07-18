@@ -25,7 +25,7 @@ provider-generated PatchSetV1      (src/providers)
         ↓
 baseline vs candidate in sandbox   (src/pipeline/validation.ts)
         ↓
-explicit apply + exact rollback    (src/pipeline/patch.ts, workflow.ts)
+explicit apply + exact rollback    (src/pipeline/patch.ts, src/agents/guided/workflow.ts)
 ```
 
 Every arrow is a checkpoint: each stage validates its input artifact by exact
@@ -35,9 +35,10 @@ rather than guessing. Only `VERIFIED` is success for a generated run.
 
 ## Layers
 
-Source is organized into domain folders that form a strict layering. A module
-may import from its own layer or any layer **above** it in this diagram, never
-below. `core` imports nothing; `cli` may import anything.
+Source is organized into domain folders and two explicit agent entry points.
+Deterministic layers provide policy and mechanics; prompts only format
+model-facing messages; agents coordinate those pieces. `core` imports nothing,
+and `cli` may import anything.
 
 ```mermaid
 graph TD
@@ -47,7 +48,9 @@ graph TD
     security["security<br/>secret scanning, pinned HTTPS"]
     context["context<br/>context selection, documentation, compiler skills/tools"]
     providers["providers<br/>adapter contract, OpenAI/Ollama, certification, schemas"]
-    pipeline["pipeline<br/>planner, snapshot, patch, sandbox validation, run store, workflow"]
+    prompts["prompts<br/>direct, patch, repair, output-contract messages"]
+    pipeline["pipeline<br/>planner, snapshot, patch, sandbox validation, run store"]
+    agents["agents<br/>direct conversion and guided lifecycle orchestration"]
     entry["index.ts / cli.ts<br/>public API and CLI shell"]
 
     config --> core
@@ -59,12 +62,19 @@ graph TD
     providers --> core
     providers --> context
     providers --> analysis
+    prompts --> core
+    prompts --> context
     pipeline --> core
     pipeline --> config
     pipeline --> analysis
     pipeline --> security
     pipeline --> context
     pipeline --> providers
+    agents --> prompts
+    agents --> pipeline
+    agents --> providers
+    agents --> context
+    entry --> agents
     entry --> pipeline
 ```
 
@@ -76,7 +86,9 @@ graph TD
 | `src/security/` | `secret-scan.ts`, `pinned-http.ts` | Cross-cutting fail-closed guards: repository-wide credential scanning before any provider access, and a DNS-vetted address-pinned HTTPS client used for any outbound fetch. |
 | `src/context/` | `context.ts`, `documentation.ts`, `compiler-skills.ts`, `compiler-tools.ts` | Everything the model is allowed to see: provenance-bound context selection, allowlisted exact-version documentation, immutable policy skills, and the bounded read-only context tool executor. |
 | `src/providers/` | `provider.ts`, `providers.ts`, `certification.ts`, `schemas.ts` | Everything the model is allowed to do: the provider-neutral adapter contract, the bundled OpenAI/Ollama HTTP adapters, the JSON output schemas providers must satisfy, and the evidence-based certification gate that decides whether a provider/model result may ever become `VERIFIED`. |
-| `src/pipeline/` | `planner.ts`, `snapshot.ts`, `patch.ts`, `validation.ts`, `run-store.ts`, `workflow.ts`, `file-memory.ts`, `simple.ts` | Run orchestration: contract drafting, immutable snapshots, patch safety and atomic apply/rollback, strong-sandbox baseline/candidate validation, the private run store, and the guided workflow that ties the stages together. `file-memory.ts` statically indexes declarations for the deterministic direct-generation path in `simple.ts`. |
+| `src/prompts/` | `direct-conversion.ts`, `guided-patch.ts`, `guided-repair.ts`, `provider-output.ts` | All model-facing message construction. Prompt builders accept typed inputs and return strings/messages; they perform no I/O, provider calls, or host mutation. |
+| `src/pipeline/` | `planner.ts`, `snapshot.ts`, `patch.ts`, `validation.ts`, `run-store.ts`, `file-memory.ts` | Deterministic execution mechanics: contract drafting, immutable snapshots, patch safety and atomic apply/rollback, strong-sandbox validation, private run storage, and static declaration indexing. `simple.ts` and `workflow.ts` remain compatibility re-exports only. |
+| `src/agents/` | `direct/`, `guided/` | The two model-using application services. `direct/` separates discovery, marker parsing, FileMemory, prompt invocation, presentation, and application. `guided/` owns reviewed-run policy and the auditable generate/validate/apply/rollback lifecycle. |
 | root | `index.ts`, `cli.ts` | Entry points only. `index.ts` re-exports the stable embedding API grouped by layer; `cli.ts` maps commands, flags, and exit codes onto that same surface. They stay at the source root so the published `dist/index.js` and `dist/cli.js` paths never move. |
 
 Two intentional wrinkles in the layering:
@@ -115,6 +127,11 @@ validation `INCONCLUSIVE`; an empty certification registry means no run can be
 diagnostics, dependency source, and fetched documentation are wrapped as
 evidence and cannot change policy, commands, scope, tests, or budgets.
 
+**Prompts are explicit application artifacts.** Model-facing instructions live
+only in `src/prompts/`. Agent orchestration passes typed, validated inputs into
+pure prompt builders; provider transports do not invent agent policy, and
+pipeline mechanics do not embed prose instructions.
+
 **Minimal-dependency host.** The deterministic engine, guided pipeline, and all
 host safety code (hashing, patch validation, sandbox validation, HTTP adapters,
 secret scanning) use only Node built-ins. Their runtime supply-chain surface is
@@ -122,7 +139,7 @@ Node itself.
 
 ## The generation paths
 
-1. **Deterministic engine** (`pipeline/simple.ts`, the default
+1. **Direct agent** (`agents/direct/`, the default
    `npx human-to-code .` flow): host code discovers the worklist, and for each
    unit issues **one plain model completion** (no tool calls), applying the
    result by exact marker range. It statically indexes declarations into
@@ -132,7 +149,7 @@ Node itself.
    security stop aborts the run. This is fast and works with small models that
    cannot do tool-calling. It shares no state with the guided pipeline and never
    reaches `VERIFIED`.
-2. **Guided pipeline** (`workflow.ts`, the `guided` subcommand): full
+2. **Guided agent** (`agents/guided/`, the `guided` subcommand): full
    contract → grounding → sandbox validation lifecycle described above. This is
    the production-architecture path and the only one that can reach `VERIFIED`.
 
@@ -149,7 +166,7 @@ Node itself.
 ## Testing shape
 
 `test/` mirrors the source modules one-to-one (`analyzer.test.ts`,
-`workflow.test.ts`, …) using `node:test` with injected fetch/DNS/clock/exec
+`guided-agent.test.ts`, …) using `node:test` with injected fetch/DNS/clock/exec
 seams — no real provider, network, or container daemon is required.
 `test/package-smoke.mjs` packs the tarball, installs it into a clean temp
 project, imports the public API, and invokes the installed CLI. See

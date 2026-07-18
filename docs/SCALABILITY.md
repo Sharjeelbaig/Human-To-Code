@@ -11,7 +11,7 @@ Source lives in layered domain folders (see
 [ARCHITECTURE.md](ARCHITECTURE.md)). The rules:
 
 1. **Imports point upward only.** A module may import from its own folder or
-   a layer above it (`core` at the top, `pipeline` at the bottom, entry points
+   a layer above it (`core` at the top, agents near the bottom, entry points
    below everything). If you need a downward import, the type or helper you
    want belongs in a higher layer — move it, don't bend the arrow.
 2. **`core/` stays dependency-free.** Nothing in `core/` imports from any
@@ -26,6 +26,9 @@ Source lives in layered domain folders (see
 5. **Every module starts with a `/** … */` header** stating what it does and,
    where relevant, what it deliberately does not do. The headers are the
    first line of documentation; keep them true when behavior changes.
+6. **Prompts live in `src/prompts/`.** Agent and provider modules call typed,
+   pure prompt builders. Do not embed system/user instruction prose in
+   transports, lifecycle orchestration, or pipeline mechanics.
 
 ## Extension points
 
@@ -100,8 +103,8 @@ between releases:
 
 ## Testing practices
 
-- Every `src/**/x.ts` with behavior has a mirror `test/x.test.ts`; keep the
-  mirror when adding or moving modules.
+- Every cohesive agent or deterministic service has a focused mirror test;
+  keep imports pointed at the primary module rather than compatibility shims.
 - Tests are deterministic and offline: injected fetch/DNS/environment/clock
   seams, no real provider, network, or container daemon (the validation tests
   stub the sandbox probe).

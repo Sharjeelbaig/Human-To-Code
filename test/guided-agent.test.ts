@@ -28,7 +28,7 @@ import {
   generateRun,
   rollbackAppliedRun,
   validateStoredRun,
-} from "../src/pipeline/workflow.ts";
+} from "../src/agents/guided/index.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {
   const absolute = join(root, ...path.split("/"));

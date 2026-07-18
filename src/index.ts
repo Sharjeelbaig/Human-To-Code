@@ -73,10 +73,14 @@ export * from "./providers/providers.ts";
 export * from "./providers/certification.ts";
 export * from "./providers/schemas.ts";
 
+// Agents: model-facing orchestration with prompts and transport kept separate.
+export * from "./agents/direct/index.ts";
+export * from "./agents/guided/index.ts";
+export * from "./prompts/index.ts";
+
 // Pipeline: plan -> generate -> validate -> apply orchestration and storage.
 export * from "./pipeline/planner.ts";
 export * from "./pipeline/patch.ts";
 export * from "./pipeline/snapshot.ts";
 export * from "./pipeline/run-store.ts";
 export * from "./pipeline/validation.ts";
-export * from "./pipeline/workflow.ts";

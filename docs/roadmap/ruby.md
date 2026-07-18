@@ -38,7 +38,7 @@ elevated-risk. Dynamic requires make import grounding partially opaque —
 document as an accepted limitation like Python's.
 
 ## Checklist
-0. Add `.rb` to `SCANNED_EXTENSIONS` in `pipeline/simple.ts` (independent quick win).
+0. Add `.rb` to `SCANNED_EXTENSIONS` in `agents/direct/discovery.ts` (independent quick win).
 1. `Ecosystem` union + `analysis/adapters/ruby.ts`.
 2. `ruby/gem`, `ruby/rails`, `ruby/rack` at `preview`.
 3. Register adapter; Ruby/Rails skill pack.

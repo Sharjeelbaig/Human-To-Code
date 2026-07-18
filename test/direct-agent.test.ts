@@ -9,10 +9,52 @@ import {
   FileMemoryConflictError,
   applyUnit,
   discoverUnits,
+  extractInlineMarkers,
   generateCode,
   generateConversionUnits,
   type UnitGenerationContext,
-} from "../src/pipeline/simple.ts";
+} from "../src/agents/direct/index.ts";
+
+test("inline marker extraction ignores marker-shaped text in strings and comments", () => {
+  const source = [
+    'const help = "run // @human to convert";',
+    "const block = 'example: /* @human replace this */';",
+    "const hash = \"example: # @human replace this\";",
+    "const template = `example text",
+    "  // @human replace this",
+    "  /* @human replace this too */",
+    "`;",
+    'const pythonHelp = """example: # @human replace this""";',
+    "/* Documentation example:",
+    " * // @human replace this",
+    " */",
+    "// Documentation says // @human replace this",
+    "// @human add the real line instruction",
+    "/* @human add the real block instruction */",
+  ].join("\n");
+
+  const markers = extractInlineMarkers(source);
+
+  assert.deepEqual(markers.map((marker) => marker.prompt), [
+    "add the real line instruction",
+    "add the real block instruction",
+  ]);
+  assert.deepEqual(markers.map((marker) => source.slice(marker.start, marker.end)), [
+    "// @human add the real line instruction",
+    "/* @human add the real block instruction */",
+  ]);
+});
+
+test("direct discovery does not create a unit for @human example text", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-lexical-marker-"));
+  try {
+    await writeFile(join(root, "example.ts"), 'const help = "run // @human to convert";\n');
+
+    assert.deepEqual(await discoverUnits(root, "typescript"), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("FileMemory records deterministic replacement line ranges without persistence", () => {
   const source = "// @human add a const named value and assign 5\nconst gap = true;\n// @human log the const\n";

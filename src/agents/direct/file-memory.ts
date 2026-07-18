@@ -1,0 +1,194 @@
+import { readFile } from "node:fs/promises";
+import { ContextSecurityError, scanSecrets } from "../../context/context.ts";
+import { extractStaticFileMemory } from "../../pipeline/file-memory.ts";
+import type {
+  ConversionUnit,
+  FileMemoryEntry,
+  GeneratedConversionUnit,
+  GenerateUnitsOptions,
+  UnitGenerationContext,
+} from "./types.ts";
+
+export class FileMemoryConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FileMemoryConflictError";
+  }
+}
+
+function declaredIdentifiers(code: string): Set<string> {
+  const identifiers = new Set<string>();
+  const declaration = /^[ \t]*(?:(?:export|default|declare|public|private|protected|async|pub)\s+)*(?:const|let|var|function|class|interface|enum|struct|trait|fn|def|static|type)\s+([A-Za-z_$][A-Za-z0-9_$]*)/gmu;
+  let match: RegExpExecArray | null;
+  while ((match = declaration.exec(code)) !== null) identifiers.add(match[1]!);
+  return identifiers;
+}
+
+function stripMemorySeparator(value: string): string | undefined {
+  let offset = 0;
+  for (;;) {
+    if (value.startsWith("\r\n", offset)) offset += 2;
+    else if (value.startsWith("\n", offset)) offset += 1;
+    else if (value.startsWith("\\r\\n", offset)) offset += 4;
+    else if (value.startsWith("\\n", offset)) offset += 2;
+    else if (value[offset] === " " || value[offset] === "\t") offset += 1;
+    else break;
+  }
+  return offset > 0 ? value.slice(offset) : undefined;
+}
+
+/** Ephemeral declaration memory shared by markers in one source file. */
+export class FileMemory {
+  readonly sourcePath: string;
+  readonly #generatedEntries: FileMemoryEntry[] = [];
+  #staticEntries: FileMemoryEntry[];
+  #virtualText: string;
+  #characterDelta = 0;
+
+  constructor(sourcePath: string, sourceText: string) {
+    this.sourcePath = sourcePath;
+    this.#virtualText = sourceText;
+    this.#staticEntries = extractStaticFileMemory(sourcePath, sourceText);
+  }
+
+  get entries(): readonly FileMemoryEntry[] {
+    const unique = new Map<string, FileMemoryEntry>();
+    const staticEntries = this.#staticEntries.filter((entry) =>
+      !this.#generatedEntries.some((generated) =>
+        entry.startLine >= generated.startLine && entry.endLine <= generated.endLine));
+    for (const entry of [...staticEntries, ...this.#generatedEntries]) {
+      unique.set(`${entry.startLine}:${entry.endLine}:${entry.code}`, entry);
+    }
+    return [...unique.values()]
+      .sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine || left.code.localeCompare(right.code))
+      .map((entry) => ({ ...entry }));
+  }
+
+  rememberReplacement(range: { start: number; end: number }, code: string): void {
+    const replacement = code.trim();
+    if (replacement.length === 0) return;
+    const start = range.start + this.#characterDelta;
+    const end = range.end + this.#characterDelta;
+    if (start < 0 || end < start || end > this.#virtualText.length) {
+      throw new Error(`Cannot update FileMemory for ${this.sourcePath}: marker range is stale.`);
+    }
+    const marker = this.#virtualText.slice(start, end);
+    if (!marker.includes("@human")) {
+      throw new Error(`Cannot update FileMemory for ${this.sourcePath}: expected an @human marker.`);
+    }
+    const startLine = 1 + (this.#virtualText.slice(0, start).match(/\n/g)?.length ?? 0);
+    const endLine = startLine + (replacement.match(/\n/g)?.length ?? 0);
+    this.#virtualText = `${this.#virtualText.slice(0, start)}${replacement}${this.#virtualText.slice(end)}`;
+    this.#characterDelta += replacement.length - (range.end - range.start);
+    this.#generatedEntries.push({ startLine, endLine, code: replacement, fragment: false });
+    this.#staticEntries = extractStaticFileMemory(this.sourcePath, this.#virtualText);
+  }
+
+  render(): string {
+    const rendered = this.entries
+      .map((entry) => `line ${entry.startLine} to line ${entry.endLine}:\n${entry.code}`)
+      .join("\n\n");
+    if (scanSecrets(rendered).length > 0) {
+      throw new ContextSecurityError(
+        "SECRET_DETECTED",
+        `FileMemory for ${this.sourcePath} contains credential-like declaration content.`,
+        this.sourcePath,
+      );
+    }
+    return rendered;
+  }
+
+  normalizeReplacement(code: string): string {
+    const original = code.trim();
+    let normalized = original;
+    let removedPrefix = false;
+    const entries = [...this.entries].sort((left, right) => right.code.length - left.code.length);
+    for (;;) {
+      const repeated = entries.find((entry) => !entry.fragment && normalized.startsWith(entry.code));
+      if (!repeated) break;
+      const remainder = normalized.slice(repeated.code.length);
+      if (remainder.length === 0) {
+        normalized = "";
+        removedPrefix = true;
+        break;
+      }
+      const withoutSeparator = stripMemorySeparator(remainder);
+      if (withoutSeparator === undefined) break;
+      normalized = withoutSeparator.trimStart();
+      removedPrefix = true;
+    }
+    if (removedPrefix && normalized.length === 0) {
+      throw new FileMemoryConflictError(
+        `The provider only repeated existing FileMemory for ${this.sourcePath}; the current marker was not implemented.`,
+      );
+    }
+
+    const remembered = new Set(this.#generatedEntries.flatMap((entry) => [...declaredIdentifiers(entry.code)]));
+    const conflicts = [...declaredIdentifiers(normalized)].filter((identifier) => remembered.has(identifier));
+    if (conflicts.length > 0) {
+      throw new FileMemoryConflictError(
+        `The provider redeclared FileMemory identifier${conflicts.length === 1 ? "" : "s"} ${conflicts.join(", ")} in ${this.sourcePath}.`,
+      );
+    }
+    return normalized;
+  }
+}
+
+/** Generate each unit without mutating source files. */
+export async function generateConversionUnits(
+  units: readonly ConversionUnit[],
+  generator: (unit: ConversionUnit, context: UnitGenerationContext) => Promise<string>,
+  options: GenerateUnitsOptions = {},
+): Promise<GeneratedConversionUnit[]> {
+  const ordered = [...units].sort((left, right) => {
+    if (left.kind !== right.kind) return left.kind === "file" ? -1 : 1;
+    const byPath = left.sourcePath.localeCompare(right.sourcePath);
+    if (byPath !== 0) return byPath;
+    return (left.range?.start ?? 0) - (right.range?.start ?? 0);
+  });
+  const memories = new Map<string, FileMemory>();
+  const generated: GeneratedConversionUnit[] = [];
+  const maxAttempts = 1 + Math.max(0, options.retries ?? 1);
+
+  for (const unit of ordered) {
+    let memory: FileMemory | undefined;
+    if (unit.kind === "inline") {
+      memory = memories.get(unit.absoluteSource);
+      if (!memory) {
+        memory = new FileMemory(unit.sourcePath, await readFile(unit.absoluteSource, "utf8"));
+        memories.set(unit.absoluteSource, memory);
+      }
+    }
+
+    let code: string | undefined;
+    let failure: string | undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      options.onProgress?.({ kind: "start", unit, attempt });
+      try {
+        const renderedMemory = memory?.render();
+        const rawCode = await generator(unit, {
+          inline: unit.kind === "inline",
+          ...(renderedMemory ? { fileMemory: renderedMemory } : {}),
+        });
+        code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
+        failure = undefined;
+        break;
+      } catch (error) {
+        if (error instanceof ContextSecurityError) throw error;
+        failure = error instanceof Error ? error.message : String(error);
+        code = undefined;
+      }
+    }
+
+    if (failure !== undefined || code === undefined) {
+      generated.push({ unit, code: "", error: failure ?? "generation produced no code" });
+      options.onProgress?.({ kind: "skip", unit, reason: failure ?? "generation produced no code" });
+      continue;
+    }
+    generated.push({ unit, code });
+    if (memory && code.trim().length > 0) memory.rememberReplacement(unit.range!, code);
+    options.onProgress?.({ kind: "done", unit });
+  }
+
+  return generated;
+}
