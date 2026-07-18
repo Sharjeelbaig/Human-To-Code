@@ -16,13 +16,14 @@ mirror these modules by name.
 | Module | Purpose |
 | --- | --- |
 | `types.ts` | Small shared types used across the pipeline: `Config`, `ProviderConfig`, `ProviderName`, `SourceFile`, `SourceKind`, `DiscoveryResult`, `TargetLanguage`. |
+| `languages.ts` | Shared code-extension-to-language registry used by strict configuration validation and direct discovery. |
 | `contracts.ts` | The versioned artifact vocabulary: `ChangeContractV1`, `PatchSetV1` (+ `PatchOperation`), `ValidationPlanV1`, `RunRecordV1`, and friends. Exact-key validators (`validateChangeContractV1`, `validatePatchSetV1`, `validateRunRecordV1`, …), canonical JSON (`canonicalJson`, `hashCanonical`), and hashing helpers (`sha256Text`, `sha256Bytes`). Raises `ArtifactValidationError`. No LLM/SDK dependency by design. |
 
 ## `src/config/` — operator policy input
 
 | Module | Purpose |
 | --- | --- |
-| `config.ts` | Strict schema-v1 `human-to-code.config.json`: `validateConfig`, `DEFAULT_CONFIG`, `CONFIG_FILENAME`, provider/pricing/privacy/sandbox/budget policy, endpoint trust rules, and explicit alpha-config migration. Unknown keys and credential-like values are rejected; credentials are environment-variable names only. |
+| `config.ts` | Strict schema-v1 `human-to-code.config.json`: `validateConfig`, `DEFAULT_CONFIG`, `CONFIG_FILENAME`, enabled languages, exact `humanFileExtensions` routing, provider/pricing/privacy/sandbox/budget policy, endpoint trust rules, and explicit alpha-config migration. Unknown keys and credential-like values are rejected; credentials are environment-variable names only. |
 | `discovery.ts` | Fail-closed discovery of `.human` sources and protected secret files (`discover`, `DiscoveryError`, `secretsTrackedError`). Never follows symlinks; never turns a partial scan into an empty success. |
 
 ## `src/analysis/` — static project intelligence
@@ -84,12 +85,12 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | Module | Purpose |
 | --- | --- |
 | `types.ts` | Direct-agent request, unit, progress, result, and provider-option types. |
-| `languages.ts` | Language-to-extension and human-readable prompt-label mapping. |
-| `marker-parser.ts` | Lightweight lexical scanner for real line, block, and JSDoc `@human` comment markers; quoted and already-commented examples stay inert. |
-| `discovery.ts` | Bounded file walking and conversion-unit creation, including existing-target and unsupported-marker notices. |
+| `languages.ts` | Language-to-default-extension and human-readable prompt-label mapping; delegates extension ownership to the shared core registry. |
+| `marker-parser.ts` | Lightweight lexical scanner for real line, block, JSDoc, and HTML `@human` comment markers. HTML scanning is tag-aware and also handles script/style comments; quoted attributes, strings, visible-text apostrophes, and already-commented examples stay inert. |
+| `discovery.ts` | Bounded file walking and conversion-unit creation. Output routing prioritizes exact config mappings, consumed first-line extension declarations, inner filename extensions, then deterministic inference; conflicts, existing targets, and unsupported markers produce notices. |
 | `declarations.ts` | Language-aware declared-identifier extraction, including type-led C, C++, C#, and Java declarations. |
 | `replacement.ts` | Exact inline-marker byte verification plus newline-preserving indentation formatting shared by memory and application. |
-| `candidate-validation.ts` | Baseline-aware pre-write syntax gate: TypeScript parser diagnostics for JS/TS and deterministic structure checks for other direct languages. Inline units are rejected only for newly introduced diagnostics. It does not claim semantic or sandbox verification. |
+| `candidate-validation.ts` | Baseline-aware pre-write syntax gate: TypeScript parser diagnostics for JS/TS, deterministic structure checks for other programming languages, and non-empty/fence gates for HTML/CSS. Inline units are rejected only for newly introduced diagnostics. It does not claim semantic or sandbox verification. |
 | `candidate-overlay.ts` | In-memory candidate overlay combining whole-file outputs and inline replacements for staged validation; the working tree stays unchanged and stale or conflicting units are excluded fail-closed. |
 | `program-diagnostics.ts` | Combined TypeScript Compiler API validation over the candidate overlay: permissive fixed compiler options, an overlay-aware compiler host, bundled `node:` builtin typings, and multiplicity/location-aware baseline-vs-candidate diagnostic comparison. Static compilation only — it never imports or executes project code. |
 | `dependency-graph.ts` | Resolved-import dependency grouping of candidate files and bounded diagnostic-to-unit attribution; diagnostics that cannot be safely attributed fail the whole staged batch. |

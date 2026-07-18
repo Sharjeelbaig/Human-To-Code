@@ -8,6 +8,7 @@
 // Core primitives: shared types and versioned artifact contracts.
 export type {
   Config,
+  HumanFileExtensionConfig,
   ProviderConfig,
   ProviderName,
   TargetLanguage,

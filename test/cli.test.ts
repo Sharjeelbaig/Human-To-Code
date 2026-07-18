@@ -97,16 +97,56 @@ test("default convert flow lists .human files and @human markers without contact
   }
 });
 
+test("default convert flow discovers HTML and CSS single-line and multiline inline markers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-html-inline-"));
+  try {
+    await put(root, "index.html", [
+      "<!-- @human add a heading -->",
+      "<!--",
+      "  @human add the main content",
+      "  with an accessible landmark",
+      "-->",
+      "",
+    ].join("\n"));
+    await put(root, "styles.css", [
+      "/* @human add page colors */",
+      "/*",
+      " * @human add responsive spacing",
+      " */",
+      "",
+    ].join("\n"));
+
+    const result = await cli([root, "--json"]);
+    assert.equal(result.code, 3, result.stderr || result.stdout);
+    const plan = JSON.parse(result.stdout) as {
+      status: string;
+      notices: unknown[];
+      units: Array<{ kind: string; source: string; output: string; language: string }>;
+    };
+    assert.equal(plan.status, "NEEDS_CONFIRMATION");
+    assert.deepEqual(plan.notices, []);
+    assert.deepEqual(plan.units, [
+      { kind: "inline", source: "index.html", output: "index.html", language: "html" },
+      { kind: "inline", source: "index.html", output: "index.html", language: "html" },
+      { kind: "inline", source: "styles.css", output: "styles.css", language: "css" },
+      { kind: "inline", source: "styles.css", output: "styles.css", language: "css" },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("multi-language receipt reports the inferred outputs instead of the configured default", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-multi-language-"));
   try {
     await put(root, "human-to-code.config.json", JSON.stringify({
       schemaVersion: 1,
       languages: ["typescript", "html", "css", "javascript"],
+      humanFileExtensions: [{ path: "script.human", extension: "js" }],
       provider: { name: "ollama", model: "fixture-model" },
     }));
-    await put(root, "index.human", "Here is complete structure of calculator in html\n");
-    await put(root, "script.human", "Here is the logic for calculator in javascript\n");
+    await put(root, "index.human", "html\nadd head section here\nadd styles\nclose head\nadd body\n");
+    await put(root, "script.human", "Read stylesheet colors, fonts, spacing, backgrounds, borders, and themes, then update them on clicks.\n");
     await put(root, "styles.human", "Here is complete styles of calculator in css\n");
 
     const receipt = await cli([root, "--dry-run"]);

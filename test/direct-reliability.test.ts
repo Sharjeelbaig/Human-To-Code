@@ -34,6 +34,150 @@ test("issue 02: single-line and decorated multiline JSDoc markers are discovered
   ]);
 });
 
+test("HTML inline parsing supports single-line, multiline, script, and style markers lexically", () => {
+  const source = [
+    "<p>Don't let an apostrophe hide the next marker.</p>",
+    '<div data-example="<!-- @human ignore this attribute example -->">',
+    "<!-- Documentation mentions @human but is not an instruction. -->",
+    "<!-- @human add the primary heading -->",
+    "<!--",
+    "  @human add a footer",
+    "  with legal links",
+    "-->",
+    "<script>",
+    '  const example = "<!-- @human ignore this script string -->";',
+    "  // @human add a click handler",
+    "  /*",
+    "   * @human add a keyboard handler",
+    "   */",
+    "</script>",
+    "<style>",
+    '  .example::after { content: "<!-- @human ignore this CSS string -->"; }',
+    "  /* @human add a focus style */",
+    "</style>",
+  ].join("\n");
+
+  const markers = extractInlineMarkers(source, "page.html");
+  assert.deepEqual(markers.map(({ prompt }) => prompt), [
+    "add the primary heading",
+    "add a footer\n  with legal links",
+    "add a click handler",
+    "add a keyboard handler",
+    "add a focus style",
+  ]);
+  assert.deepEqual(markers.map(({ start, end }) => source.slice(start, end)), [
+    "<!-- @human add the primary heading -->",
+    "<!--\n  @human add a footer\n  with legal links\n-->",
+    "// @human add a click handler",
+    "/*\n   * @human add a keyboard handler\n   */",
+    "/* @human add a focus style */",
+  ]);
+});
+
+test("HTML and CSS inline markers apply exactly and preserve multiline indentation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-html-css-inline-"));
+  const htmlPath = join(root, "index.html");
+  const cssPath = join(root, "styles.css");
+  try {
+    await writeFile(htmlPath, [
+      "<main>",
+      "  <!-- @human add title -->",
+      "  <!--",
+      "    @human add content",
+      "    with a paragraph",
+      "  -->",
+      "</main>",
+      "",
+    ].join("\n"));
+    await writeFile(cssPath, [
+      ":root {",
+      "  /* @human add colors */",
+      "}",
+      "",
+      ".button {",
+      "  /*",
+      "   * @human add interaction styles",
+      "   * on hover and focus",
+      "   */",
+      "}",
+      "",
+    ].join("\n"));
+
+    const discovered = await discoverDirectUnits(root, ["html", "css"]);
+    assert.deepEqual(discovered.notices, []);
+    assert.deepEqual(discovered.units.map(({ sourcePath, language, prompt }) => ({
+      sourcePath,
+      language,
+      prompt,
+    })), [
+      { sourcePath: "index.html", language: "html", prompt: "add title" },
+      { sourcePath: "index.html", language: "html", prompt: "add content\n    with a paragraph" },
+      { sourcePath: "styles.css", language: "css", prompt: "add colors" },
+      { sourcePath: "styles.css", language: "css", prompt: "add interaction styles\non hover and focus" },
+    ]);
+
+    const replacements = new Map([
+      ["add title", "<h1>Calculator</h1>"],
+      ["add content\n    with a paragraph", "<section>\n<p>Ready.</p>\n</section>"],
+      ["add colors", "--accent: royalblue;"],
+      ["add interaction styles\non hover and focus", "&:hover,\n&:focus {\n  color: var(--accent);\n}"],
+    ]);
+    const ordered = [...discovered.units].sort((left, right) => {
+      const byPath = left.sourcePath.localeCompare(right.sourcePath);
+      return byPath !== 0 ? byPath : right.range!.start - left.range!.start;
+    });
+    for (const unit of ordered) {
+      const code = replacements.get(unit.prompt)!;
+      await validateGeneratedUnit(unit, code);
+      await applyUnit(root, unit, code);
+    }
+
+    assert.equal(await readFile(htmlPath, "utf8"), [
+      "<main>",
+      "  <h1>Calculator</h1>",
+      "  <section>",
+      "  <p>Ready.</p>",
+      "  </section>",
+      "</main>",
+      "",
+    ].join("\n"));
+    assert.equal(await readFile(cssPath, "utf8"), [
+      ":root {",
+      "  --accent: royalblue;",
+      "}",
+      "",
+      ".button {",
+      "  &:hover,",
+      "  &:focus {",
+      "    color: var(--accent);",
+      "  }",
+      "}",
+      "",
+    ].join("\n"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("HTM, MTS, and CTS files participate in inline discovery", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-inline-aliases-"));
+  try {
+    await writeFile(join(root, "page.htm"), "<!-- @human add a landmark -->\n");
+    await writeFile(join(root, "module.mts"), "// @human export a value\n");
+    await writeFile(join(root, "legacy.cts"), "/* @human export another value */\n");
+
+    const discovered = await discoverDirectUnits(root, ["typescript", "html"]);
+    assert.deepEqual(discovered.notices, []);
+    assert.deepEqual(discovered.units.map(({ sourcePath, language, prompt }) => ({ sourcePath, language, prompt })), [
+      { sourcePath: "legacy.cts", language: "typescript", prompt: "export another value" },
+      { sourcePath: "module.mts", language: "typescript", prompt: "export a value" },
+      { sourcePath: "page.htm", language: "html", prompt: "add a landmark" },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("issue 04: surrounding prose is discarded when exactly one fenced block exists", () => {
   assert.equal(stripCodeFence([
     "Here is the code:",

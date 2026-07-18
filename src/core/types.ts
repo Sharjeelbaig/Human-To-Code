@@ -29,6 +29,13 @@ export interface ProviderConfig {
   baseUrl?: string;
 }
 
+/** Explicit output extension for one project-relative `.human` source. */
+export interface HumanFileExtensionConfig {
+  path: string;
+  /** Normalized output extension without a leading dot. */
+  extension: string;
+}
+
 export interface Config {
   /** Legacy single-language hint; static workspace analysis is authoritative. */
   language: TargetLanguage;
@@ -38,6 +45,8 @@ export interface Config {
    * inner extension, e.g. `index.html.human` -> `index.html`.
    */
   languages: TargetLanguage[];
+  /** Exact per-file routing rules that take precedence over language inference. */
+  humanFileExtensions: HumanFileExtensionConfig[];
   /** Glob-free directory/file names to skip during discovery (a denylist). */
   filesToIgnore: string[];
   /**

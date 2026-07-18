@@ -11,7 +11,7 @@ import { replaceInlineMarker } from "./replacement.ts";
 import type { ConversionUnit, GeneratedConversionUnit } from "./types.ts";
 
 /** Extensions that participate in combined TypeScript program validation. */
-export const PROJECT_VALIDATION_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+export const PROJECT_VALIDATION_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 
 export interface CandidateOverlayFile {
   /** Project-relative POSIX path of the candidate file. */

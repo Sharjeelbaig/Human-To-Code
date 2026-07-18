@@ -535,7 +535,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const languages = effective.languages;
   const providerName = effective.provider.name;
   const model = effective.provider.model;
-  const discovery = await discoverDirectUnits(root, languages);
+  const discovery = await discoverDirectUnits(root, languages, effective.humanFileExtensions);
   const units = discovery.units;
 
   if (cli.json) {

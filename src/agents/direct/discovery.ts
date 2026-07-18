@@ -3,10 +3,12 @@ import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { inferUnitLanguage } from "./language-inference.ts";
 import { languageForExtension, languageProfile } from "./languages.ts";
 import { extractInlineMarkers } from "./marker-parser.ts";
+import type { HumanFileExtensionConfig } from "../../core/types.ts";
 import type { ConversionUnit, DirectDiscoveryResult } from "./types.ts";
 
 const SCANNED_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+  ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
+  ".html", ".htm", ".css",
   ".py", ".rs", ".go", ".java", ".rb", ".cs", ".cpp", ".cc", ".c", ".h", ".hpp",
 ]);
 
@@ -47,12 +49,25 @@ export async function walkDirectFiles(root: string): Promise<string[]> {
 export async function discoverDirectUnits(
   root: string,
   language: string | readonly string[],
+  humanFileExtensions: readonly HumanFileExtensionConfig[] = [],
 ): Promise<DirectDiscoveryResult> {
   const absoluteRoot = resolve(root);
   const languages = (typeof language === "string" ? [language] : [...language])
     .map((entry) => entry.trim().toLowerCase());
   const primary = languages[0] ?? "typescript";
   const configured = new Set(languages);
+  const configuredExtensionByPath = new Map<string, string>();
+  for (const mapping of humanFileExtensions) {
+    if (configuredExtensionByPath.has(mapping.path)) {
+      throw new Error(`Duplicate configured .human path: ${mapping.path}`);
+    }
+    const extension = mapping.extension.replace(/^\./u, "").toLowerCase();
+    const mappedLanguage = languageForExtension(extension);
+    if (mappedLanguage === undefined || !configured.has(mappedLanguage)) {
+      throw new Error(`Configured extension .${extension} for ${mapping.path} does not select an enabled language.`);
+    }
+    configuredExtensionByPath.set(mapping.path, extension);
+  }
   const files = await walk(absoluteRoot, DEFAULT_IGNORES);
   const units: ConversionUnit[] = [];
   const notices: DirectDiscoveryResult["notices"] = [];
@@ -68,21 +83,64 @@ export async function discoverDirectUnits(
       } catch {
         continue;
       }
-      const prompt = content.trim();
+      const rawPrompt = content.trim();
+      if (rawPrompt.length === 0) continue;
+      const lines = rawPrompt.split(/\r?\n/u);
+      const declaredExtension = lines[0]?.trim().replace(/^\./u, "").toLowerCase() ?? "";
+      const declaredLanguage = languageForExtension(declaredExtension);
+      const configuredExtension = configuredExtensionByPath.get(rel);
+      const configuredLanguage = configuredExtension === undefined
+        ? undefined
+        : languageForExtension(configuredExtension)!;
+      if (
+        configuredLanguage !== undefined
+        && declaredLanguage !== undefined
+        && configuredLanguage !== declaredLanguage
+      ) {
+        notices.push({
+          code: "EXTENSION_CONFLICT",
+          sourcePath: rel,
+          message: `${rel} was skipped because config selects .${configuredExtension} but its first line declares .${declaredExtension}.`,
+        });
+        continue;
+      }
+      if (
+        configuredLanguage === undefined
+        && declaredLanguage !== undefined
+        && !configured.has(declaredLanguage)
+      ) {
+        notices.push({
+          code: "UNCONFIGURED_EXTENSION",
+          sourcePath: rel,
+          message: `${rel} was skipped because its first line declares .${declaredExtension}, whose language is not enabled in config.languages.`,
+        });
+        continue;
+      }
+      const prompt = declaredLanguage === undefined
+        ? rawPrompt
+        : lines.slice(1).join("\n").trim();
       if (prompt.length === 0) continue;
-      // An explicit inner extension is authoritative: `index.html.human` ->
-      // `index.html`. Otherwise, a multi-language configuration infers the
-      // target from the request text and filename before falling back to the
-      // primary language, so `styles.human` is not written as `styles.ts`.
+
+      // Explicit config and first-line declarations outrank filename and text
+      // inference. A recognized inner extension remains authoritative when
+      // neither higher-priority route is present.
       const stem = rel.slice(0, -".human".length);
-      const innerLanguage = languageForExtension(extname(stem));
+      const innerExtension = extname(stem);
+      const innerLanguage = languageForExtension(innerExtension);
       const routed = innerLanguage !== undefined && configured.has(innerLanguage);
-      const unitLanguage = routed
-        ? innerLanguage
-        : inferUnitLanguage(basename(stem), prompt, languages);
-      const outputPath = routed
-        ? stem
-        : `${stem}.${languageProfile(unitLanguage).ext}`;
+      const unitLanguage = configuredLanguage
+        ?? declaredLanguage
+        ?? (routed ? innerLanguage : inferUnitLanguage(basename(stem), prompt, languages));
+      const explicitExtension = configuredExtension
+        ?? (declaredLanguage === undefined ? undefined : declaredExtension);
+      const outputBase = explicitExtension !== undefined && innerLanguage !== undefined
+        ? stem.slice(0, -innerExtension.length)
+        : stem;
+      const outputPath = explicitExtension !== undefined
+        ? `${outputBase}.${explicitExtension}`
+        : routed
+          ? stem
+          : `${stem}.${languageProfile(unitLanguage).ext}`;
       try {
         await stat(join(absoluteRoot, ...outputPath.split("/")));
         notices.push({
@@ -136,7 +194,7 @@ export async function discoverDirectUnits(
       continue;
     }
     if (!content.includes("@human")) continue;
-    for (const marker of extractInlineMarkers(content)) {
+    for (const marker of extractInlineMarkers(content, rel)) {
       const line = content.slice(0, marker.start).split("\n").length;
       units.push({
         kind: "inline",
@@ -158,6 +216,7 @@ export async function discoverDirectUnits(
 export async function discoverUnits(
   root: string,
   language: string | readonly string[],
+  humanFileExtensions: readonly HumanFileExtensionConfig[] = [],
 ): Promise<ConversionUnit[]> {
-  return (await discoverDirectUnits(root, language)).units;
+  return (await discoverDirectUnits(root, language, humanFileExtensions)).units;
 }

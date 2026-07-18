@@ -12,7 +12,7 @@ export class DirectCandidateValidationError extends Error {
   }
 }
 
-const TYPESCRIPT_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+const TYPESCRIPT_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 
 // Delimiter balancing misreads prose-bearing markup: apostrophes in HTML text
 // and unquoted `url(https://…)` in CSS are legal but read as unterminated

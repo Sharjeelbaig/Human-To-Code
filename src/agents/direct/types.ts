@@ -59,7 +59,11 @@ export interface GenerateUnitsOptions {
 }
 
 export interface DirectDiscoveryNotice {
-  code: "TARGET_EXISTS" | "UNSUPPORTED_MARKER_FILE";
+  code:
+    | "TARGET_EXISTS"
+    | "UNSUPPORTED_MARKER_FILE"
+    | "EXTENSION_CONFLICT"
+    | "UNCONFIGURED_EXTENSION";
   sourcePath: string;
   message: string;
 }

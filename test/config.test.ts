@@ -20,6 +20,7 @@ test("validateConfig fills v1 defaults", () => {
   const config = validateConfig(V1);
   assert.equal(config.schemaVersion, 1);
   assert.equal(config.language, "typescript");
+  assert.deepEqual(config.humanFileExtensions, []);
   assert.equal(config.provider.name, "ollama");
   assert.equal(config.provider.model, "qwen2.5-coder:7b");
   assert.equal(config.allowNonHumanFiles, false);
@@ -45,6 +46,7 @@ test("defaults are deeply frozen and every result is deeply cloned", () => {
   assert.equal(Object.isFrozen(DEFAULT_CONFIG), true);
   assert.equal(Object.isFrozen(DEFAULT_CONFIG.provider), true);
   assert.equal(Object.isFrozen(DEFAULT_CONFIG.filesToIgnore), true);
+  assert.equal(Object.isFrozen(DEFAULT_CONFIG.humanFileExtensions), true);
 
   const first = validateConfig(V1);
   const second = validateConfig(V1);
@@ -95,6 +97,55 @@ test("languages rejects empty lists, unknown entries, and duplicates", () => {
   assert.throws(() => validateConfig({ ...V1, languages: [] }), ConfigError);
   assert.throws(() => validateConfig({ ...V1, languages: ["cobol"] }), ConfigError);
   assert.throws(() => validateConfig({ ...V1, languages: ["html", "html"] }), ConfigError);
+});
+
+test("humanFileExtensions validates exact .human paths and enabled extensions", () => {
+  const config = validateConfig({
+    ...V1,
+    languages: ["typescript", "javascript", "html"],
+    humanFileExtensions: [
+      { path: "index.human", extension: ".html" },
+      { path: "src/script.human", extension: "mjs" },
+    ],
+  });
+  assert.deepEqual(config.humanFileExtensions, [
+    { path: "index.human", extension: "html" },
+    { path: "src/script.human", extension: "mjs" },
+  ]);
+
+  const invalidMappings = [
+    [{ path: "../script.human", extension: "js" }],
+    [{ path: "/script.human", extension: "js" }],
+    [{ path: "script.ts", extension: "js" }],
+    [{ path: "script.strict.human", extension: "js" }],
+    [{ path: "script.human", extension: "exe" }],
+    [{ path: "script.human", extension: "js", typo: true }],
+  ];
+  for (const humanFileExtensions of invalidMappings) {
+    assert.throws(
+      () => validateConfig({ ...V1, languages: ["typescript", "javascript"], humanFileExtensions }),
+      ConfigError,
+    );
+  }
+  assert.throws(
+    () => validateConfig({
+      ...V1,
+      languages: ["typescript"],
+      humanFileExtensions: [{ path: "script.human", extension: "js" }],
+    }),
+    /must be listed in `languages`/u,
+  );
+  assert.throws(
+    () => validateConfig({
+      ...V1,
+      languages: ["javascript"],
+      humanFileExtensions: [
+        { path: "script.human", extension: "js" },
+        { path: "script.human", extension: "mjs" },
+      ],
+    }),
+    /duplicate paths/u,
+  );
 });
 
 test("provider model defaults per provider", () => {

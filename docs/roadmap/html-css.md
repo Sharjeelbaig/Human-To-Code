@@ -1,9 +1,12 @@
 # HTML & CSS support plan
 
 ## Status today
-Level 2 only: not in `LANGUAGE_PROFILES`. React/Vite workspaces already
-cover most component markup/styling through the existing node adapter; this
-plan is for *static* sites and stylesheet-centric projects.
+The direct converter supports whole-file HTML/CSS generation and inline
+single-line or multiline markers in `.html`, `.htm`, and `.css`. HTML comments
+use `<!-- @human ... -->`; JavaScript/CSS comments inside `<script>` and
+`<style>` are also recognized lexically. The remaining roadmap below is for a
+grounded, sandbox-validated `static-web` guided profile. React/Vite workspaces
+already cover component markup/styling through the existing node adapter.
 
 ## Target profile
 - `Ecosystem`: `static-web`.

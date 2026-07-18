@@ -11,8 +11,10 @@ import { constants as fsConstants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { isIP } from "node:net";
 import { isAbsolute, join } from "node:path";
+import { CODE_EXTENSION_LANGUAGES } from "../core/languages.ts";
 import type {
   Config,
+  HumanFileExtensionConfig,
   ProviderConfig,
   ProviderName,
   TargetLanguage,
@@ -38,6 +40,14 @@ const PROVIDERS: readonly ProviderName[] = [
   "grok",
   "gemini",
 ];
+
+/** Extensions whose owning language is supported by schema-v1 config. */
+const HUMAN_FILE_EXTENSION_LANGUAGES: Readonly<Record<string, TargetLanguage>> =
+  Object.freeze(Object.fromEntries(
+    Object.entries(CODE_EXTENSION_LANGUAGES)
+      .filter((entry): entry is [string, TargetLanguage] =>
+        LANGUAGES.includes(entry[1] as TargetLanguage)),
+  ));
 
 /** Stable defaults for this package release. They are not model aliases. */
 const DEFAULT_MODEL: Readonly<Record<ProviderName, string>> = Object.freeze({
@@ -157,6 +167,7 @@ const DEFAULT_CONFIG_VALUE: ConfigV1 = {
   schemaVersion: CONFIG_SCHEMA_VERSION,
   language: "typescript",
   languages: ["typescript"],
+  humanFileExtensions: [],
   filesToIgnore: ["node_modules", ".git", "dist"],
   allowNonHumanFiles: false,
   provider: {
@@ -373,6 +384,31 @@ function validateIgnoreName(value: string, path: string): string {
     throw new ConfigError(`\`${path}\` must be a file or directory name, not a path.`);
   }
   return value;
+}
+
+function validateHumanFileExtension(
+  raw: unknown,
+  index: number,
+): HumanFileExtensionConfig {
+  const itemPath = `humanFileExtensions[${index}]`;
+  const value = expectObject(raw, itemPath);
+  assertKnownKeys(value, ["path", "extension"], itemPath);
+  if (typeof value.path !== "string") {
+    throw new ConfigError(`\`${itemPath}.path\` must be a string.`);
+  }
+  const path = validateRelativePath(value.path, `${itemPath}.path`);
+  if (!path.endsWith(".human") || path.endsWith(".strict.human")) {
+    throw new ConfigError(`\`${itemPath}.path\` must name a non-strict .human file.`);
+  }
+  const extension = expectString(value.extension, `${itemPath}.extension`, 16)
+    .replace(/^\./u, "")
+    .toLowerCase();
+  if (HUMAN_FILE_EXTENSION_LANGUAGES[extension] === undefined) {
+    throw new ConfigError(
+      `\`${itemPath}.extension\` must be one of: ${Object.keys(HUMAN_FILE_EXTENSION_LANGUAGES).join(", ")}.`,
+    );
+  }
+  return { path, extension };
 }
 
 function isLoopback(hostname: string): boolean {
@@ -850,6 +886,7 @@ export function validateConfig(raw: unknown): ConfigV1 {
       "schemaVersion",
       "language",
       "languages",
+      "humanFileExtensions",
       "filesToIgnore",
       "allowNonHumanFiles",
       "provider",
@@ -916,6 +953,25 @@ export function validateConfig(raw: unknown): ConfigV1 {
     }
   } else if (raw.language !== undefined) {
     config.languages = [config.language];
+  }
+  if (raw.humanFileExtensions !== undefined) {
+    if (!Array.isArray(raw.humanFileExtensions) || raw.humanFileExtensions.length > 1_000) {
+      throw new ConfigError("`humanFileExtensions` must be an array with at most 1000 entries.");
+    }
+    const mappings = raw.humanFileExtensions.map(validateHumanFileExtension);
+    const normalizedPaths = mappings.map(({ path }) => path.toLowerCase());
+    if (new Set(normalizedPaths).size !== normalizedPaths.length) {
+      throw new ConfigError("`humanFileExtensions` must not contain duplicate paths.");
+    }
+    for (const [index, mapping] of mappings.entries()) {
+      const mappedLanguage = HUMAN_FILE_EXTENSION_LANGUAGES[mapping.extension]!;
+      if (!config.languages.includes(mappedLanguage)) {
+        throw new ConfigError(
+          `\`humanFileExtensions[${index}].extension\` selects ${mappedLanguage}, which must be listed in \`languages\`.`,
+        );
+      }
+    }
+    config.humanFileExtensions = mappings;
   }
   if (raw.filesToIgnore !== undefined) {
     config.filesToIgnore = expectStringArray(

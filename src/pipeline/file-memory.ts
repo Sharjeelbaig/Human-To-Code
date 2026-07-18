@@ -23,6 +23,8 @@ interface DeclarationCandidate {
 const EXTENSION_FAMILY: Readonly<Record<string, LanguageFamily>> = Object.freeze({
   ".ts": "javascript",
   ".tsx": "javascript",
+  ".mts": "javascript",
+  ".cts": "javascript",
   ".js": "javascript",
   ".jsx": "javascript",
   ".mjs": "javascript",

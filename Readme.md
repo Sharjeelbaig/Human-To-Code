@@ -108,12 +108,22 @@ The direct `npx human-to-code .` flow discovers work (whole `.human` files and
 inline `@human` markers), prints a receipt, and — after you confirm — converts
 them with the deterministic direct engine.
 
-Inline discovery currently supports `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
-`.cjs`, `.py`, `.rs`, `.go`, `.java`, `.rb`, `.cs`, `.cpp`, `.cc`, `.c`, `.h`,
-and `.hpp`. A marker-shaped `@human` request in another regular file up to
+Inline discovery currently supports `.ts`, `.tsx`, `.mts`, `.cts`, `.js`,
+`.jsx`, `.mjs`, `.cjs`, `.html`, `.htm`, `.css`, `.py`, `.rs`, `.go`, `.java`,
+`.rb`, `.cs`, `.cpp`, `.cc`, `.c`, `.h`, and `.hpp`. A marker-shaped `@human` request in another regular file up to
 1 MiB is reported as unsupported. Ignored/dot directories and symlinks are
 intentionally excluded from the direct walk; oversized unsupported files are
 not opened merely to produce a notice.
+
+The lexical marker scanner supports real `// @human` and `# @human` line
+comments, single-line or multiline `/* @human ... */` block comments,
+decorated JSDoc/block comments, and single-line or multiline HTML
+`<!-- @human ... -->` comments. In HTML, the same JavaScript and CSS comment
+forms also work inside `<script>` and `<style>`. Marker-shaped examples inside
+quoted attributes, strings, template literals, ordinary documentation
+comments, or another comment remain inert. Replacement removes exactly the
+recognized comment range and preserves surrounding text, newline style, and
+indentation.
 
 ### Fast deterministic engine
 
@@ -216,7 +226,12 @@ This complete local-Ollama example shows the policy fields:
 ```json
 {
   "schemaVersion": 1,
-  "languages": ["typescript", "html", "css"],
+  "languages": ["typescript", "html", "css", "javascript"],
+  "humanFileExtensions": [
+    { "path": "index.human", "extension": "html" },
+    { "path": "script.human", "extension": "js" },
+    { "path": "styles.human", "extension": "css" }
+  ],
   "filesToIgnore": ["node_modules", ".git", "dist"],
   "allowNonHumanFiles": false,
   "provider": {
@@ -253,7 +268,23 @@ This complete local-Ollama example shows the policy fields:
 }
 ```
 
-`languages` lists every output language enabled for direct conversion (`typescript`, `javascript`, `python`, `rust`, `html`, `css`); its first entry is the default. The receipt lists only the languages selected by the discovered units, not every configured possibility. An explicit inner extension is authoritative when configured: `index.html.human` writes `index.html` and `styles.css.human` writes `styles.css`. For a bare name such as `index.human`, discovery deterministically checks an explicit language named in the request, then an unambiguous filename convention, then request vocabulary, and finally falls back to the first configured language. For example, `index.human` containing “build the page in HTML” writes `index.html`, `script.human` containing “logic in JavaScript” writes `script.js`, and `styles.human` containing “styles in CSS” writes `styles.css`. This decision is made before confirmation without another model call. Use an inner extension when the request is intentionally multilingual or otherwise ambiguous. An inner extension whose language is not configured is treated as part of the file name. The singular `language` is retained for alpha compatibility; when supplied with `languages`, it must be a member and is normalized to the first/default entry. `filesToIgnore` accepts exact file/directory names, not glob expressions. With `sandbox.engine: "auto"`, validation probes Docker first and then Podman; `"docker"` and `"podman"` select one explicitly. Neither runtime being available makes validation `INCONCLUSIVE` and runs no project command.
+`languages` lists every output language enabled for direct conversion (`typescript`, `javascript`, `python`, `rust`, `html`, `css`); its first entry is the default. The receipt lists only the languages selected by the discovered units, not every configured possibility.
+
+`humanFileExtensions` provides the strongest routing signal. Each entry binds one exact, portable project-relative `.human` path to an output extension; a leading dot is optional, and the extension's language must appear in `languages`. This prevents prompt vocabulary from changing the output: the example always routes `script.human` to `script.js`, even if its instruction repeatedly mentions stylesheets, CSS classes, colors, or themes. Recognized inner extensions are replaced when an explicit mapping is present, so mapping `page.html.human` to `js` produces `page.js`.
+
+A `.human` file may instead declare its extension on its first nonblank line. The declaration is removed before the remaining instruction is sent to the model:
+
+```text
+html
+add head section here
+add styles
+close head
+add body
+```
+
+That `index.human` content writes `index.html`. Tokens such as `js`, `.js`, `mjs`, `ts`, `tsx`, `py`, `rs`, `html`, and `css` are accepted when their language is enabled. A config mapping wins over the first-line declaration, but conflicting languages are reported and skipped instead of guessed.
+
+Without either explicit route, a configured inner extension is authoritative: `index.html.human` writes `index.html` and `styles.css.human` writes `styles.css`. For a bare name, discovery checks an explicit language named in the request, then an unambiguous filename convention, then request vocabulary, and finally falls back to the first configured language. This decision is made before confirmation without another model call. The singular `language` is retained for alpha compatibility; when supplied with `languages`, it must be a member and is normalized to the first/default entry. `filesToIgnore` accepts exact file/directory names, not glob expressions. With `sandbox.engine: "auto"`, validation probes Docker first and then Podman; `"docker"` and `"podman"` select one explicitly. Neither runtime being available makes validation `INCONCLUSIVE` and runs no project command.
 
 ### Budget semantics
 

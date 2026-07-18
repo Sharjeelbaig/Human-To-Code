@@ -107,10 +107,17 @@ try {
   writeFileSync(join(mixedRoot, "human-to-code.config.json"), JSON.stringify({
     schemaVersion: 1,
     languages: ["typescript", "html", "css", "javascript"],
+    humanFileExtensions: [{ path: "script.human", extension: "js" }],
     provider: { name: "ollama", model: "fixture-model" },
   }));
-  writeFileSync(join(mixedRoot, "index.human"), "Build the calculator structure in HTML.\n");
-  writeFileSync(join(mixedRoot, "script.human"), "Build the calculator logic in JavaScript.\n");
+  writeFileSync(
+    join(mixedRoot, "index.human"),
+    "html\nadd head section here\nadd styles\nclose head\nadd body\n",
+  );
+  writeFileSync(
+    join(mixedRoot, "script.human"),
+    "Read stylesheet colors, fonts, spacing, backgrounds, borders, and themes, then update them on clicks.\n",
+  );
   writeFileSync(join(mixedRoot, "styles.human"), "Build the calculator styles in CSS.\n");
   const mixed = spawnSync(
     npx,
@@ -123,6 +130,30 @@ try {
   assert.match(mixed.stdout, /index\.human\s+->\s+index\.html/u);
   assert.match(mixed.stdout, /script\.human\s+->\s+script\.js/u);
   assert.match(mixed.stdout, /styles\.human\s+->\s+styles\.css/u);
+
+  const inlineRoot = join(installRoot, "inline-html-project");
+  mkdirSync(inlineRoot, { recursive: true });
+  writeFileSync(join(inlineRoot, "page.html"), [
+    "<!-- @human add a heading -->",
+    "<!--",
+    "  @human add the main content",
+    "-->",
+    "",
+  ].join("\n"));
+  writeFileSync(join(inlineRoot, "styles.css"), "/* @human add page colors */\n");
+  const inline = spawnSync(
+    npx,
+    ["--no-install", "human-to-code", inlineRoot, "--json"],
+    { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
+  );
+  assert.equal(inline.status, 3, inline.stderr || inline.stdout);
+  const inlinePlan = JSON.parse(inline.stdout);
+  assert.deepEqual(inlinePlan.notices, []);
+  assert.deepEqual(inlinePlan.units, [
+    { kind: "inline", source: "page.html", output: "page.html", language: "html" },
+    { kind: "inline", source: "page.html", output: "page.html", language: "html" },
+    { kind: "inline", source: "styles.css", output: "styles.css", language: "css" },
+  ]);
 
   // The reviewed/validated pipeline is still available under `guided`.
   const guided = spawnSync(

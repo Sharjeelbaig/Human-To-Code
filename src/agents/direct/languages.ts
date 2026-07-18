@@ -1,3 +1,4 @@
+import { languageForCodeExtension } from "../../core/languages.ts";
 import type { LanguageProfile } from "./types.ts";
 
 /** Operator-declared config language -> output extension and prompt label. */
@@ -21,14 +22,6 @@ export function languageProfile(language: string): LanguageProfile {
 }
 
 /** File extension (with or without a leading dot) -> owning config language. */
-const EXTENSION_LANGUAGES: Record<string, string> = {
-  ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
-  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-  py: "python", rs: "rust", go: "go", java: "java", rb: "ruby", cs: "csharp",
-  cpp: "cpp", cc: "cpp", hpp: "cpp", c: "c", h: "c",
-  html: "html", htm: "html", css: "css",
-};
-
 export function languageForExtension(extension: string): string | undefined {
-  return EXTENSION_LANGUAGES[extension.replace(/^\./u, "").toLowerCase()];
+  return languageForCodeExtension(extension);
 }

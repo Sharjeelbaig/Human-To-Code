@@ -8,6 +8,7 @@ import {
   FileMemory,
   FileMemoryConflictError,
   applyUnit,
+  discoverDirectUnits,
   discoverUnits,
   extractInlineMarkers,
   generateCode,
@@ -435,6 +436,81 @@ test("an explicit request language wins over filename and vocabulary hints", asy
     const units = await discoverUnits(root, ["typescript", "javascript", "css"]);
     assert.equal(units[0]?.outputPath, "styles.js");
     assert.equal(units[0]?.language, "javascript");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("configured human-file extensions override misleading prompt vocabulary", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-configured-extension-"));
+  try {
+    const instruction = "Read the stylesheet colors, fonts, spacing, backgrounds, borders, and themes, then update them on clicks.";
+    await writeFile(join(root, "script.human"), `${instruction}\n`);
+
+    const units = await discoverUnits(
+      root,
+      ["typescript", "javascript", "css"],
+      [{ path: "script.human", extension: "js" }],
+    );
+    assert.equal(units[0]?.outputPath, "script.js");
+    assert.equal(units[0]?.language, "javascript");
+    assert.equal(units[0]?.prompt, instruction);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a first-line extension routes the file and is removed from the model prompt", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-declared-extension-"));
+  try {
+    await writeFile(join(root, "index.human"), [
+      "html",
+      "add head section here",
+      "add styles",
+      "close head",
+      "add body",
+      "",
+    ].join("\n"));
+    await writeFile(join(root, "script.human"), [
+      ".js",
+      "Read stylesheet colors and update CSS classes on clicks.",
+      "",
+    ].join("\n"));
+
+    const units = await discoverUnits(root, ["typescript", "html", "css", "javascript"]);
+    const bySource = new Map(units.map((unit) => [unit.sourcePath, unit]));
+    assert.equal(bySource.get("index.human")?.outputPath, "index.html");
+    assert.equal(bySource.get("index.human")?.language, "html");
+    assert.equal(bySource.get("index.human")?.prompt, [
+      "add head section here",
+      "add styles",
+      "close head",
+      "add body",
+    ].join("\n"));
+    assert.equal(bySource.get("script.human")?.outputPath, "script.js");
+    assert.equal(bySource.get("script.human")?.language, "javascript");
+    assert.equal(bySource.get("script.human")?.prompt, "Read stylesheet colors and update CSS classes on clicks.");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("conflicting or disabled first-line extensions are reported instead of guessed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-extension-conflict-"));
+  try {
+    await writeFile(join(root, "conflict.human"), "css\nCreate the behavior.\n");
+    await writeFile(join(root, "disabled.human"), "html\nCreate the page.\n");
+
+    const discovered = await discoverDirectUnits(
+      root,
+      ["typescript", "javascript", "css"],
+      [{ path: "conflict.human", extension: "js" }],
+    );
+    assert.deepEqual(discovered.units, []);
+    assert.deepEqual(discovered.notices.map(({ sourcePath, code }) => ({ sourcePath, code })), [
+      { sourcePath: "conflict.human", code: "EXTENSION_CONFLICT" },
+      { sourcePath: "disabled.human", code: "UNCONFIGURED_EXTENSION" },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
