@@ -198,7 +198,11 @@ html[data-theme="dark"] .icon-moon { display: block; }
   max-width: 1380px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.2fr);
+  /* Content column is a bit wider (1.45fr vs the old 1.2fr) so the buttons +
+     command pill fit on one line. This only widens the content leftward into
+     the decorative wire area; the buttons stay left-anchored and are never
+     pushed right. */
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.45fr);
   gap: 24px;
   align-items: center;
 }
@@ -366,6 +370,21 @@ html[data-theme="dark"] .icon-moon { display: block; }
 }
 .cmd-copy:hover { background: rgba(255, 255, 255, 0.24); transform: scale(1.08); }
 .cmd-copy.copied { background: #22c55e; color: #fff; }
+
+/* --- Hero actions: buttons on the left, command pill on the SAME row just to
+   their right (in the empty space beside them). The wider content column above
+   gives this row enough width to stay on one line. If a viewport is too narrow
+   for both, flex-wrap drops the pill onto its own line rather than overflow. --- */
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  margin-top: 30px;
+}
+.hero-actions > .hero-cta,
+.hero-actions > .cmd-pill { margin-top: 0; }
 
 /* --- CTA buttons --- */
 .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 24px; }
@@ -1303,11 +1322,20 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
   .hero-line-code { margin-left: 0; margin-top: .18em; }
   .hero-highlight { padding-inline: .025em .055em; }
   .hero-sub { margin-top: 16px; font-size: 1.05rem; }
+  /* Stack on phones: command pill on top, buttons below (original layout). */
+  .hero-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    margin-top: 24px;
+  }
+  .hero-actions > .cmd-pill { order: 1; margin-top: 0; }
+  .hero-actions > .hero-cta { order: 2; margin-top: 24px; }
   .cmd-pill {
     width: 100%;
     max-width: 100%;
     gap: 8px;
-    margin-top: 24px;
     padding: 11px 12px;
     font-size: 0.9rem;
   }
