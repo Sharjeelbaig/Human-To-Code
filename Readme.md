@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="human-to-code — reviewed intent to validated code patches" width="100%">
+  <img src="assets/banner.svg" alt="human-to-code — write intent in plain language, compile it to real code" width="100%">
 </p>
 
 <p align="center">

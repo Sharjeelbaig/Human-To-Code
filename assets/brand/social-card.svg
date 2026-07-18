@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-labelledby="title desc">
-  <title id="title">human-to-code — reviewed intent to validated code</title>
+  <title id="title">human-to-code — plain language to real code</title>
   <desc id="desc">Social sharing card for human-to-code.</desc>
   <defs>
     <linearGradient id="bg" x1="80" y1="40" x2="1200" y2="620" gradientUnits="userSpaceOnUse">
@@ -24,19 +24,19 @@
     <rect x="58" y="45" width="12" height="38" rx="6" fill="#ff5f3c"/>
   </g>
   <text x="258" y="177" fill="#f7f4ef" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="64" font-weight="850" letter-spacing="-3">human-to-code</text>
-  <text x="91" y="315" fill="#f7f4ef" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="50" font-weight="760" letter-spacing="-1.6">Reviewed intent.</text>
-  <text x="91" y="376" fill="#ff8a5c" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="50" font-weight="760" letter-spacing="-1.6">Validated code.</text>
-  <text x="91" y="432" fill="#aaa6b0" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="23">Security-constrained compiler agent for grounded, reviewable patches.</text>
+  <text x="91" y="315" fill="#f7f4ef" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="50" font-weight="760" letter-spacing="-1.6">Plain language.</text>
+  <text x="91" y="376" fill="#ff8a5c" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="50" font-weight="760" letter-spacing="-1.6">Real code.</text>
+  <text x="91" y="432" fill="#aaa6b0" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="23">Turns .human files and @human markers straight into real code.</text>
   <g transform="translate(91 500)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" font-weight="700">
     <rect width="142" height="48" rx="24" fill="#f7f4ef" fill-opacity=".08" stroke="#fff" stroke-opacity=".12"/>
     <text x="71" y="31" text-anchor="middle" fill="#f7f4ef">.human</text>
     <path d="M155 24h42" stroke="#ff5f3c" stroke-width="3" stroke-linecap="round"/>
     <path d="m190 17 8 7-8 7" fill="none" stroke="#ff5f3c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
     <rect x="211" width="168" height="48" rx="24" fill="#f7f4ef" fill-opacity=".08" stroke="#fff" stroke-opacity=".12"/>
-    <text x="295" y="31" text-anchor="middle" fill="#f7f4ef">review</text>
+    <text x="295" y="31" text-anchor="middle" fill="#f7f4ef">generate</text>
     <path d="M392 24h42" stroke="#ff5f3c" stroke-width="3" stroke-linecap="round"/>
     <path d="m427 17 8 7-8 7" fill="none" stroke="#ff5f3c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
     <rect x="448" width="182" height="48" rx="24" fill="#ff5f3c"/>
-    <text x="539" y="31" text-anchor="middle" fill="#13090b">verified patch</text>
+    <text x="539" y="31" text-anchor="middle" fill="#13090b">code</text>
   </g>
 </svg>
