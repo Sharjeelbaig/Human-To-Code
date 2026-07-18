@@ -546,7 +546,12 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       provider: providerName,
       model,
       requests: units.length,
-      units: units.map((unit) => ({ kind: unit.kind, source: unit.sourcePath, output: unit.outputPath ?? unit.sourcePath })),
+      units: units.map((unit) => ({
+        kind: unit.kind,
+        source: unit.sourcePath,
+        output: unit.outputPath ?? unit.sourcePath,
+        language: unit.language ?? language,
+      })),
       notices: discovery.notices,
     };
     if (!cli.yes || units.length === 0) {

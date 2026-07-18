@@ -24,7 +24,10 @@ export interface ProjectDiagnostic {
 
 /**
  * Permissive fixed compiler options: the goal is catching real cross-file
- * contradictions in generated code, not enforcing a strictness style. Bundler
+ * contradictions in generated code, not enforcing a strictness style. The
+ * default environment includes both modern ECMAScript and browser globals so
+ * a plain HTML/CSS/JavaScript `.human` project can use `document`, `window`,
+ * DOM events, and iterable DOM collections without false diagnostics. Bundler
  * resolution accepts extensionless, `.js`-suffixed, and (with noEmit)
  * `.ts`-suffixed relative imports, matching what direct models emit.
  */
@@ -33,7 +36,7 @@ function validationCompilerOptions(root: string): ts.CompilerOptions {
     target: ts.ScriptTarget.ES2023,
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
-    lib: ["lib.es2023.d.ts"],
+    lib: ["lib.es2023.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
     allowJs: true,
     checkJs: true,
     jsx: ts.JsxEmit.Preserve,

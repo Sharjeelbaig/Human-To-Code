@@ -383,6 +383,23 @@ test("non-JS/TS units bypass combined program validation unchanged", async () =>
   }
 });
 
+test("default JavaScript project validation accepts browser DOM APIs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-browser-js-"));
+  try {
+    const outcome = await validateCandidateProject(root, [{
+      unit: fileUnit(root, "script.human", "script.js"),
+      code: [
+        'const display = document.querySelector("#display");',
+        'display?.addEventListener("click", () => console.log(window.location.href));',
+      ].join("\n"),
+    }]);
+    assert.equal(outcome.validated, true);
+    assert.equal(outcome.results[0]?.error, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("repair prompt wraps diagnostics and related files as untrusted data in src/prompts", () => {
   const prompt = buildDirectRepairPrompt({
     languageLabel: "TypeScript",

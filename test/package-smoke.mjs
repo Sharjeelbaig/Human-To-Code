@@ -40,6 +40,7 @@ try {
     ),
   );
   assert.equal(installedPackage.bin["human-to-code"], "./dist/cli.js");
+  assert.equal(installedPackage.version, "0.1.20");
 
   // The staged JS/TS project validation path needs the TypeScript compiler and
   // bundled node builtin typings at runtime in a clean install.
@@ -92,7 +93,36 @@ try {
   assert.equal(plan.status, "NEEDS_CONFIRMATION");
   assert.equal(plan.provider, "ollama");
   assert.equal(plan.requests, 1);
-  assert.deepEqual(plan.units, [{ kind: "file", source: "feature.human", output: "feature.ts" }]);
+  assert.deepEqual(plan.units, [{
+    kind: "file",
+    source: "feature.human",
+    output: "feature.ts",
+    language: "typescript",
+  }]);
+
+  // A packed install must retain per-file language inference; testing only the
+  // source CLI would miss a stale or incomplete dist build.
+  const mixedRoot = join(installRoot, "mixed-language-project");
+  mkdirSync(mixedRoot, { recursive: true });
+  writeFileSync(join(mixedRoot, "human-to-code.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    languages: ["typescript", "html", "css", "javascript"],
+    provider: { name: "ollama", model: "fixture-model" },
+  }));
+  writeFileSync(join(mixedRoot, "index.human"), "Build the calculator structure in HTML.\n");
+  writeFileSync(join(mixedRoot, "script.human"), "Build the calculator logic in JavaScript.\n");
+  writeFileSync(join(mixedRoot, "styles.human"), "Build the calculator styles in CSS.\n");
+  const mixed = spawnSync(
+    npx,
+    ["--no-install", "human-to-code", mixedRoot, "--dry-run"],
+    { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
+  );
+  assert.equal(mixed.status, 0, mixed.stderr || mixed.stdout);
+  assert.match(mixed.stdout, /Languages: HTML \(\.html\), JavaScript \(\.js\), CSS \(\.css\)/u);
+  assert.doesNotMatch(mixed.stdout, /TypeScript \(\.ts\)/u);
+  assert.match(mixed.stdout, /index\.human\s+->\s+index\.html/u);
+  assert.match(mixed.stdout, /script\.human\s+->\s+script\.js/u);
+  assert.match(mixed.stdout, /styles\.human\s+->\s+styles\.css/u);
 
   // The reviewed/validated pipeline is still available under `guided`.
   const guided = spawnSync(

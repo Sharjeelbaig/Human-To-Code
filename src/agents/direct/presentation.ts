@@ -12,23 +12,39 @@ export function renderReceipt(
   units: readonly ConversionUnit[],
   provider: string,
   model: string,
-  language: string | readonly string[],
+  configuredLanguages: string | readonly string[],
 ): string {
-  const list = typeof language === "string" ? [language] : language;
-  const rendered = list
+  const configured = typeof configuredLanguages === "string"
+    ? [configuredLanguages]
+    : configuredLanguages;
+  const primary = configured[0] ?? "typescript";
+  const selected = units.length === 0
+    ? [...configured]
+    : [...new Set(units.map((unit) => unit.language ?? primary))];
+  const rendered = selected
     .map((entry) => {
       const profile = languageProfile(entry);
       return `${profile.label} (.${profile.ext})`;
     })
     .join(", ");
+  const repairableUnits = units.filter((unit) => {
+    const language = unit.language ?? primary;
+    return language === "typescript" || language === "javascript";
+  });
+  const repairLanguages = [...new Set(repairableUnits.map((unit) => unit.language ?? primary))]
+    .map((language) => languageProfile(language).label)
+    .join("/");
+  const repairAllowance = repairableUnits.length > 0
+    ? ` (up to ${repairableUnits.length} extra bounded repair request${repairableUnits.length === 1 ? "" : "s"} for ${repairLanguages})`
+    : "";
   const lines = [
     "human-to-code — conversion receipt",
     "",
-    `  ${list.length > 1 ? "Languages:" : "Language :"} ${rendered}`,
+    `  ${selected.length > 1 ? "Languages:" : "Language :"} ${rendered}`,
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
     `  Engine   : direct (one model request per prompt; bounded cross-file repair may add requests)`,
-    `  Requests : ${units.length} planned (up to ${units.length} extra bounded repair requests for JS/TS)`,
+    `  Requests : ${units.length} planned${repairAllowance}`,
     "",
   ];
   if (units.length === 0) lines.push("  No .human files or @human markers were found.");

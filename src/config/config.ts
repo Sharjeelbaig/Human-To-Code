@@ -905,6 +905,14 @@ export function validateConfig(raw: unknown): ConfigV1 {
       throw new ConfigError(
         "`language` must be listed in `languages` when both are set.",
       );
+    } else {
+      // Keep one authoritative primary language. `language` is the legacy
+      // spelling of that default, while the first `languages` entry drives
+      // direct discovery and receipt ordering.
+      config.languages = [
+        config.language,
+        ...languages.filter((language) => language !== config.language),
+      ];
     }
   } else if (raw.language !== undefined) {
     config.languages = [config.language];

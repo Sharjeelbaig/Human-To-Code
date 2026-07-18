@@ -84,6 +84,7 @@ test("a lone legacy language becomes the languages list", () => {
 test("language must be a member of languages when both are set", () => {
   const config = validateConfig({ ...V1, language: "css", languages: ["html", "css"] });
   assert.equal(config.language, "css");
+  assert.deepEqual(config.languages, ["css", "html"]);
   assert.throws(
     () => validateConfig({ ...V1, language: "python", languages: ["html"] }),
     ConfigError,

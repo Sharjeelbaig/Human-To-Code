@@ -80,18 +80,58 @@ test("default convert flow lists .human files and @human markers without contact
     assert.equal(result.code, 3, result.stderr || result.stdout);
     const plan = JSON.parse(result.stdout) as {
       status: string; language: string; provider: string; requests: number;
-      units: Array<{ kind: string; source: string; output: string }>;
+      units: Array<{ kind: string; source: string; output: string; language: string }>;
     };
     assert.equal(plan.status, "NEEDS_CONFIRMATION");
     assert.equal(plan.language, "typescript");
     assert.equal(plan.provider, "ollama");
     assert.equal(plan.requests, 2);
     assert.deepEqual(plan.units, [
-      { kind: "file", source: "add.human", output: "add.ts" },
-      { kind: "inline", source: "math.ts", output: "math.ts" },
+      { kind: "file", source: "add.human", output: "add.ts", language: "typescript" },
+      { kind: "inline", source: "math.ts", output: "math.ts", language: "typescript" },
     ]);
     // No confirmation was given, so nothing is written and no provider is called.
     await assert.rejects(access(join(root, "add.ts")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("multi-language receipt reports the inferred outputs instead of the configured default", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-multi-language-"));
+  try {
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["typescript", "html", "css", "javascript"],
+      provider: { name: "ollama", model: "fixture-model" },
+    }));
+    await put(root, "index.human", "Here is complete structure of calculator in html\n");
+    await put(root, "script.human", "Here is the logic for calculator in javascript\n");
+    await put(root, "styles.human", "Here is complete styles of calculator in css\n");
+
+    const receipt = await cli([root, "--dry-run"]);
+    assert.equal(receipt.code, 0, receipt.stderr || receipt.stdout);
+    assert.match(receipt.stdout, /Languages: HTML \(\.html\), JavaScript \(\.js\), CSS \(\.css\)/u);
+    assert.doesNotMatch(receipt.stdout, /TypeScript \(\.ts\)/u);
+    assert.match(receipt.stdout, /index\.human\s+->\s+index\.html/u);
+    assert.match(receipt.stdout, /script\.human\s+->\s+script\.js/u);
+    assert.match(receipt.stdout, /styles\.human\s+->\s+styles\.css/u);
+    assert.match(receipt.stdout, /3 planned \(up to 1 extra bounded repair request for JavaScript\)/u);
+    assert.doesNotMatch(receipt.stdout, /TypeScript|\.ts\b/u);
+    await assert.rejects(access(join(root, "index.html")));
+
+    const json = await cli([root, "--json"]);
+    assert.equal(json.code, 3, json.stderr || json.stdout);
+    const plan = JSON.parse(json.stdout) as {
+      languages: string[];
+      units: Array<{ output: string; language: string }>;
+    };
+    assert.deepEqual(plan.languages, ["typescript", "html", "css", "javascript"]);
+    assert.deepEqual(plan.units.map(({ output, language }) => ({ output, language })), [
+      { output: "index.html", language: "html" },
+      { output: "script.js", language: "javascript" },
+      { output: "styles.css", language: "css" },
+    ]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

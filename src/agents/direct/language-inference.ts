@@ -20,6 +20,21 @@ const EXPLICIT_MENTIONS: ReadonlyArray<readonly [string, RegExp]> = [
 ];
 
 /**
+ * When a request names more than one language, prefer the one described as
+ * the output. This makes instructions such as "convert JavaScript to
+ * TypeScript" deterministic without allowing a weaker vocabulary score to
+ * override an otherwise unambiguous explicit language name.
+ */
+const OUTPUT_MENTIONS: Readonly<Record<string, RegExp>> = {
+  typescript: /\b(?:as|in|into|to|using|with)\s+(?:plain\s+)?typescript\b|\btypescript\s+(?:code|file|module|output)\b/u,
+  javascript: /\b(?:as|in|into|to|using|with)\s+(?:plain\s+|vanilla\s+)?(?:javascript|js)\b|\b(?:javascript|js)\s+(?:code|file|module|output)\b/u,
+  html: /\b(?:as|in|into|to|using|with)\s+(?:plain\s+)?html5?\b|\bhtml5?\s+(?:code|document|file|markup|output|page)\b/u,
+  css: /\b(?:as|in|into|to|using|with)\s+(?:plain\s+)?css3?\b|\bcss3?\s+(?:code|file|output|stylesheet)\b/u,
+  python: /\b(?:as|in|into|to|using|with)\s+(?:plain\s+)?python\b|\bpython\s+(?:code|file|module|output|script)\b/u,
+  rust: /\b(?:as|in|into|to|using|with)\s+(?:plain\s+)?rust\b|\brust\s+(?:code|file|module|output)\b/u,
+};
+
+/**
  * Filename stems that conventionally belong to one language. `index` is
  * deliberately absent: `index.html` and `index.ts` are equally idiomatic, so
  * that name is decided by the request text instead.
@@ -43,25 +58,11 @@ const VOCABULARY: Readonly<Record<string, RegExp>> = {
   rust: /\b(?:functions?|structs?|traits?|enums?|impl|modules?|crates?|ownership|borrow\w*|algorithm|calculate|calculation|logic|sort|parse|loop|loops)\b/gu,
 };
 
-const EXPLICIT_WEIGHT = 6;
-const STEM_WEIGHT = 3;
-const MAX_VOCABULARY_SCORE = 4;
-
 function countMatches(pattern: RegExp, text: string): number {
   // Each language's vocabulary pattern is global; reset lastIndex so repeated
   // inference calls cannot inherit a previous match position.
   pattern.lastIndex = 0;
   return [...text.matchAll(pattern)].length;
-}
-
-function scoreLanguage(language: string, stem: string, request: string): number {
-  let score = 0;
-  const explicit = EXPLICIT_MENTIONS.find(([name]) => name === language)?.[1];
-  if (explicit?.test(request)) score += EXPLICIT_WEIGHT;
-  if (STEM_CONVENTIONS[language]?.test(stem)) score += STEM_WEIGHT;
-  const vocabulary = VOCABULARY[language];
-  if (vocabulary) score += Math.min(countMatches(vocabulary, request), MAX_VOCABULARY_SCORE);
-  return score;
 }
 
 /**
@@ -79,10 +80,23 @@ export function inferUnitLanguage(
 
   const stem = fileStem.trim().toLowerCase();
   const text = request.toLowerCase();
+
+  const explicitlyNamed = configured.filter((language) =>
+    EXPLICIT_MENTIONS.find(([name]) => name === language)?.[1].test(text) === true);
+  if (explicitlyNamed.length === 1) return explicitlyNamed[0]!;
+  if (explicitlyNamed.length > 1) {
+    const outputLanguage = explicitlyNamed.find((language) => OUTPUT_MENTIONS[language]?.test(text));
+    return outputLanguage ?? explicitlyNamed[0]!;
+  }
+
+  const conventional = configured.filter((language) => STEM_CONVENTIONS[language]?.test(stem) === true);
+  if (conventional.length === 1) return conventional[0]!;
+
   let best = primary;
   let bestScore = 0;
   for (const language of configured) {
-    const score = scoreLanguage(language, stem, text);
+    const vocabulary = VOCABULARY[language];
+    const score = vocabulary ? countMatches(vocabulary, text) : 0;
     if (score > bestScore) {
       best = language;
       bestScore = score;

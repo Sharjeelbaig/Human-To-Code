@@ -402,6 +402,44 @@ test("multi-language discovery routes .human files by inner extension", async ()
   }
 });
 
+test("multi-language discovery infers bare .human outputs from explicit request languages", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-inferred-language-"));
+  try {
+    await writeFile(join(root, "index.human"), "Here is complete structure of calculator in html\n");
+    await writeFile(join(root, "script.human"), "Here is the logic for calculator in javascript\n");
+    await writeFile(join(root, "styles.human"), "Here is complete styles of calculator in css\n");
+
+    const units = await discoverUnits(root, ["typescript", "html", "css", "javascript"]);
+    assert.deepEqual(units.map(({ sourcePath, outputPath, language }) => ({
+      sourcePath,
+      outputPath,
+      language,
+    })), [
+      { sourcePath: "index.human", outputPath: "index.html", language: "html" },
+      { sourcePath: "script.human", outputPath: "script.js", language: "javascript" },
+      { sourcePath: "styles.human", outputPath: "styles.css", language: "css" },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an explicit request language wins over filename and vocabulary hints", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-explicit-language-"));
+  try {
+    await writeFile(
+      join(root, "styles.human"),
+      "Write JavaScript code that stores colors, fonts, spacing, backgrounds, borders, and themes.\n",
+    );
+
+    const units = await discoverUnits(root, ["typescript", "javascript", "css"]);
+    assert.equal(units[0]?.outputPath, "styles.js");
+    assert.equal(units[0]?.language, "javascript");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("single-language discovery keeps its legacy output naming", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-single-language-"));
   try {
