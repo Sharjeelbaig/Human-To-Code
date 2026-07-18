@@ -1,6 +1,13 @@
 import { languageProfile } from "./languages.ts";
 import type { ConversionUnit } from "./types.ts";
 
+export class ModelOutputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelOutputError";
+  }
+}
+
 export function renderReceipt(
   units: readonly ConversionUnit[],
   provider: string,
@@ -28,6 +35,13 @@ export function renderReceipt(
 
 export function stripCodeFence(output: string): string {
   const trimmed = output.trim();
-  const match = /^```(?:[\w.+-]+)?\s*\n?([\s\S]*?)\n?```$/u.exec(trimmed);
-  return (match?.[1] ?? trimmed).trim();
+  const fences = [...trimmed.matchAll(/```(?:[\w.+-]+)?[ \t]*\r?\n([\s\S]*?)\r?\n?```/gu)];
+  if (fences.length > 1) {
+    throw new ModelOutputError("Model returned multiple fenced code blocks; refusing an ambiguous replacement.");
+  }
+  if (fences.length === 1) return (fences[0]?.[1] ?? "").trim();
+  if (trimmed.includes("```")) {
+    throw new ModelOutputError("Model returned an unterminated code fence; refusing to write formatting as source.");
+  }
+  return trimmed;
 }

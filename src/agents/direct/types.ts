@@ -19,6 +19,8 @@ export interface ConversionUnit {
   outputPath?: string;
   /** For `inline` units, the character range of the marker to replace. */
   range?: { start: number; end: number };
+  /** Exact marker bytes captured during discovery; required for stale-edit detection. */
+  expectedMarker?: string;
   /** 1-based source line of the marker, for progress display. */
   line?: number;
   /** Short human-readable description for the receipt. */
@@ -50,6 +52,19 @@ export interface GenerateUnitsOptions {
   /** Extra generation attempts when a unit trips the FileMemory guard or the provider errors. */
   retries?: number;
   onProgress?: (event: ConversionProgress) => void;
+  /** Fail-closed candidate check run before a unit is remembered or applied. */
+  validate?: (unit: ConversionUnit, code: string) => Promise<void>;
+}
+
+export interface DirectDiscoveryNotice {
+  code: "TARGET_EXISTS" | "UNSUPPORTED_MARKER_FILE";
+  sourcePath: string;
+  message: string;
+}
+
+export interface DirectDiscoveryResult {
+  units: ConversionUnit[];
+  notices: DirectDiscoveryNotice[];
 }
 
 export interface GenerateOptions {

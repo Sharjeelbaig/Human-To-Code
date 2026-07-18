@@ -32,10 +32,11 @@ import { createOllamaProvider, createOpenAIProvider } from "./providers/provider
 import { RunStore } from "./pipeline/run-store.ts";
 import {
   applyUnit,
-  discoverUnits,
+  discoverDirectUnits,
   generateConversionUnits,
   generateCode,
   renderReceipt,
+  validateGeneratedUnit,
   type ConversionUnit,
   type ConversionProgress,
 } from "./agents/direct/index.ts";
@@ -530,7 +531,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const language = effective.language;
   const providerName = effective.provider.name;
   const model = effective.provider.model;
-  const units = await discoverUnits(root, language);
+  const discovery = await discoverDirectUnits(root, language);
+  const units = discovery.units;
 
   if (cli.json) {
     const plan = {
@@ -540,6 +542,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       model,
       requests: units.length,
       units: units.map((unit) => ({ kind: unit.kind, source: unit.sourcePath, output: unit.outputPath ?? unit.sourcePath })),
+      notices: discovery.notices,
     };
     if (!cli.yes || units.length === 0) {
       output(plan, true);
@@ -547,6 +550,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     }
   } else {
     output(renderReceipt(units, providerName, model, language), false);
+    for (const notice of discovery.notices) output(`  ! ${notice.message}`, false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
@@ -616,7 +620,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
           ...context,
         });
       },
-      { retries: 1, ...(onProgress ? { onProgress } : {}) },
+      { retries: 1, validate: validateGeneratedUnit, ...(onProgress ? { onProgress } : {}) },
     );
   } catch (error) {
     spinner.stop();
@@ -647,9 +651,15 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       if (!cli.json) output(`  ⊘ skipped ${describeUnit(unit)}: empty model output`, false);
       continue;
     }
-    const path = await applyUnit(root, unit, code);
-    written.push(path);
-    if (!cli.json) output(`  ✓ ${describeUnit(unit)}`, false);
+    try {
+      const path = await applyUnit(root, unit, code);
+      written.push(path);
+      if (!cli.json) output(`  ✓ ${describeUnit(unit)}`, false);
+    } catch (applyError) {
+      const reason = applyError instanceof Error ? applyError.message : String(applyError);
+      skipped.push({ source: unit.sourcePath, reason });
+      if (!cli.json) output(`  ⊘ skipped ${describeUnit(unit)}: ${reason}`, false);
+    }
   }
   const seconds = Math.round((Date.now() - started) / 1000);
   if (cli.json) {

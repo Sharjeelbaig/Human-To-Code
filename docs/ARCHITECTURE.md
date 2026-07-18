@@ -132,23 +132,29 @@ only in `src/prompts/`. Agent orchestration passes typed, validated inputs into
 pure prompt builders; provider transports do not invent agent policy, and
 pipeline mechanics do not embed prose instructions.
 
-**Minimal-dependency host.** The deterministic engine, guided pipeline, and all
-host safety code (hashing, patch validation, sandbox validation, HTTP adapters,
-secret scanning) use only Node built-ins. Their runtime supply-chain surface is
-Node itself.
+**Minimal-dependency host.** The guided pipeline and host safety code (hashing,
+patch validation, sandbox validation, HTTP adapters, secret scanning) use Node
+built-ins. The direct agent has one deliberate runtime parser dependency:
+TypeScript, used to reject malformed JavaScript/TypeScript candidates before
+they reach the working tree. Other direct languages use host-owned structural
+checks; adding another runtime dependency still requires design review.
 
 ## The generation paths
 
 1. **Direct agent** (`agents/direct/`, the default
    `npx human-to-code .` flow): host code discovers the worklist, and for each
    unit issues **one plain model completion** (no tool calls), applying the
-   result by exact marker range. It statically indexes declarations into
+   result only after output normalization and candidate syntax validation. It
+   statically indexes declarations into
    ephemeral FileMemory (with few-shot prompting) so the model reuses rather
-   than re-declares symbols. Each marker is isolated — a bad or failing unit is
-   retried, then skipped with a reason, and the rest still convert; only a
-   security stop aborts the run. This is fast and works with small models that
-   cannot do tool-calling. It shares no state with the guided pipeline and never
-   reaches `VERIFIED`.
+   than re-declares symbols. Exclusive whole-file creation prevents sibling
+   overwrite, while exact marker-byte checks and shared indentation formatting
+   make inline application stale-safe. Each marker is isolated — a bad or
+   failing unit is retried, then skipped with a reason, and the rest still
+   convert; only a security stop aborts the run. This is fast and works with
+   small models that cannot do tool-calling. Its syntax checks are not project
+   builds, semantic verification, or sandbox execution. It shares no state with
+   the guided pipeline and never reaches `VERIFIED`.
 2. **Guided agent** (`agents/guided/`, the `guided` subcommand): full
    contract → grounding → sandbox validation lifecycle described above. This is
    the production-architecture path and the only one that can reach `VERIFIED`.

@@ -145,11 +145,20 @@ interface StructureState {
   triple?: "'''" | "\"\"\"";
   blockComment: boolean;
   escaped: boolean;
+  regex: boolean;
+  regexClass: boolean;
 }
 
 interface LineStructure {
   topLevelSemicolon: boolean;
   topLevelHeaderEnd: boolean;
+}
+
+function regexMayStart(line: string, index: number): boolean {
+  const prefix = line.slice(0, index).trimEnd();
+  if (prefix.length === 0) return true;
+  if (/[=(:,!&|?;{}\[\]]$/u.test(prefix)) return true;
+  return /\b(?:return|throw|case|yield|await|typeof|instanceof|in|of|delete|void|new)$/u.test(prefix);
 }
 
 function scanStructure(line: string, family: LanguageFamily, state: StructureState): LineStructure {
@@ -163,6 +172,14 @@ function scanStructure(line: string, family: LanguageFamily, state: StructureSta
         state.blockComment = false;
         index += 1;
       }
+      continue;
+    }
+    if (state.regex) {
+      if (state.escaped) state.escaped = false;
+      else if (char === "\\") state.escaped = true;
+      else if (char === "[") state.regexClass = true;
+      else if (char === "]") state.regexClass = false;
+      else if (char === "/" && !state.regexClass) state.regex = false;
       continue;
     }
     if (state.triple) {
@@ -184,6 +201,12 @@ function scanStructure(line: string, family: LanguageFamily, state: StructureSta
       continue;
     }
     if (char === "/" && next === "/") break;
+    if (family === "javascript" && char === "/" && regexMayStart(line, index)) {
+      state.regex = true;
+      state.regexClass = false;
+      state.escaped = false;
+      continue;
+    }
     if ((family === "python" || family === "ruby") && char === "#") break;
     if (family === "python" && (line.startsWith("'''", index) || line.startsWith("\"\"\"", index))) {
       state.triple = line.slice(index, index + 3) as StructureState["triple"];
@@ -207,6 +230,12 @@ function scanStructure(line: string, family: LanguageFamily, state: StructureSta
       topLevelHeaderEnd = true;
     }
   }
+  // JavaScript regex literals cannot contain a raw newline. Do not let an
+  // invalid or truncated regex hide declarations on every following line.
+  if (state.regex && !state.escaped) {
+    state.regex = false;
+    state.regexClass = false;
+  }
   return { topLevelSemicolon, topLevelHeaderEnd };
 }
 
@@ -216,7 +245,15 @@ interface SpanResolution {
 }
 
 function spanEnd(lines: readonly string[], start: number, family: LanguageFamily, candidate: DeclarationCandidate): SpanResolution {
-  const state: StructureState = { round: 0, square: 0, curly: 0, blockComment: false, escaped: false };
+  const state: StructureState = {
+    round: 0,
+    square: 0,
+    curly: 0,
+    blockComment: false,
+    escaped: false,
+    regex: false,
+    regexClass: false,
+  };
   for (let index = start; index < lines.length; index += 1) {
     const structure = scanStructure(lines[index]!, family, state);
     const balanced = state.round === 0 && state.square === 0 && state.curly === 0 && !state.quote && !state.triple && !state.blockComment;

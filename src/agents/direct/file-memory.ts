@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { ContextSecurityError, scanSecrets } from "../../context/context.ts";
 import { extractStaticFileMemory } from "../../pipeline/file-memory.ts";
+import { declaredIdentifiers } from "./declarations.ts";
+import { formatInlineReplacement } from "./replacement.ts";
 import type {
   ConversionUnit,
   FileMemoryEntry,
@@ -14,14 +16,6 @@ export class FileMemoryConflictError extends Error {
     super(message);
     this.name = "FileMemoryConflictError";
   }
-}
-
-function declaredIdentifiers(code: string): Set<string> {
-  const identifiers = new Set<string>();
-  const declaration = /^[ \t]*(?:(?:export|default|declare|public|private|protected|async|pub)\s+)*(?:const|let|var|function|class|interface|enum|struct|trait|fn|def|static|type)\s+([A-Za-z_$][A-Za-z0-9_$]*)/gmu;
-  let match: RegExpExecArray | null;
-  while ((match = declaration.exec(code)) !== null) identifiers.add(match[1]!);
-  return identifiers;
 }
 
 function stripMemorySeparator(value: string): string | undefined {
@@ -78,8 +72,9 @@ export class FileMemory {
     }
     const startLine = 1 + (this.#virtualText.slice(0, start).match(/\n/g)?.length ?? 0);
     const endLine = startLine + (replacement.match(/\n/g)?.length ?? 0);
-    this.#virtualText = `${this.#virtualText.slice(0, start)}${replacement}${this.#virtualText.slice(end)}`;
-    this.#characterDelta += replacement.length - (range.end - range.start);
+    const formatted = formatInlineReplacement(this.#virtualText, { start, end }, replacement);
+    this.#virtualText = `${this.#virtualText.slice(0, start)}${formatted}${this.#virtualText.slice(end)}`;
+    this.#characterDelta += formatted.length - (range.end - range.start);
     this.#generatedEntries.push({ startLine, endLine, code: replacement, fragment: false });
     this.#staticEntries = extractStaticFileMemory(this.sourcePath, this.#virtualText);
   }
@@ -123,8 +118,8 @@ export class FileMemory {
       );
     }
 
-    const remembered = new Set(this.#generatedEntries.flatMap((entry) => [...declaredIdentifiers(entry.code)]));
-    const conflicts = [...declaredIdentifiers(normalized)].filter((identifier) => remembered.has(identifier));
+    const remembered = new Set(this.#generatedEntries.flatMap((entry) => [...declaredIdentifiers(this.sourcePath, entry.code)]));
+    const conflicts = [...declaredIdentifiers(this.sourcePath, normalized)].filter((identifier) => remembered.has(identifier));
     if (conflicts.length > 0) {
       throw new FileMemoryConflictError(
         `The provider redeclared FileMemory identifier${conflicts.length === 1 ? "" : "s"} ${conflicts.join(", ")} in ${this.sourcePath}.`,
@@ -171,6 +166,7 @@ export async function generateConversionUnits(
           ...(renderedMemory ? { fileMemory: renderedMemory } : {}),
         });
         code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
+        await options.validate?.(unit, code);
         failure = undefined;
         break;
       } catch (error) {

@@ -56,6 +56,28 @@ test("direct discovery does not create a unit for @human example text", async ()
   }
 });
 
+test("issue 03: a line marker inside a block comment is not discovered or applied", async () => {
+  const source = [
+    "/* setup",
+    "// @human do the thing",
+    "*/",
+    "const ready = true;",
+    "",
+  ].join("\n");
+  assert.deepEqual(extractInlineMarkers(source), []);
+
+  const root = await mkdtemp(join(tmpdir(), "h2c-block-comment-marker-"));
+  const path = join(root, "example.ts");
+  try {
+    await writeFile(path, source);
+
+    assert.deepEqual(await discoverUnits(root, "typescript"), []);
+    assert.equal(await readFile(path, "utf8"), source);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("FileMemory records deterministic replacement line ranges without persistence", () => {
   const source = "// @human add a const named value and assign 5\nconst gap = true;\n// @human log the const\n";
   const start = source.indexOf("// @human");

@@ -12,7 +12,8 @@ up this ladder deliberately:
 1. **Direct path** (`src/agents/direct/`) — the language has an entry in
    `LANGUAGE_PROFILES` (output extension + prompt label) and, if it has an
    inline-comment form, its source extensions are in `SCANNED_EXTENSIONS` for
-   `@human` markers. No grounding, no validation; receipt-and-confirm only.
+   `@human` markers. This path has pre-write syntax/structure checks, but no API
+   grounding, project build/test execution, sandbox, or `VERIFIED` status.
    *Today: TypeScript, JavaScript, Python, Rust, Go, Java, Ruby, C#, C++, C.*
 2. **General fallback** (`src/analysis/adapters/general.ts`) — any declared
    language can flow through the guided pipeline ungrounded, permanently

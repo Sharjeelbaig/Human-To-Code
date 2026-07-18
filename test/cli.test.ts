@@ -97,6 +97,29 @@ test("default convert flow lists .human files and @human markers without contact
   }
 });
 
+test("default convert flow reports markers in unsupported file types", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-unsupported-marker-"));
+  try {
+    await put(root, "Component.vue", "<!-- @human add a loading state -->\n");
+
+    const result = await cli([root, "--json"]);
+    assert.equal(result.code, 3, result.stderr || result.stdout);
+    const plan = JSON.parse(result.stdout) as {
+      status: string;
+      requests: number;
+      notices: Array<{ code: string; sourcePath: string; message: string }>;
+    };
+    assert.equal(plan.status, "NEEDS_INPUT");
+    assert.equal(plan.requests, 0);
+    assert.deepEqual(plan.notices.map(({ code, sourcePath }) => ({ code, sourcePath })), [
+      { code: "UNSUPPORTED_MARKER_FILE", sourcePath: "Component.vue" },
+    ]);
+    assert.match(plan.notices[0]?.message ?? "", /not supported/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("remote direct conversion requires explicit consent before instructions or source context leave the host", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-remote-memory-"));
   try {

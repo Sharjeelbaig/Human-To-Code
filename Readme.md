@@ -54,10 +54,12 @@ npx human-to-code .
 By default this runs the **direct converter**, not an instruction to rewrite the whole directory. It:
 
 1. Loads config and scans the project for `.human` files and inline `@human` markers, without importing application modules or executing project configuration.
-2. Prints a receipt (language, provider, model, and the exact worklist) and asks for confirmation. Nothing is written until you confirm — or pass `-y`/`--yes`. If no request is found it returns `NEEDS_INPUT`.
-3. On confirmation, converts each item with one model completion per unit and writes the result: a whole `.human` file becomes a sibling source file; an inline `@human` marker is replaced in place. Each item is independent — a failing one is skipped with a reason rather than aborting the rest.
+2. Reports marker-shaped requests in unsupported file types and refuses a `.human` request whose sibling output already exists. Intentionally ignored directories and symlinks remain outside discovery.
+3. Prints a receipt (language, provider, model, and the exact worklist) and asks for confirmation. Nothing is written until you confirm — or pass `-y`/`--yes`. If no request is found it returns `NEEDS_INPUT`.
+4. On confirmation, converts each item with one model completion per unit, extracts one unambiguous code block, and validates the complete candidate before writing. JavaScript and TypeScript use the TypeScript parser; other supported languages receive a deterministic structural syntax check. Inline validation compares the candidate with the original file and rejects only syntax errors introduced by that replacement, without blaming it for unchanged baseline errors.
+5. Applies each accepted item defensively: new sibling files use exclusive creation, inline markers must still match the bytes found during discovery, and multi-line replacements inherit the marker's indentation. A failing or stale item is skipped with a reason rather than aborting the rest.
 
-The direct converter writes code straight to the working tree. It does **not** create a `.strict.human.json` change contract, run sandbox validation, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan — only the indexed declarations it attaches to an inline prompt as context are secret-scanned (a finding is `SECURITY_BLOCKED`). For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
+The direct converter writes code straight to the working tree. Its syntax gate catches malformed output; it does **not** prove API correctness, run project builds or tests, execute code in a sandbox, create a `.strict.human.json` change contract, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan — only the indexed declarations it attaches to an inline prompt as context are secret-scanned (a finding is `SECURITY_BLOCKED`). For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
 
 No configured provider is needed to scan and preview. A default run selects loopback-local Ollama with `qwen2.5-coder:7b`, so a fresh `npx human-to-code .` never transmits code remotely by default. The model must already be installed; the tool never pulls it implicitly. To use another local model, OpenAI, or Ollama Cloud, create and edit a config (the command never overwrites one):
 
@@ -105,6 +107,13 @@ The direct `npx human-to-code .` flow discovers work (whole `.human` files and
 inline `@human` markers), prints a receipt, and — after you confirm — converts
 them with the deterministic direct engine.
 
+Inline discovery currently supports `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
+`.cjs`, `.py`, `.rs`, `.go`, `.java`, `.rb`, `.cs`, `.cpp`, `.cc`, `.c`, `.h`,
+and `.hpp`. A marker-shaped `@human` request in another regular file up to
+1 MiB is reported as unsupported. Ignored/dot directories and symlinks are
+intentionally excluded from the direct walk; oversized unsupported files are
+not opened merely to produce a notice.
+
 ### Fast deterministic engine
 
 The host does the orchestration; the model only writes code. For each unit the
@@ -119,7 +128,11 @@ tool-calling, models that can only do plain text generation work fine.
   the other markers still convert. One failure never aborts the run.
 - **FileMemory** — declarations already in the file are shown to the model as
   read-only context (with few-shot examples) so it reuses rather than
-  re-declares them.
+  re-declares them. Its static scanner understands JavaScript regex literals,
+  and the redeclaration guard covers type-led C, C++, C#, and Java forms.
+- **Candidate and write guards** — ambiguous fenced responses and malformed
+  candidates are retried; existing sibling files, stale inline markers, and
+  unsafe indentation changes are refused before mutation.
 - **Clear, stable output** — a single truncated status line per marker
   (`✓ app.ts (inline @human, line 12)` / `⊘ skipped … : <reason>`), plus an
   in-place elapsed spinner while a completion is in flight.

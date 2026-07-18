@@ -2,7 +2,7 @@
 
 `human-to-code` reads attacker-controlled repositories, sends selected evidence to an LLM provider, and may execute project validation commands. The project therefore treats repository content, model output, documentation, provider endpoints, and build/test tooling as untrusted.
 
-Version `0.1.0` is a preview. The shipped ecosystem and provider/model combinations are not certified, so generated runs do not reach `VERIFIED` through the CLI and automatic application/rollback remain unreachable for normal generated runs. Do not weaken that boundary to make a preview run appear successful.
+Version `0.1.16` is a preview. The shipped ecosystem and provider/model combinations are not certified, so guided generated runs do not reach `VERIFIED` through the CLI and guided automatic application/rollback remain unreachable for normal generated runs. The default direct converter is a separate convenience path that writes accepted units to the working tree after confirmation; it never claims `VERIFIED`. Do not weaken either boundary to make a preview run appear successful.
 
 ## Trust boundaries
 
@@ -23,6 +23,22 @@ The operator, operating system, Docker/Podman runtime and daemon, configured pub
 The analyzer reads bounded regular files and statically recognizes React, NestJS, FastAPI, and Cargo workspace signals. It does not import application modules, evaluate JavaScript/TypeScript or Python configuration, run framework CLIs, execute `setup.py`, or invoke Cargo during discovery. It does not follow symlinks.
 
 Unreadable roots, non-directories, symlinked roots, scan truncation, conflicting project managers, multiple plausible targets, or unsupported dynamic metadata must return a non-success status. An empty or partial scan must never look like a supported project.
+
+### Direct conversion has guarded writes, not sandbox verification
+
+The direct converter treats model text as untrusted before writing: it accepts
+at most one unambiguous fenced code block, validates the complete candidate's
+new syntax/structure diagnostics relative to the unchanged baseline, refuses
+existing sibling targets using both discovery checks and exclusive creation,
+verifies exact inline marker bytes again at apply time,
+and preserves marker indentation. Invalid or stale units are retried within the
+bounded generation policy and then skipped without mutation.
+
+These controls prevent the specific malformed-output, overwrite, stale-range,
+and indentation failures they check. They do not prove external APIs, types,
+project-wide behavior, security properties, or test success, and they do not
+execute the candidate in a sandbox. Use the guided contract and validation path
+when those stronger boundaries are required.
 
 ### The reviewed contract owns authority
 

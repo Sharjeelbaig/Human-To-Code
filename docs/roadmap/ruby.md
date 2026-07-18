@@ -1,9 +1,9 @@
 # Ruby support plan
 
 ## Status today
-Level 1: `LANGUAGE_PROFILES` has `ruby` (`.rb`); `.rb` is **not** yet in
-`SCANNED_EXTENSIONS`, so inline `# @human` markers in Ruby files are not
-discovered — adding it is a one-line prerequisite worth shipping early.
+Level 1: `LANGUAGE_PROFILES` has `ruby` (`.rb`) and `.rb` is in
+`SCANNED_EXTENSIONS`, so whole-file `.human` and inline `# @human` markers
+work through the direct path. No grounded profile exists yet.
 
 ## Target profile
 - `Ecosystem`: `ruby`.
@@ -38,7 +38,6 @@ elevated-risk. Dynamic requires make import grounding partially opaque —
 document as an accepted limitation like Python's.
 
 ## Checklist
-0. Add `.rb` to `SCANNED_EXTENSIONS` in `agents/direct/discovery.ts` (independent quick win).
 1. `Ecosystem` union + `analysis/adapters/ruby.ts`.
 2. `ruby/gem`, `ruby/rails`, `ruby/rack` at `preview`.
 3. Register adapter; Ruby/Rails skill pack.

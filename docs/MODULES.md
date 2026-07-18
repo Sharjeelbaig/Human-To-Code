@@ -84,12 +84,15 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | --- | --- |
 | `types.ts` | Direct-agent request, unit, progress, result, and provider-option types. |
 | `languages.ts` | Language-to-extension and human-readable prompt-label mapping. |
-| `marker-parser.ts` | Lightweight lexical scanner for real `@human` comment markers; quoted and already-commented examples stay inert. |
-| `discovery.ts` | Bounded file walking and conversion-unit creation for `.human` files and inline markers. |
-| `file-memory.ts` | Ephemeral declaration memory, replacement normalization, retry isolation, and sequential per-file generation. |
+| `marker-parser.ts` | Lightweight lexical scanner for real line, block, and JSDoc `@human` comment markers; quoted and already-commented examples stay inert. |
+| `discovery.ts` | Bounded file walking and conversion-unit creation, including existing-target and unsupported-marker notices. |
+| `declarations.ts` | Language-aware declared-identifier extraction, including type-led C, C++, C#, and Java declarations. |
+| `replacement.ts` | Exact inline-marker byte verification plus newline-preserving indentation formatting shared by memory and application. |
+| `candidate-validation.ts` | Baseline-aware pre-write syntax gate: TypeScript parser diagnostics for JS/TS and deterministic structure checks for other direct languages. Inline units are rejected only for newly introduced diagnostics. It does not claim semantic or sandbox verification. |
+| `file-memory.ts` | Ephemeral declaration memory, replacement normalization, candidate-validation retry isolation, and sequential per-file generation. |
 | `generation-client.ts` | One direct provider request through OpenAI-compatible chat or Ollama, using the central direct prompt builder. |
-| `presentation.ts` | Stable conversion receipt and code-fence cleanup. |
-| `application.ts` | Exact-range inline replacement and whole-file writes. |
+| `presentation.ts` | Stable conversion receipt and unambiguous single-code-block extraction; rejects multiple or unterminated fences. |
+| `application.ts` | Stale-safe inline replacement and exclusive whole-file creation that never overwrites a sibling. |
 | `index.ts` | Direct-agent export surface used by the CLI and package entry point. |
 
 ### `src/agents/guided/`
@@ -112,7 +115,7 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `patch.ts` | Constrained patch validation and atomic application (`preparePatch`, `applyPatchAtomic`, `PatchSafetyError`, `PatchPolicy`): scope/hash/anchor checks, protected/generated/lockfile refusal, traversal/symlink/binary/collision rejection, per-file atomic writes, rollback artifacts. |
 | `validation.ts` | Strong container-only validation (`validateBaselineAndCandidate`, `strongSandboxAvailable`): Docker/Podman sandbox with no network, read-only root, scrubbed environment, resource limits; unchanged baseline first, then candidate; secret-scanned output. |
 | `run-store.ts` | `RunStore`: durable, private, crash-safe run metadata (contracts, patches, reports, rollback artifacts) with recursive secret gating on every write. |
-| `file-memory.ts` | Dependency-free static declaration/signature indexing for every language scanned by the direct path. Produces exact line-range evidence without executing project code. |
+| `file-memory.ts` | Dependency-free static declaration/signature indexing for every language scanned by the direct path, including JavaScript regex-literal awareness. Produces exact line-range evidence without executing project code. |
 | `simple.ts` | Deprecated source-compatibility re-export for `agents/direct/`; contains no implementation. |
 | `workflow.ts` | Deprecated source-compatibility re-export for `agents/guided/`; contains no implementation. |
 
@@ -129,5 +132,6 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `test/certification.test.ts`, `test/release-gate.test.ts` | Certification evidence gate and release-status honesty. |
 | `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/guided-agent.test.ts` | Guided mechanics and lifecycle stage by stage, including apply/rollback and repair limits. |
 | `test/direct-agent.test.ts` | Lexical marker discovery, FileMemory indexing/normalization, provider prompts, retry isolation, and application. |
+| `test/direct-reliability.test.ts` | Regression coverage for direct issues 02 and 04–11: JSDoc, output cleanup, validation, overwrite/staleness/indent guards, regex memory, C-family declarations, and discovery notices. |
 | `test/cli.test.ts` | Command surface and exit codes. |
 | `test/package-smoke.mjs` | Packed-tarball install, public import, installed-CLI invocation (`npm run package:check`). |

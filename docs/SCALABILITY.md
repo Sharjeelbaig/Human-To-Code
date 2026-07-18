@@ -87,9 +87,10 @@ between releases:
   `noUncheckedIndexedAccess` stay on; avoid `any` and non-null assertions —
   validate at the boundary and let types flow.
 - **Minimal production dependencies.** HTTP, hashing, JSON, process handling,
-  provider access, and orchestration use Node built-ins. Adding a runtime
-  dependency changes the supply-chain posture and needs a design discussion
-  first.
+  provider access, and orchestration use Node built-ins. TypeScript is the one
+  deliberate runtime parser dependency for direct JS/TS candidate validation.
+  Adding another runtime dependency changes the supply-chain posture and needs
+  a design discussion first.
 - **Errors are typed and named.** Each layer exports its own error classes
   (`ArtifactValidationError`, `ProviderError`, `PatchSafetyError`, …) so the
   CLI can map failures to exit codes without string matching. Error messages

@@ -28,6 +28,22 @@ function lineEnd(text: string, start: number): number {
   return newline === -1 ? text.length : newline;
 }
 
+function blockMarkerPrompt(content: string): string | undefined {
+  const ordinary = /^\s*@human\b[ \t]*([\s\S]*)$/u.exec(content);
+  if (ordinary) return (ordinary[1] ?? "").trim() || undefined;
+
+  // JSDoc content begins with the third opener star. Remove only conventional
+  // leading `*` decoration; prose before @human remains non-instruction text.
+  if (!content.startsWith("*")) return undefined;
+  const normalized = content
+    .slice(1)
+    .split(/\r?\n/u)
+    .map((line) => line.replace(/^\s*\*?[ \t]?/u, ""))
+    .join("\n");
+  const jsdoc = /^\s*@human\b[ \t]*([\s\S]*)$/u.exec(normalized);
+  return (jsdoc?.[1] ?? "").trim() || undefined;
+}
+
 /** Find every lexical `@human` comment marker with its exact character range. */
 export function extractInlineMarkers(text: string): InlineMarker[] {
   const markers: InlineMarker[] = [];
@@ -54,9 +70,8 @@ export function extractInlineMarkers(text: string): InlineMarker[] {
       const close = text.indexOf("*/", offset + 2);
       const end = close === -1 ? text.length : close + 2;
       if (close !== -1) {
-        const match = /^\s*@human\b[ \t]*([\s\S]*)$/u.exec(text.slice(offset + 2, close));
-        const prompt = (match?.[1] ?? "").trim();
-        if (match && prompt.length > 0) markers.push({ prompt, start: offset, end });
+        const prompt = blockMarkerPrompt(text.slice(offset + 2, close));
+        if (prompt) markers.push({ prompt, start: offset, end });
       }
       offset = end;
       continue;

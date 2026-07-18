@@ -7,3 +7,6 @@ export * from "./discovery.ts";
 export * from "./presentation.ts";
 export * from "./generation-client.ts";
 export * from "./application.ts";
+export * from "./replacement.ts";
+export * from "./declarations.ts";
+export * from "./candidate-validation.ts";
