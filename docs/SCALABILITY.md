@@ -88,9 +88,15 @@ between releases:
   validate at the boundary and let types flow.
 - **Minimal production dependencies.** HTTP, hashing, JSON, process handling,
   provider access, and orchestration use Node built-ins. TypeScript is the one
-  deliberate runtime parser dependency for direct JS/TS candidate validation.
-  Adding another runtime dependency changes the supply-chain posture and needs
-  a design discussion first.
+  deliberate runtime compiler dependency for direct JS/TS candidate validation,
+  both per-file syntax checks and the combined candidate-project type check;
+  `@types/node` ships with it so `node:` builtin imports resolve in target
+  projects without their own type dependencies. Combined validation builds a
+  TypeScript program over the project's JS/TS files per staged pass, so its
+  cost grows with project size — the walk is bounded and `skipLibCheck` is
+  forced, but very large repositories pay a real compile cost per conversion
+  run. Adding another runtime dependency changes the supply-chain posture and
+  needs a design discussion first.
 - **Errors are typed and named.** Each layer exports its own error classes
   (`ArtifactValidationError`, `ProviderError`, `PatchSafetyError`, …) so the
   CLI can map failures to exit codes without string matching. Error messages

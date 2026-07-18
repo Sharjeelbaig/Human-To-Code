@@ -2,7 +2,7 @@
 
 `human-to-code` reads attacker-controlled repositories, sends selected evidence to an LLM provider, and may execute project validation commands. The project therefore treats repository content, model output, documentation, provider endpoints, and build/test tooling as untrusted.
 
-Version `0.1.16` is a preview. The shipped ecosystem and provider/model combinations are not certified, so guided generated runs do not reach `VERIFIED` through the CLI and guided automatic application/rollback remain unreachable for normal generated runs. The default direct converter is a separate convenience path that writes accepted units to the working tree after confirmation; it never claims `VERIFIED`. Do not weaken either boundary to make a preview run appear successful.
+Version `0.1.17` is a preview. The shipped ecosystem and provider/model combinations are not certified, so guided generated runs do not reach `VERIFIED` through the CLI and guided automatic application/rollback remain unreachable for normal generated runs. The default direct converter is a separate convenience path that writes accepted units to the working tree after confirmation; it never claims `VERIFIED`. Do not weaken either boundary to make a preview run appear successful.
 
 ## Trust boundaries
 
@@ -34,11 +34,28 @@ verifies exact inline marker bytes again at apply time,
 and preserves marker indentation. Invalid or stale units are retried within the
 bounded generation policy and then skipped without mutation.
 
+JavaScript/TypeScript units additionally pass staged combined validation: the
+generated files form an in-memory candidate overlay, the working tree stays
+unchanged, and the TypeScript Compiler API type-checks the combined candidate
+project against the unchanged baseline. Newly introduced cross-file
+diagnostics (wrong imports/exports, missing members, argument counts, literal
+unions, object shapes, readonly violations, incompatible calls) reject the
+whole dependency-connected group; if safe isolation cannot be proven, the
+entire staged batch fails without partial application. A failing whole-file
+unit may receive one bounded repair request using the same provider and model;
+repair context contains only generated candidate content and normalized
+compiler diagnostics, both treated as untrusted data, and is secret-scanned
+before it may leave the host. No project code is imported or executed and no
+project scripts run during this validation.
+
 These controls prevent the specific malformed-output, overwrite, stale-range,
-and indentation failures they check. They do not prove external APIs, types,
-project-wide behavior, security properties, or test success, and they do not
-execute the candidate in a sandbox. Use the guided contract and validation path
-when those stronger boundaries are required.
+indentation, and cross-file-contract failures they check. Static compilation
+is stronger than syntax parsing, but it does not prove runtime behavior,
+external-API grounding, project-wide security properties, or test success,
+and it never executes the candidate in a sandbox or claims `VERIFIED`. Other
+direct languages keep their per-file structural validation level. Use the
+guided contract and validation path when those stronger boundaries are
+required.
 
 ### The reviewed contract owns authority
 

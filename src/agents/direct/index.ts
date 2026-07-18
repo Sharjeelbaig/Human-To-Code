@@ -10,3 +10,7 @@ export * from "./application.ts";
 export * from "./replacement.ts";
 export * from "./declarations.ts";
 export * from "./candidate-validation.ts";
+export * from "./candidate-overlay.ts";
+export * from "./program-diagnostics.ts";
+export * from "./dependency-graph.ts";
+export * from "./staged-validation.ts";

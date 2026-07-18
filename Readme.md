@@ -57,9 +57,10 @@ By default this runs the **direct converter**, not an instruction to rewrite the
 2. Reports marker-shaped requests in unsupported file types and refuses a `.human` request whose sibling output already exists. Intentionally ignored directories and symlinks remain outside discovery.
 3. Prints a receipt (language, provider, model, and the exact worklist) and asks for confirmation. Nothing is written until you confirm — or pass `-y`/`--yes`. If no request is found it returns `NEEDS_INPUT`.
 4. On confirmation, converts each item with one model completion per unit, extracts one unambiguous code block, and validates the complete candidate before writing. JavaScript and TypeScript use the TypeScript parser; other supported languages receive a deterministic structural syntax check. Inline validation compares the candidate with the original file and rejects only syntax errors introduced by that replacement, without blaming it for unchanged baseline errors.
-5. Applies each accepted item defensively: new sibling files use exclusive creation, inline markers must still match the bytes found during discovery, and multi-line replacements inherit the marker's indentation. A failing or stale item is skipped with a reason rather than aborting the rest.
+5. For JavaScript/TypeScript output, additionally stages every accepted unit into an in-memory candidate overlay and type-checks the combined candidate project with the TypeScript Compiler API — imports/exports, methods and properties, argument counts, literal unions, object shapes, readonly rules, and call compatibility across the generated files together. Diagnostics are compared against the unchanged baseline, so pre-existing project errors are never blamed on generated units. A dependency-connected group that introduces new cross-file errors receives at most one bounded repair request per whole-file unit (same provider and model); if it still fails it is skipped **whole** — never partially written — while units proven independent still apply. Other direct languages keep their per-file validation level.
+6. Applies each accepted item defensively: new sibling files use exclusive creation, inline markers must still match the bytes found during discovery, and multi-line replacements inherit the marker's indentation. A failing or stale item is skipped with a reason rather than aborting the rest.
 
-The direct converter writes code straight to the working tree. Its syntax gate catches malformed output; it does **not** prove API correctness, run project builds or tests, execute code in a sandbox, create a `.strict.human.json` change contract, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan — only the indexed declarations it attaches to an inline prompt as context are secret-scanned (a finding is `SECURITY_BLOCKED`). For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
+The direct converter writes code straight to the working tree. Its combined static compiler validation for JS/TS is stronger than syntax parsing, but it is still static analysis: it does **not** execute or import project code, run project builds or tests, prove runtime behavior or external-API grounding, execute code in a sandbox, create a `.strict.human.json` change contract, produce a `VERIFIED` run, or perform the guided pipeline's repository-wide secret scan — only the indexed declarations it attaches to an inline prompt as context are secret-scanned (a finding is `SECURITY_BLOCKED`). For the reviewed contract → grounding → sandbox-validation lifecycle — where the `.strict.human.json` contract and the `VERIFIED`/`apply`/`rollback` machinery live — use `human-to-code guided` (see [The reviewed change contract](#the-reviewed-change-contract) and the [CLI](#cli) table).
 
 No configured provider is needed to scan and preview. A default run selects loopback-local Ollama with `qwen2.5-coder:7b`, so a fresh `npx human-to-code .` never transmits code remotely by default. The model must already be installed; the tool never pulls it implicitly. To use another local model, OpenAI, or Ollama Cloud, create and edit a config (the command never overwrites one):
 
@@ -118,9 +119,12 @@ not opened merely to produce a notice.
 
 The host does the orchestration; the model only writes code. For each unit the
 host issues **one plain model completion** (no tool calls) and applies the
-result by exact marker range. This is fast and works with small models — a 1.5B
-coder model converts a four-marker file in ~4 seconds. Because it needs no
-tool-calling, models that can only do plain text generation work fine.
+result by exact marker range; when combined JS/TS project validation finds a
+repairable cross-file error, a whole-file unit may receive **one additional
+bounded repair completion** with the same provider and model. This is fast and
+works with small models — a 1.5B coder model converts a four-marker file in
+~4 seconds. Because it needs no tool-calling, models that can only do plain
+text generation work fine.
 
 - **Per-marker isolation** — each `@human` marker is generated and applied
   independently. If one marker's output is bad (e.g. a small model redeclares an
@@ -133,6 +137,13 @@ tool-calling, models that can only do plain text generation work fine.
 - **Candidate and write guards** — ambiguous fenced responses and malformed
   candidates are retried; existing sibling files, stale inline markers, and
   unsafe indentation changes are refused before mutation.
+- **Combined project validation (JS/TS)** — all accepted JavaScript/TypeScript
+  units are staged into an in-memory overlay and type-checked together with
+  the TypeScript Compiler API before any write. Newly introduced cross-file
+  diagnostics reject the whole dependency-connected group (after at most one
+  bounded repair attempt per whole-file unit); independent units still apply.
+  Pre-existing baseline errors are never attributed to generated code. This is
+  static compilation, not sandbox execution, runtime testing, or API grounding.
 - **Clear, stable output** — a single truncated status line per marker
   (`✓ app.ts (inline @human, line 12)` / `⊘ skipped … : <reason>`), plus an
   in-place elapsed spinner while a completion is in flight.
@@ -163,7 +174,7 @@ The draft is deliberately conservative. Do not remove its review question until 
 
 | Command | Behavior |
 | --- | --- |
-| `human-to-code [root]` | Default direct flow: discover `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker; see below). `npx human-to-code .` is the normal entry point. |
+| `human-to-code [root]` | Default direct flow: discover `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker, plus at most one bounded cross-file repair completion per whole-file JS/TS unit; see below). `npx human-to-code .` is the normal entry point. |
 | `human-to-code guided [root]` | Reviewed contract → grounding → sandbox-validation lifecycle. The only path that can reach `VERIFIED`. |
 | `human-to-code analyze [root] [--json]` | Produce a deterministic multi-workspace project profile and diagnostics. `SUPPORTED` means statically recognized, not certified. |
 | `human-to-code plan <file.human> [--root <root>]` | Write a review-blocked `ChangeContractV1` draft. |

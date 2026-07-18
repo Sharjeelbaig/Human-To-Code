@@ -134,10 +134,13 @@ pipeline mechanics do not embed prose instructions.
 
 **Minimal-dependency host.** The guided pipeline and host safety code (hashing,
 patch validation, sandbox validation, HTTP adapters, secret scanning) use Node
-built-ins. The direct agent has one deliberate runtime parser dependency:
-TypeScript, used to reject malformed JavaScript/TypeScript candidates before
-they reach the working tree. Other direct languages use host-owned structural
-checks; adding another runtime dependency still requires design review.
+built-ins. The direct agent has two deliberate runtime dependencies: the
+TypeScript compiler, used both to reject malformed JavaScript/TypeScript
+candidates and to type-check the combined multi-file candidate project before
+any write, and `@types/node`, bundled so `node:` builtin imports in generated
+code resolve even in target projects with no type dependencies of their own.
+Other direct languages use host-owned structural checks; adding another
+runtime dependency still requires design review.
 
 ## The generation paths
 
@@ -151,10 +154,21 @@ checks; adding another runtime dependency still requires design review.
    overwrite, while exact marker-byte checks and shared indentation formatting
    make inline application stale-safe. Each marker is isolated — a bad or
    failing unit is retried, then skipped with a reason, and the rest still
-   convert; only a security stop aborts the run. This is fast and works with
-   small models that cannot do tool-calling. Its syntax checks are not project
-   builds, semantic verification, or sandbox execution. It shares no state with
-   the guided pipeline and never reaches `VERIFIED`.
+   convert; only a security stop aborts the run. Before anything is written,
+   all accepted JavaScript/TypeScript units are staged into an in-memory
+   candidate overlay (`candidate-overlay.ts`) and the combined candidate
+   project is type-checked with the TypeScript Compiler API
+   (`program-diagnostics.ts`) against the unchanged baseline, so pre-existing
+   errors are never blamed on generated code. New cross-file diagnostics are
+   attributed through the resolved import graph (`dependency-graph.ts`); a
+   failing dependency-connected group gets at most one bounded repair
+   completion per whole-file unit and is otherwise rejected whole
+   (`staged-validation.ts`), while units proven independent still apply. This
+   is fast and works with small models that cannot do tool-calling. Combined
+   static compilation is stronger than per-file syntax checks, but it is not a
+   project build, runtime test, sandbox execution, or API grounding; other
+   direct languages keep per-file structural validation. It shares no state
+   with the guided pipeline and never reaches `VERIFIED`.
 2. **Guided agent** (`agents/guided/`, the `guided` subcommand): full
    contract → grounding → sandbox validation lifecycle described above. This is
    the production-architecture path and the only one that can reach `VERIFIED`.

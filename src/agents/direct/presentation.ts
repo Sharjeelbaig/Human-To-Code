@@ -21,8 +21,8 @@ export function renderReceipt(
     `  Language : ${profile.label} (.${profile.ext})`,
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
-    `  Engine   : direct (one model request per prompt)`,
-    `  Requests : ${units.length}`,
+    `  Engine   : direct (one model request per prompt; bounded cross-file repair may add requests)`,
+    `  Requests : ${units.length} planned (up to ${units.length} extra bounded repair requests for JS/TS)`,
     "",
   ];
   if (units.length === 0) lines.push("  No .human files or @human markers were found.");

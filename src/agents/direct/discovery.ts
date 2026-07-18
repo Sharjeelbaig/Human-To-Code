@@ -37,6 +37,11 @@ async function walk(root: string, ignores: ReadonlySet<string>): Promise<string[
   return results.sort();
 }
 
+/** Bounded direct-path file walk, shared with combined project validation. */
+export async function walkDirectFiles(root: string): Promise<string[]> {
+  return walk(resolve(root), DEFAULT_IGNORES);
+}
+
 /** Discover units plus actionable notices for marker text that cannot run safely. */
 export async function discoverDirectUnits(root: string, language: string): Promise<DirectDiscoveryResult> {
   const absoluteRoot = resolve(root);

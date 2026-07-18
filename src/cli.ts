@@ -35,10 +35,13 @@ import {
   discoverDirectUnits,
   generateConversionUnits,
   generateCode,
+  generateRepairCode,
   renderReceipt,
+  validateCandidateProject,
   validateGeneratedUnit,
   type ConversionUnit,
   type ConversionProgress,
+  type StagedValidationProgress,
 } from "./agents/direct/index.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
 import {
@@ -629,6 +632,53 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
     return 5;
   }
+
+  // Staged project-aware validation: every accepted JS/TS unit joins an
+  // in-memory candidate overlay that is type-checked as one TypeScript
+  // program against the unchanged baseline before any file is written.
+  // Dependency-connected groups that introduce cross-file errors get one
+  // bounded repair request per whole-file unit, then fail closed together.
+  let repairRequests = 0;
+  try {
+    const onStagedProgress = interactive
+      ? (event: StagedValidationProgress): void => {
+          if (event.kind === "project-validate") {
+            spinner.label(`validating combined candidate project (${event.files} file(s), pass ${event.pass})`);
+          } else if (event.kind === "repair") {
+            spinner.label(`repairing ${describeUnit(event.unit)} (bounded repair ${event.attempt})`);
+          } else if (event.kind === "reject") {
+            spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
+          }
+        }
+      : undefined;
+    const staged = await validateCandidateProject(root, generated, {
+      maxRepairAttemptsPerUnit: 1,
+      contextCharBudget: effective.privacy.maxContextTokens * 4,
+      repair: (request) => generateRepairCode({
+        targetPath: request.targetPath,
+        inline: request.unit.kind === "inline",
+        instruction: request.unit.prompt,
+        currentCode: request.currentCode,
+        diagnostics: request.diagnostics,
+        relatedFiles: request.relatedFiles,
+      }, {
+        language,
+        provider: providerName,
+        model,
+        ...(baseUrl ? { baseUrl } : {}),
+        ...(apiKey ? { apiKey } : {}),
+      }),
+      ...(onStagedProgress ? { onProgress: onStagedProgress } : {}),
+    });
+    generated = staged.results;
+    repairRequests = staged.repairRequests;
+  } catch (error) {
+    spinner.stop();
+    if (error instanceof ContextSecurityError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
+    return 5;
+  }
   spinner.stop();
 
   // Apply bottom-to-top so replacing a later marker cannot invalidate an
@@ -663,9 +713,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   }
   const seconds = Math.round((Date.now() - started) / 1000);
   if (cli.json) {
-    output({ status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE", engine: "simple", written, skipped }, true);
+    output({ status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE", engine: "simple", written, skipped, repairRequests }, true);
   } else {
-    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}.`, false);
+    const repairs = repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
+    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${repairs}.`, false);
   }
   return written.length === 0 && skipped.length > 0 ? 5 : 0;
 }

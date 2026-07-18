@@ -71,6 +71,7 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | Module | Purpose |
 | --- | --- |
 | `direct-conversion.ts` | System and user messages for whole-file and inline direct conversion, including FileMemory rules and examples. |
+| `direct-repair.ts` | Bounded cross-file repair messages for one generated JS/TS unit: original instruction, current candidate, normalized compiler diagnostics, and related generated files, all framed as untrusted data. |
 | `guided-patch.ts` | Structured patch-generation messages: reviewed contract, target profile, immutable snapshot hash, compiler skills, and wrapped untrusted evidence. |
 | `guided-repair.ts` | Bounded repair messages that freeze contract, snapshot, validation plan, paths, operations, and scope. |
 | `provider-output.ts` | Host-enforced JSON output-contract message used only when a provider lacks native JSON Schema support. |
@@ -89,8 +90,12 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `declarations.ts` | Language-aware declared-identifier extraction, including type-led C, C++, C#, and Java declarations. |
 | `replacement.ts` | Exact inline-marker byte verification plus newline-preserving indentation formatting shared by memory and application. |
 | `candidate-validation.ts` | Baseline-aware pre-write syntax gate: TypeScript parser diagnostics for JS/TS and deterministic structure checks for other direct languages. Inline units are rejected only for newly introduced diagnostics. It does not claim semantic or sandbox verification. |
+| `candidate-overlay.ts` | In-memory candidate overlay combining whole-file outputs and inline replacements for staged validation; the working tree stays unchanged and stale or conflicting units are excluded fail-closed. |
+| `program-diagnostics.ts` | Combined TypeScript Compiler API validation over the candidate overlay: permissive fixed compiler options, an overlay-aware compiler host, bundled `node:` builtin typings, and multiplicity/location-aware baseline-vs-candidate diagnostic comparison. Static compilation only — it never imports or executes project code. |
+| `dependency-graph.ts` | Resolved-import dependency grouping of candidate files and bounded diagnostic-to-unit attribution; diagnostics that cannot be safely attributed fail the whole staged batch. |
+| `staged-validation.ts` | Orchestrates overlay build, combined program validation, group rejection, and the bounded per-unit repair budget (secret-scanned repair context, injected repair callback). Produces per-unit accept/reject results for the CLI. |
 | `file-memory.ts` | Ephemeral declaration memory, replacement normalization, candidate-validation retry isolation, and sequential per-file generation. |
-| `generation-client.ts` | One direct provider request through OpenAI-compatible chat or Ollama, using the central direct prompt builder. |
+| `generation-client.ts` | Direct provider requests through OpenAI-compatible chat or Ollama: one conversion request per unit plus bounded cross-file repair requests, always using the central prompt builders. |
 | `presentation.ts` | Stable conversion receipt and unambiguous single-code-block extraction; rejects multiple or unterminated fences. |
 | `application.ts` | Stale-safe inline replacement and exclusive whole-file creation that never overwrites a sibling. |
 | `index.ts` | Direct-agent export surface used by the CLI and package entry point. |
@@ -133,5 +138,6 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/guided-agent.test.ts` | Guided mechanics and lifecycle stage by stage, including apply/rollback and repair limits. |
 | `test/direct-agent.test.ts` | Lexical marker discovery, FileMemory indexing/normalization, provider prompts, retry isolation, and application. |
 | `test/direct-reliability.test.ts` | Regression coverage for direct issues 02 and 04–11: JSDoc, output cleanup, validation, overwrite/staleness/indent guards, regex memory, C-family declarations, and discovery notices. |
+| `test/staged-validation.test.ts` | Issue 12 coverage: calculator-style cross-file rejection, consistent-candidate acceptance, bounded repair success and exhaustion, named-import/member/union/arity detection, baseline tolerance and multiplicity comparison, dependency-group isolation, and overlay write guards. |
 | `test/cli.test.ts` | Command surface and exit codes. |
 | `test/package-smoke.mjs` | Packed-tarball install, public import, installed-CLI invocation (`npm run package:check`). |

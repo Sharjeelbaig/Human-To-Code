@@ -41,6 +41,13 @@ try {
   );
   assert.equal(installedPackage.bin["human-to-code"], "./dist/cli.js");
 
+  // The staged JS/TS project validation path needs the TypeScript compiler and
+  // bundled node builtin typings at runtime in a clean install.
+  assert.equal(typeof installedPackage.dependencies.typescript, "string");
+  assert.equal(typeof installedPackage.dependencies["@types/node"], "string");
+  assert.ok(existsSync(join(installRoot, "node_modules", "typescript", "package.json")));
+  assert.ok(existsSync(join(installRoot, "node_modules", "@types", "node", "package.json")));
+
   const entry = join(
     installRoot,
     "node_modules",
@@ -50,6 +57,8 @@ try {
   );
   const exported = await import(pathToFileURL(entry).href);
   assert.equal(typeof exported.loadConfig, "function");
+  assert.equal(typeof exported.validateCandidateProject, "function");
+  assert.equal(typeof exported.buildCandidateOverlay, "function");
 
   const cli = join(
     installRoot,

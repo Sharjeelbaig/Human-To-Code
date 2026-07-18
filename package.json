@@ -1,6 +1,6 @@
 {
   "name": "human-to-code",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Safely turn reviewed natural-language change contracts into validated code patches.",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,6 +29,7 @@
     "node": ">=24.0.0"
   },
   "dependencies": {
+    "@types/node": "24.13.3",
     "typescript": "5.9.3"
   },
   "scripts": {
@@ -52,7 +53,5 @@
   "publishConfig": {
     "access": "public"
   },
-  "devDependencies": {
-    "@types/node": "24.13.3"
-  }
+  "devDependencies": {}
 }
