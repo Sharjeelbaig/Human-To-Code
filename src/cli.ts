@@ -3,7 +3,7 @@
 
 import { constants as fsConstants, realpathSync } from "node:fs";
 import { copyFile, lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { analyzeProject, type ProjectProfileV1 } from "./analysis/analyzer.ts";
@@ -40,7 +40,6 @@ import {
   type ConversionProgress,
 } from "./pipeline/simple.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
-import type { DeepAgentProgress } from "./pipeline/deep-agent.ts";
 import {
   applyVerifiedRun,
   buildContextPreview,
@@ -55,7 +54,6 @@ const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compi
 
 Usage:
   human-to-code [root] [-y]                    Convert .human files and @human markers to code (default; fast deterministic engine)
-  human-to-code [root] [-y] --agent            Use the LangGraph deep agent (planning/filesystem/subagents; needs a tool-calling model)
   human-to-code build [root] [-y]              Alias of the default convert flow
   human-to-code guided [root]                  Reviewed/grounded/validated compiler pipeline
   human-to-code analyze [root] [--json]
@@ -86,7 +84,6 @@ Other options:
   --explain                      Show outbound context provenance and exact selected content
   --json                         Machine-readable output
   -y, --yes                      Skip the confirmation prompt and write files
-  --agent                        Use the LangGraph deep agent instead of the default deterministic engine
   --simple                       Deprecated no-op; the deterministic engine is now the default
   --dry-run                      Analyze and preview only; perform no generation
   --manual-passed                Explicitly attest all reviewed manual acceptance checks
@@ -117,7 +114,6 @@ interface CliOptions {
   trustCustomEndpoint: boolean;
   yes: boolean;
   simple: boolean;
-  agent: boolean;
   init: boolean;
   help: boolean;
   root?: string;
@@ -147,7 +143,6 @@ function parse(argv: string[]): CliOptions {
       "trust-custom-endpoint": { type: "boolean", default: false },
       yes: { type: "boolean", short: "y", default: false },
       simple: { type: "boolean", default: false },
-      agent: { type: "boolean", default: false },
       init: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       root: { type: "string" },
@@ -173,7 +168,6 @@ function parse(argv: string[]): CliOptions {
     trustCustomEndpoint: values["trust-custom-endpoint"] === true,
     yes: values.yes === true,
     simple: values.simple === true,
-    agent: values.agent === true,
     init: values.init === true,
     help: values.help === true,
     ...(typeof values.root === "string" ? { root: values.root } : {}),
@@ -524,27 +518,6 @@ function createSpinner(active: boolean): Spinner {
   };
 }
 
-function todoIcon(status: string): string {
-  if (status === "completed") return "[✓]";
-  if (status === "in_progress") return "[~]";
-  return "[ ]";
-}
-
-/** Project-relative, forward-slash path for display; falls back to the input. */
-function shortPath(target: string, root: string): string {
-  const rel = relative(root, target);
-  if (rel.length > 0 && !rel.startsWith("..")) return rel.split(sep).join("/");
-  return target;
-}
-
-/** Rewrite an incapable-model tool-call failure into an actionable hint. */
-function deepAgentErrorHint(message: string): string {
-  const looksLikeToolFormatFailure = /xml syntax error|<\/?(?:function|parameter|tool_call)>|failed to parse|does not support tools|no tool/iu.test(message);
-  return looksLikeToolFormatFailure
-    ? " — the model likely cannot emit valid tool calls. Use a larger tool-calling model (for example qwen2.5-coder:7b or bigger), or run with --simple."
-    : "";
-}
-
 /**
  * Simple `.human`/`@human` -> code flow: discover units, show a receipt, and on
  * confirmation write real code files. This is the default `human-to-code .`
@@ -573,7 +546,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       return units.length === 0 ? 3 : cli.yes ? 0 : 3;
     }
   } else {
-    output(renderReceipt(units, providerName, model, language, cli.agent ? "agent" : "simple"), false);
+    output(renderReceipt(units, providerName, model, language), false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
@@ -590,87 +563,13 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const apiKey = providerName === "openai"
     ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
     : undefined;
-  const localMemoryProvider = providerName === "ollama"
+  const localProvider = providerName === "ollama"
     && (baseUrl === undefined || isLoopbackProviderHost(new URL(baseUrl).hostname));
-  if (units.some((unit) => unit.kind === "inline")
-    && !localMemoryProvider
-    && !effective.privacy.remoteProviderConsent) {
+  if (!localProvider && !effective.privacy.remoteProviderConsent) {
     throw new ContextSecurityError(
       "INVALID_CANDIDATE",
-      "Inline FileMemory would send statically indexed source declarations to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
+      "Direct conversion would send change instructions and possibly source context to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
     );
-  }
-
-  // `--agent` opts into the LangGraph deep agent (planning, filesystem,
-  // subagents, prompts); it needs a tool-calling-capable model. The default is
-  // the deterministic per-marker generator below: fast and small-model-friendly.
-  if (cli.agent) {
-    const { runDeepAgentConversion } = await import("./pipeline/deep-agent.ts");
-    const interactive = !cli.json;
-    const spinner = createSpinner(interactive);
-    const started = Date.now();
-    const todoStatus = new Map<string, string>();
-    let planPrinted = false;
-    const onProgress = interactive
-      ? (event: DeepAgentProgress): void => {
-          if (event.kind === "plan") {
-            if (!planPrinted) {
-              spinner.note("\nPlan:");
-              for (const todo of event.todos) {
-                spinner.note(`  ${todoIcon(todo.status)} ${todo.content}`);
-                todoStatus.set(todo.content, todo.status);
-              }
-              planPrinted = true;
-              return;
-            }
-            for (const todo of event.todos) {
-              if (todoStatus.get(todo.content) !== todo.status) {
-                if (todo.status === "completed") spinner.note(`  ✓ ${todo.content}`);
-                else if (todo.status === "in_progress") spinner.label(todo.content);
-                todoStatus.set(todo.content, todo.status);
-              }
-            }
-          } else if (event.kind === "tool") {
-            const rawDetail = event.detail ?? "";
-            const detail = rawDetail.startsWith("/") ? shortPath(resolve(root, `.${rawDetail}`), root) : rawDetail;
-            const suffix = detail ? ` ${detail}` : "";
-            spinner.note(`  → ${event.name}${suffix}`);
-            spinner.label(`${event.name}${suffix}`);
-          }
-        }
-      : undefined;
-
-    if (interactive) output("\nStarting deep agent… (planning, filesystem, subagents)", false);
-    try {
-      const outcome = await runDeepAgentConversion({
-        root,
-        language,
-        provider: providerName,
-        model,
-        units,
-        ...(baseUrl ? { baseUrl } : {}),
-        ...(apiKey ? { apiKey } : {}),
-        ...(onProgress ? { onProgress } : {}),
-      });
-      spinner.stop();
-      const seconds = Math.round((Date.now() - started) / 1000);
-      if (cli.json) {
-        output({ status: "DONE", engine: "deep-agent", todos: outcome.todos, messages: outcome.messageCount, summary: outcome.summary }, true);
-      } else {
-        output(`\nDeep agent finished in ${seconds}s (${outcome.messageCount} steps).${outcome.summary ? `\n${outcome.summary}` : ""}`, false);
-      }
-      return 0;
-    } catch (error) {
-      spinner.stop();
-      const message = error instanceof Error ? error.message : String(error);
-      output(
-        cli.json
-          ? { status: "FAILED", engine: "deep-agent", error: message }
-          : `\nDeep agent error: ${message}${deepAgentErrorHint(message)}`,
-        cli.json,
-      );
-      return 5;
-    }
   }
 
   // Default engine: deterministic per-marker generation. Each marker is one

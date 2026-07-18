@@ -99,13 +99,13 @@ node dist/cli.js .
 
 Node.js 24 or newer is required.
 
-## Generation engines
+## Generation engine
 
 The direct `npx human-to-code .` flow discovers work (whole `.human` files and
 inline `@human` markers), prints a receipt, and — after you confirm — converts
-it. Two engines are available.
+them with the deterministic direct engine.
 
-### Default: fast deterministic engine
+### Fast deterministic engine
 
 The host does the orchestration; the model only writes code. For each unit the
 host issues **one plain model completion** (no tool calls) and applies the
@@ -127,30 +127,9 @@ tool-calling, models that can only do plain text generation work fine.
 This engine cannot produce `VERIFIED` runs; for the reviewed, sandbox-validated
 pipeline use `human-to-code guided`.
 
-### `--agent`: LangGraph deep agent
-
-`--agent` runs the [`deepagents`](https://docs.langchain.com/oss/javascript/deepagents/overview)
-harness with the four deep-agent pillars — **Planning** (`write_todos`),
-**File System** (a project-rooted `FilesystemBackend`, with writes denied on
-VCS/dependency/config/secret paths), **Sub Agents** (`planner`/`implementer`/
-`reviewer` via the `task` tool), and **Prompts** (per-role system prompts). The
-model drives scope, file edits, and delegation; live progress streams to the
-terminal.
-
-This engine needs a **tool-calling-capable model** (~7B+). It is reached through
-the OpenAI-compatible chat client (Ollama via its `/v1` endpoint, since the deep
-agent's structured tool messages are not supported by the native `/api/chat`
-surface). Small models that cannot emit valid tool calls fail with a
-tool-call/XML parse error; the CLI detects this and suggests a larger model or
-the default engine. It also pulls the runtime dependencies `deepagents`,
-`langchain`, `@langchain/core`, `@langchain/openai`, and `@langchain/ollama`.
-
 ```bash
-# Fast deterministic engine (default) — works with small models:
+# Deterministic engine — works with small models:
 npx human-to-code . --yes --model qwen2.5-coder:1.5b
-
-# LangGraph deep agent — needs a tool-calling model:
-npx human-to-code . --yes --agent --model qwen2.5-coder:7b
 ```
 
 ## The reviewed change contract
@@ -172,7 +151,6 @@ The draft is deliberately conservative. Do not remove its review question until 
 | Command | Behavior |
 | --- | --- |
 | `human-to-code [root]` | Default direct flow: discover `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker; see below). `npx human-to-code .` is the normal entry point. |
-| `human-to-code [root] --agent` | Same direct flow using the **LangGraph deep agent** (planning/filesystem/subagents). Needs a tool-calling-capable model (~7B+). |
 | `human-to-code guided [root]` | Reviewed contract → grounding → sandbox-validation lifecycle. The only path that can reach `VERIFIED`. |
 | `human-to-code analyze [root] [--json]` | Produce a deterministic multi-workspace project profile and diagnostics. `SUPPORTED` means statically recognized, not certified. |
 | `human-to-code plan <file.human> [--root <root>]` | Write a review-blocked `ChangeContractV1` draft. |

@@ -41,6 +41,12 @@ async function cli(
   });
 }
 
+test("--agent is no longer a supported CLI option", async () => {
+  const result = await cli(["--agent"]);
+  assert.equal(result.code, 1, result.stderr || result.stdout);
+  assert.match(result.stderr, /Unknown option '--agent'/u);
+});
+
 test("guided subcommand creates a review draft and exits NEEDS_INPUT", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-guided-"));
   try {
@@ -91,7 +97,7 @@ test("default convert flow lists .human files and @human markers without contact
   }
 });
 
-test("remote inline FileMemory requires explicit source-context consent before provider access", async () => {
+test("remote direct conversion requires explicit consent before instructions or source context leave the host", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-remote-memory-"));
   try {
     await put(root, "human-to-code.config.json", JSON.stringify({
@@ -105,7 +111,7 @@ test("remote inline FileMemory requires explicit source-context consent before p
     assert.equal(result.code, 4, result.stderr || result.stdout);
     const output = JSON.parse(result.stdout) as { status: string; diagnostic: string };
     assert.equal(output.status, "SECURITY_BLOCKED");
-    assert.match(output.diagnostic, /FileMemory would send statically indexed source declarations/u);
+    assert.match(output.diagnostic, /send change instructions and possibly source context to a remote provider/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

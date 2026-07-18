@@ -75,7 +75,6 @@ mirror these modules by name.
 | `workflow.ts` | The guided end-to-end orchestrator (`generateRun` and the apply/rollback/repair flows): ties analysis, certification, secret scan, context, provider, snapshot, validation, run store, and patch together with crash-safe budget checkpoints and at most two diagnostic repairs. |
 | `file-memory.ts` | Dependency-free static declaration/signature indexing for every language scanned by the direct path. Produces exact line-range evidence without executing project code. |
 | `simple.ts` | The default direct-flow engine: deterministic per-marker generation. One plain model completion per unit (no tool calls), applied by exact marker range, with ephemeral FileMemory and few-shot prompting. Per-marker isolation with retry-then-skip; a security stop is the only whole-run abort. Fast and small-model-friendly. Shares no trust with the guided pipeline; cannot produce `VERIFIED`. |
-| `deep-agent.ts` | The `--agent` engine: builds and runs a LangChain/LangGraph deep agent (`deepagents` harness) with planning (`write_todos`), a project-rooted `FilesystemBackend`, `planner`/`implementer`/`reviewer` subagents, and per-role prompts. `buildDeepAgentModel` binds the provider through the OpenAI-compatible chat client (Ollama via its `/v1` endpoint); needs a tool-calling model. The only module that imports the `deepagents`/`langchain` runtime dependencies. |
 
 ## Test map
 
@@ -90,6 +89,5 @@ mirror these modules by name.
 | `test/certification.test.ts`, `test/release-gate.test.ts` | Certification evidence gate and release-status honesty. |
 | `test/planner.test.ts`, `test/patch.test.ts`, `test/snapshot.test.ts`, `test/run-store.test.ts`, `test/validation.test.ts`, `test/workflow.test.ts` | The pipeline stage by stage, including apply/rollback and repair limits. |
 | `test/simple.test.ts` | Ephemeral FileMemory indexing/normalization and the `--simple` direct path. |
-| `test/deep-agent.test.ts` | Deep-agent engine: provider model binding and an end-to-end run against a fake chat model (no network). |
 | `test/cli.test.ts` | Command surface and exit codes. |
 | `test/package-smoke.mjs` | Packed-tarball install, public import, installed-CLI invocation (`npm run package:check`). |
