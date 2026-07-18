@@ -1,7 +1,11 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { inferUnitLanguage } from "./language-inference.ts";
-import { languageForExtension, languageProfile } from "./languages.ts";
+import {
+  languageForExtension,
+  languageProfile,
+  resolveLanguageDeclaration,
+} from "./languages.ts";
 import { extractInlineMarkers } from "./marker-parser.ts";
 import type { HumanFileExtensionConfig } from "../../core/types.ts";
 import type { ConversionUnit, DirectDiscoveryResult } from "./types.ts";
@@ -87,8 +91,10 @@ export async function discoverDirectUnits(
       const rawPrompt = content.trim();
       if (rawPrompt.length === 0) continue;
       const lines = rawPrompt.split(/\r?\n/u);
-      const declaredExtension = lines[0]?.trim().replace(/^\./u, "").toLowerCase() ?? "";
-      const declaredLanguage = languageForExtension(declaredExtension);
+      const declaredToken = lines[0]?.trim() ?? "";
+      const declaration = resolveLanguageDeclaration(declaredToken);
+      const declaredExtension = declaration?.extension;
+      const declaredLanguage = declaration?.language;
       const configuredExtension = configuredExtensionByPath.get(rel);
       const configuredLanguage = configuredExtension === undefined
         ? undefined
@@ -101,7 +107,7 @@ export async function discoverDirectUnits(
         notices.push({
           code: "EXTENSION_CONFLICT",
           sourcePath: rel,
-          message: `${rel} was skipped because config selects .${configuredExtension} but its first line declares .${declaredExtension}.`,
+          message: `${rel} was skipped because config selects .${configuredExtension} but its first line declares ${declaredToken} (.${declaredExtension}).`,
         });
         continue;
       }
@@ -113,7 +119,7 @@ export async function discoverDirectUnits(
         notices.push({
           code: "UNCONFIGURED_EXTENSION",
           sourcePath: rel,
-          message: `${rel} was skipped because its first line declares .${declaredExtension}, whose language is not enabled in config.languages.`,
+          message: `${rel} was skipped because its first line declares ${declaredToken} (.${declaredExtension}), whose language is not enabled in config.languages.`,
         });
         continue;
       }
@@ -133,7 +139,7 @@ export async function discoverDirectUnits(
         ?? declaredLanguage
         ?? (routed ? innerLanguage : inferUnitLanguage(basename(stem), prompt, languages));
       const explicitExtension = configuredExtension
-        ?? (declaredLanguage === undefined ? undefined : declaredExtension);
+        ?? declaredExtension;
       const outputBase = explicitExtension !== undefined && innerLanguage !== undefined
         ? stem.slice(0, -innerExtension.length)
         : stem;

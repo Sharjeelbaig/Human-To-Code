@@ -25,3 +25,28 @@ export function languageProfile(language: string): LanguageProfile {
 export function languageForExtension(extension: string): string | undefined {
   return languageForCodeExtension(extension);
 }
+
+export interface LanguageDeclaration {
+  language: string;
+  extension: string;
+}
+
+/**
+ * Resolve the first line of a `.human` file as either a code extension (`js`)
+ * or a configured language name (`javascript`). Language names always select
+ * their profile's canonical output extension, so a `javascript` declaration
+ * creates `.js`, never `.javascript`.
+ */
+export function resolveLanguageDeclaration(value: string): LanguageDeclaration | undefined {
+  const normalized = value.trim().replace(/^\./u, "").toLowerCase();
+  const extensionLanguage = languageForExtension(normalized);
+  if (extensionLanguage !== undefined) {
+    return { language: extensionLanguage, extension: normalized };
+  }
+
+  if (!Object.hasOwn(LANGUAGE_PROFILES, normalized)) return undefined;
+  return {
+    language: normalized,
+    extension: LANGUAGE_PROFILES[normalized]!.ext,
+  };
+}

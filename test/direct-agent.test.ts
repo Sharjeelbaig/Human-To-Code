@@ -495,6 +495,61 @@ test("a first-line extension routes the file and is removed from the model promp
   }
 });
 
+test("a first-line language name uses its canonical extension and outranks later language mentions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-declared-language-name-"));
+  try {
+    const instruction = [
+      "Create plain browser behavior.",
+      "Do not emit TypeScript syntax.",
+    ].join("\n");
+    await writeFile(join(root, "script.human"), `javascript\n${instruction}\n`);
+
+    const units = await discoverUnits(root, ["typescript", "html", "css", "javascript"]);
+    assert.deepEqual(units.map(({ sourcePath, outputPath, language, prompt }) => ({
+      sourcePath,
+      outputPath,
+      language,
+      prompt,
+    })), [{
+      sourcePath: "script.human",
+      outputPath: "script.js",
+      language: "javascript",
+      prompt: instruction,
+    }]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("first-line language names map to canonical output extensions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-declared-language-extensions-"));
+  try {
+    const declarations = [
+      ["typescript", "ts"],
+      ["javascript", "js"],
+      ["python", "py"],
+      ["rust", "rs"],
+      ["ruby", "rb"],
+      ["csharp", "cs"],
+      ["cpp", "cpp"],
+    ] as const;
+    for (const [language] of declarations) {
+      await writeFile(join(root, `${language}.human`), `${language}\nCreate the file.\n`);
+    }
+
+    const units = await discoverUnits(root, declarations.map(([language]) => language));
+    const bySource = new Map(units.map((unit) => [unit.sourcePath, unit]));
+    for (const [language, extension] of declarations) {
+      const unit = bySource.get(`${language}.human`);
+      assert.equal(unit?.language, language);
+      assert.equal(unit?.outputPath, `${language}.${extension}`);
+      assert.equal(unit?.prompt, "Create the file.");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("conflicting or disabled first-line extensions are reported instead of guessed", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-extension-conflict-"));
   try {

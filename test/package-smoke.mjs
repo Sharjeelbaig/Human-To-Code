@@ -40,7 +40,7 @@ try {
     ),
   );
   assert.equal(installedPackage.bin["human-to-code"], "./dist/cli.js");
-  assert.equal(installedPackage.version, "0.1.25");
+  assert.equal(installedPackage.version, "0.1.27");
 
   // The staged JS/TS project validation path needs the TypeScript compiler and
   // bundled node builtin typings at runtime in a clean install.
@@ -110,7 +110,6 @@ try {
   writeFileSync(join(mixedRoot, "human-to-code.config.json"), JSON.stringify({
     schemaVersion: 1,
     languages: ["typescript", "html", "css", "javascript"],
-    humanFileExtensions: [{ path: "script.human", extension: "js" }],
     provider: { name: "ollama", model: "fixture-model" },
   }));
   writeFileSync(
@@ -119,7 +118,7 @@ try {
   );
   writeFileSync(
     join(mixedRoot, "script.human"),
-    "Read stylesheet colors, fonts, spacing, backgrounds, borders, and themes, then update them on clicks.\n",
+    "javascript\nRead stylesheet colors and update them on clicks. Do not emit TypeScript syntax.\n",
   );
   writeFileSync(join(mixedRoot, "styles.human"), "Build the calculator styles in CSS.\n");
   const mixed = spawnSync(

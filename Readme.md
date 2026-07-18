@@ -343,7 +343,7 @@ untrusted evidence. With a remote provider, this compact direct context is sent
 only after `privacy.remoteProviderConsent` is enabled; local Ollama keeps it on
 the configured loopback endpoint.
 
-A `.human` file may instead declare its extension on its first nonblank line. The declaration is removed before the remaining instruction is sent to the model:
+A `.human` file may instead declare its output extension or configured language name on its first nonblank line. The declaration is removed before the remaining instruction is sent to the model:
 
 ```text
 html
@@ -353,7 +353,7 @@ close head
 add body
 ```
 
-That `index.human` content writes `index.html`. Tokens such as `js`, `.js`, `mjs`, `ts`, `tsx`, `py`, `rs`, `html`, and `css` are accepted when their language is enabled. A config mapping wins over the first-line declaration, but conflicting languages are reported and skipped instead of guessed.
+That `index.human` content writes `index.html`. Extension tokens such as `js`, `.js`, `mjs`, `ts`, `tsx`, `py`, and `rs` are accepted when their language is enabled. Canonical configured names such as `javascript`, `typescript`, `python`, `rust`, `ruby`, `csharp`, and `cpp` are also accepted and map to their normal output extensions. For example, a first line of `javascript` writes `.js`, not `.javascript`. A config mapping wins over the first-line declaration, but conflicting languages are reported and skipped instead of guessed.
 
 Without either explicit route, a configured inner extension is authoritative: `index.html.human` writes `index.html` and `styles.css.human` writes `styles.css`. For a bare name, discovery checks an explicit language named in the request, then an unambiguous filename convention, then request vocabulary, and finally falls back to the first configured language. This decision is made before confirmation without another model call. The singular `language` is retained for alpha compatibility; when supplied with `languages`, it must be a member and is normalized to the first/default entry. `filesToIgnore` accepts exact file/directory names, not glob expressions. With `sandbox.engine: "auto"`, validation probes Docker first and then Podman; `"docker"` and `"podman"` select one explicitly. Neither runtime being available makes validation `INCONCLUSIVE` and runs no project command.
 
