@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: build a scope-frozen guided repair prompt from validation
- * diagnostics without allowing new files, operations, dependencies, or tests.
+ * Builds a scope-frozen guided repair prompt out of validation diagnostics. No
+ * new files, operations, dependencies, or tests get through it.
  */
 import {
   canonicalJson,

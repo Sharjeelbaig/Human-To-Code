@@ -273,9 +273,9 @@ function gitIgnored(root: string, relPaths: readonly string[]): Set<string> {
 }
 
 /**
- * Human-to-code role: find and classify natural-language instruction sources
- * without executing project code. Missing/unreadable roots, unreadable
- * descendants, and Git failures reject instead of returning partial output.
+ * Finds and classifies natural-language instruction sources without executing
+ * project code. Missing or unreadable roots, unreadable descendants, and Git
+ * failures all reject rather than returning partial output.
  */
 export async function discoverHumanInstructionSources(
   rootInput: string,

@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: build the prompt that aligns direct-mode target files
- * and shared names before independent code-generation requests begin.
+ * Builds the prompt that gets direct-mode target files and shared names to
+ * agree, before the independent generation requests start.
  */
 import type { PromptMessages } from "./direct-conversion.ts";
 

@@ -488,9 +488,9 @@ export interface GenerateValidatedOptions {
 }
 
 /**
- * Human-to-code role: obtain model output and accept it only after the host
- * validates the required code-artifact schema. Native JSON Schema support may
- * improve generation quality but never replaces this local validator.
+ * Gets model output and accepts it only once the host has validated it against
+ * the required code-artifact schema. Native JSON Schema support may improve what
+ * comes back, but it never replaces this local validator.
  */
 export async function generateValidated<T>(
   adapter: ProviderAdapter,

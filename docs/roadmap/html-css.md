@@ -1,21 +1,26 @@
 # HTML & CSS support plan
 
 ## Status today
-The direct converter supports whole-file HTML/CSS generation and inline
-single-line or multiline markers in `.html`, `.htm`, and `.css`. HTML comments
-use `<!-- @human ... -->`; JavaScript/CSS comments inside `<script>` and
-`<style>` are also recognized lexically. The remaining roadmap below is for a
-grounded, sandbox-validated `static-web` guided profile. React/Vite workspaces
-already cover component markup/styling through the existing node adapter.
-Direct ProjectMemory also exposes current and planned sibling CSS/JavaScript
-files to an HTML request with exact relative references, then carries accepted
-HTML ids/classes/references forward as compact contracts for later CSS and
-JavaScript requests. This is generation context, not the link-graph validation
-planned below. An optional direct safety net is also available through
-`direct.reconcileIntegrations`: the same generic cross-language auditor used for
-Python, Rust, JS/TS, and other supported relationships can audit the structured
-HTML/CSS/JavaScript edges supplied by ProjectMemory. It defaults off and remains
-narrower than the future deterministic complete static-web link graph.
+The direct converter already handles whole-file HTML/CSS generation plus inline
+single-line and multiline markers in `.html`, `.htm`, and `.css`. HTML comments
+use `<!-- @human ... -->`, and the JavaScript/CSS comment forms inside
+`<script>` and `<style>` are recognized lexically too. React/Vite workspaces get
+their component markup and styling covered by the existing node adapter.
+
+ProjectMemory shows an HTML request its current and planned sibling CSS and
+JavaScript files with exact relative references, then carries the accepted HTML
+ids, classes, and references forward as compact contracts for the CSS and
+JavaScript requests that follow. That's generation *context* — not the
+link-graph validation planned below.
+
+There's also a safety net in `direct.reconcileIntegrations` (on by default): the
+same generic cross-language auditor used for Python, Rust, JS/TS, and the other
+supported relationships can audit the structured HTML/CSS/JavaScript edges
+ProjectMemory supplies. It's still narrower than the deterministic complete
+static-web link graph described below.
+
+Everything from here down is about a grounded, sandbox-validated `static-web`
+guided profile, which doesn't exist yet.
 
 ## Target profile
 - `Ecosystem`: `static-web`.

@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: render structured model patch operations into a stable
- * human-review view without applying them.
+ * Renders structured patch operations into a stable view a human can review.
+ * Applies nothing.
  */
 import type { PatchSetV1 } from "../../core/contracts.ts";
 

@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: turn one natural-language instruction into a bounded
- * implementation checklist used to measure direct-generation coverage.
+ * Turns one natural-language instruction into a bounded implementation
+ * checklist, which is how direct-generation coverage gets measured.
  */
 import type { PromptMessages } from "./direct-conversion.ts";
 

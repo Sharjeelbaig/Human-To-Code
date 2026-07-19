@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Human-to-code role: expose direct and guided natural-language-to-code flows
- * as CLI commands while leaving conversion policy in agents and pipeline code.
+ * The CLI shell. Exposes the direct and guided flows as commands and prints the
+ * results; the actual conversion policy lives in agents/ and pipeline/.
  */
 
 import { constants as fsConstants, realpathSync } from "node:fs";
@@ -1090,7 +1090,7 @@ async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
   return outcomeExit(validated);
 }
 
-/** Human-to-code role: map CLI commands onto direct or guided conversion workflows. */
+/** Maps a CLI command onto the direct or guided conversion workflow behind it. */
 export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   let cli: CliOptions;
   try {

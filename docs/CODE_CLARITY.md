@@ -1,43 +1,45 @@
 # Source clarity and naming practices
 
-The source should explain how reviewed human language becomes bounded code even
-when a contributor has not read every architecture document. Names and comments
-are part of the safety design: unclear code makes scope, trust, and mutation
-mistakes easier to introduce.
+The source should be able to explain how reviewed human language becomes bounded
+code, even to someone who hasn't read a single architecture document. Names and
+comments are part of the safety design here — unclear code makes it easier to
+introduce a scope, trust, or mutation mistake without noticing.
 
-For the current command-to-function and variable handoffs these names describe,
-see [WORKFLOWS.md](WORKFLOWS.md).
+For the friendly folder and file map these names describe, see
+[CODEBASE_TOUR.md](CODEBASE_TOUR.md).
 
-These practices apply to new code immediately. Existing code should move toward
-them when its owning module is changed; avoid unrelated mass renames that create
-review noise or break the embedding API.
+These practices apply to new code right away. Existing code should drift toward
+them whenever its module gets touched for another reason. Please don't do
+unrelated mass renames — they create review noise and can break the embedding
+API.
 
 ## Name from the lifecycle outward
 
-A public or cross-module function name should normally contain:
+A public or cross-module function name should usually contain:
 
 ```text
 action + domain object + lifecycle qualifier (when needed)
 ```
 
-| Prefer | Avoid | What the preferred name tells the reader |
+| Prefer | Avoid | What the better name tells you |
 | --- | --- | --- |
-| `discoverHumanInstructionSources` | `discover` | Finds `.human` inputs rather than arbitrary files. |
-| `generateGuidedCodeChangeRun` | `generateRun` | Generates a reviewed guided change, not any run. |
-| `validateGuidedCodeChangeRun` | `validateStoredRun` | Validates the guided code-change lifecycle. |
-| `applyVerifiedCodeChangeRun` | `apply` | Mutates files only for an eligible verified run. |
-| `collectUniqueValues` | `unique` | Returns values rather than answering a boolean question. |
-| `hasUniqueEditAnchor` | `unique` | A boolean name states the condition it represents. |
+| `discoverHumanInstructionSources` | `discover` | It finds `.human` inputs, not arbitrary files. |
+| `generateGuidedCodeChangeRun` | `generateRun` | It generates a reviewed guided change, not just any run. |
+| `validateGuidedCodeChangeRun` | `validateStoredRun` | It validates the guided code-change lifecycle. |
+| `applyVerifiedCodeChangeRun` | `apply` | It only mutates files for a run that's actually eligible. |
+| `collectUniqueValues` | `unique` | It returns values instead of answering a yes/no question. |
+| `hasUniqueEditAnchor` | `unique` | A boolean name states the condition it stands for. |
 
-Short names remain appropriate inside a small, obvious scope. `path` in a
-five-line path helper is clearer than repeating `projectRelativePath`; `data`,
-`result`, `item`, or `value` should be replaced when two meanings are possible.
+Short names are still fine inside a small, obvious scope. `path` in a five-line
+path helper beats repeating `projectRelativePath` everywhere. But `data`,
+`result`, `item`, and `value` should be replaced the moment two meanings are
+possible.
 
 ## Use the project vocabulary consistently
 
-Do not invent synonyms for established lifecycle concepts.
+Don't invent synonyms for concepts that already have a name.
 
-| Concept | Preferred vocabulary |
+| Concept | What to call it |
 | --- | --- |
 | Natural-language input | `instruction`, `humanSource`, `changeRequest` |
 | One direct-mode task | `conversionUnit` |
@@ -48,84 +50,92 @@ Do not invent synonyms for established lifecycle concepts.
 | Unchanged comparison tree | `baseline` |
 | Changed isolated tree | `candidate` |
 | Validation outcome | `validationReport` |
-| User's real checkout | `workingTree` |
+| The user's real checkout | `workingTree` |
 
-Use `compile` only for actual compiler work. Use `generate` for model output,
-`validate` for host checks, and `apply` only for working-tree mutation.
+Save `compile` for actual compiler work. Use `generate` for model output,
+`validate` for host checks, and `apply` only when the working tree is being
+mutated.
 
 ## Make units and state visible
 
-- Boolean names begin with `is`, `has`, `can`, `should`, `was`, or `needs`.
-- Collections use plural nouns; maps and sets state what their keys represent.
-- Paths use `Path`, `Root`, or `Directory`; hashes use `Hash`; identifiers use
-  `Id`; byte, token, money, and time values use `Bytes`, `Tokens`, `Usd`, or
-  `Ms` suffixes.
-- Distinguish `source`, `baseline`, `candidate`, and `workingTree`; never call
-  all four `root` inside the same operation.
-- Names crossing a trust boundary describe validation state when useful:
-  `rawProviderOutput`, `validatedPatch`, `reviewedContract`.
-- Avoid unexplained abbreviations except established formats and protocols such
-  as `JSON`, `HTTP`, `SHA`, `API`, and `CLI`.
+- Boolean names start with `is`, `has`, `can`, `should`, `was`, or `needs`.
+- Collections get plural nouns, and maps and sets say what their keys are.
+- Paths use `Path`, `Root`, or `Directory`. Hashes use `Hash`. Identifiers use
+  `Id`. Byte, token, money, and time values use `Bytes`, `Tokens`, `Usd`, or
+  `Ms`.
+- Keep `source`, `baseline`, `candidate`, and `workingTree` distinct. Never call
+  all four of them `root` in the same operation.
+- Names crossing a trust boundary should say where they are in that journey when
+  it helps: `rawProviderOutput`, `validatedPatch`, `reviewedContract`.
+- Skip unexplained abbreviations, except for established formats and protocols
+  like `JSON`, `HTTP`, `SHA`, `API`, and `CLI`.
 
 ## Comments explain role, boundary, and reason
 
-Every module starts with a `/** ... */` responsibility header. For modules in
-the conversion path, prefer this form:
+Every module opens with a `/** ... */` header saying what the file is for.
+Write it the way you'd explain the file to someone sitting next to you:
 
 ```ts
 /**
- * Human-to-code role: select the least-privilege project evidence the model
- * may use to turn a reviewed request into code.
+ * Picks the least-privilege slice of the project the model is allowed to see
+ * when turning a reviewed request into code.
  */
 ```
 
-Add a function comment when a function is a lifecycle checkpoint, crosses a
-trust boundary, mutates files, executes untrusted project commands, or enforces
-a non-obvious invariant. A useful comment answers at least one of these:
+Keep it about the file's job. A header that just repeats the filename is not
+useful, and neither is the same stock phrase pasted across twenty modules.
 
-- Where is this used between human instruction and final code?
-- What input is untrusted, reviewed, generated, validated, or persisted?
-- What authority does this function deliberately not have?
-- Why must this check happen before the next stage?
+Add a comment on a function when it's a lifecycle checkpoint, crosses a trust
+boundary, mutates files, executes untrusted project commands, or enforces an
+invariant you wouldn't guess from reading it. A comment that's pulling its
+weight answers at least one of these:
+
+- Where does this sit between the human instruction and the final code?
+- Which input here is untrusted, reviewed, generated, validated, or persisted?
+- What authority does this function deliberately *not* have?
+- Why does this check have to happen before the next stage?
 - Does it read, generate, validate, execute, persist, apply, or roll back?
 
-Do not narrate syntax:
+Don't narrate syntax:
 
 ```ts
 // Bad: Loop through operations.
-// Good: Reject the whole patch on the first out-of-scope operation so a model
-// cannot smuggle an allowed edit beside a prohibited one.
+// Good: Reject the whole patch on the first out-of-scope operation, so a model
+// cannot smuggle an allowed edit in beside a prohibited one.
 ```
 
-Comments are not a substitute for names. If a comment merely translates a
-vague name, improve the name first. Comments must be updated in the same change
-as the behavior they describe.
+Comments aren't a substitute for names. If a comment is just translating a vague
+name into English, fix the name instead. And when behavior changes, the comment
+changes in the same commit.
 
 ## Public API changes
 
-The embedding API is intentionally stable. When an exported name is unclear:
+The embedding API is deliberately stable. When an exported name turns out to be
+unclear:
 
-1. Add the clearer name as the primary implementation.
-2. Update internal code, tests, and documentation to use it.
-3. Keep the old name only as a small `@deprecated` alias when compatibility is
-   required.
-4. Remove the alias only in a documented breaking release.
+1. Add the clearer name as the real implementation.
+2. Point internal code, tests, and documentation at it.
+3. Keep the old name only as a small `@deprecated` alias, and only if
+   compatibility actually requires it.
+4. Remove that alias only in a documented breaking release.
 
-Do not maintain two implementations. The legacy alias must point to the new
-symbol so behavior cannot drift.
+Never maintain two implementations. The legacy alias has to point at the new
+symbol, so the two can't drift apart.
 
 ## Review checklist
 
-- Can a reader identify the lifecycle stage from each public function name?
+- Can a reader tell the lifecycle stage from each public function name?
 - Do booleans read like true/false questions?
 - Do paths, hashes, IDs, units, and collections advertise their shape?
 - Are model output, repository text, diagnostics, and provider responses named
-  as untrusted until validation occurs?
-- Does every source module begin with an accurate responsibility header?
-- Do checkpoint comments explain role or invariant rather than restating code?
+  as untrusted until they've been validated?
+- Does every source module start with an accurate header that says what it does?
+- Do checkpoint comments explain the role or invariant instead of restating the
+  code below them?
 - Are compatibility aliases explicitly deprecated and documented?
-- Were tests and the glossary updated when a public name changed?
+- Did the tests and the glossary get updated when a public name changed?
 
-`test/source-clarity.test.ts` enforces module responsibility headers and rejects
-context-free exported names unless they are documented compatibility aliases.
-Human review remains responsible for semantic naming quality.
+`test/source-clarity.test.ts` enforces that every module has a responsibility
+header and rejects context-free exported names unless they're documented
+compatibility aliases. It can't judge whether a name is *good* — that's still on
+human review.

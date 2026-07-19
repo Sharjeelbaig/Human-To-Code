@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: apply accepted direct-mode code to the working tree
- * only after stale-input checks, with rollback protection for file batches.
+ * Writes accepted direct-mode code to the working tree — but only after the
+ * stale-input checks pass, and with rollback protection for whole batches.
  */
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";

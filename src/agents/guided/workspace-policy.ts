@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: resolve the reviewed workspaces and freeze the provider,
- * context, budget, and validation policy for one guided code-change run.
+ * Works out which reviewed workspaces apply, then freezes the provider,
+ * context, budget, and validation policy for that one guided run.
  */
 import type { ProjectProfileV1, WorkspaceProfileV1 } from "../../analysis/analyzer.ts";
 import type { ConfigV1 } from "../../config/config.ts";

@@ -277,8 +277,8 @@ export function computePatchSnapshotHash(operations: readonly PatchOperation[]):
 }
 
 /**
- * Human-to-code role: reject a model-proposed patch unless every operation is
- * in reviewed scope and still matches the exact snapshot it was generated for.
+ * Rejects a model-proposed patch unless every operation stays inside reviewed
+ * scope and still matches the exact snapshot it was generated against.
  */
 export async function preparePatch(
   rootInput: string,
@@ -423,10 +423,10 @@ async function writeAtomic(absPath: string, content: string, mode: number): Prom
 }
 
 /**
- * Human-to-code role: write a host-validated structured code patch to the
- * working tree. On failure, touched paths are restored before rethrowing.
- * Atomicity is per file; callers must not describe this as a filesystem-wide
- * transaction.
+ * Writes a host-validated structured patch to the working tree. If something
+ * fails, touched paths are restored before the error is rethrown. Atomicity is
+ * per file — don't describe this as a filesystem-wide transaction, because it
+ * isn't one.
  */
 export async function applyPatchAtomic(
   root: string,

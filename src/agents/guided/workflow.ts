@@ -325,8 +325,8 @@ async function precomputeContractContext(
 }
 
 /**
- * Human-to-code role: build the exact context envelope a guided run may expose
- * to its configured provider before any code-generation request is made.
+ * Builds the exact context envelope a guided run is allowed to expose to its
+ * configured provider — before any code-generation request goes out.
  */
 export async function buildGuidedContextPreview(
   rootInput: string,
@@ -456,8 +456,8 @@ async function persistOutcome(store: RunStore, runId: string, status: RunStatus,
 }
 
 /**
- * Human-to-code role: convert one reviewed change contract into a bounded,
- * provenance-linked patch artifact without mutating the working tree.
+ * Turns one reviewed change contract into a bounded, provenance-linked patch
+ * artifact, without touching the working tree.
  */
 export async function generateGuidedCodeChangeRun(input: GenerateRunOptions): Promise<WorkflowOutcome> {
   const options = { ...input, config: resolveWorkspaceConfig(input.config, input.profile, input.contract) };
@@ -1288,8 +1288,8 @@ async function validateStoredRunLocked(options: ValidateStoredRunOptions & { sto
 }
 
 /**
- * Human-to-code role: validate a stored guided patch against its unchanged
- * baseline and isolated candidate using the frozen validation plan.
+ * Validates a stored guided patch against its unchanged baseline and its
+ * isolated candidate, using the frozen validation plan.
  */
 export async function validateGuidedCodeChangeRun(options: ValidateStoredRunOptions): Promise<WorkflowOutcome> {
   const store = options.store ?? new RunStore();
@@ -1442,7 +1442,7 @@ function validateApplyArtifact(value: unknown, patchHash: string): void {
   }
 }
 
-/** Human-to-code role: apply only a provenance-matching `VERIFIED` guided run. */
+/** Applies a guided run only when it is `VERIFIED` and its provenance still matches. */
 export async function applyVerifiedCodeChangeRun(runId: string, store = new RunStore()): Promise<WorkflowOutcome> {
   const initialRecord = await store.read(runId);
   if (initialRecord.status !== "VERIFIED") return { runId, status: initialRecord.status, diagnostics: ["Automatic apply requires a VERIFIED run."] };
@@ -1492,7 +1492,7 @@ export async function applyVerifiedCodeChangeRun(runId: string, store = new RunS
   }
 }
 
-/** Human-to-code role: restore exact pre-apply files for one applied guided run. */
+/** Restores the exact pre-apply files for one guided run that was applied. */
 export async function rollbackAppliedCodeChangeRun(runId: string, store = new RunStore()): Promise<WorkflowOutcome> {
   try {
     const restored = await store.exclusive(runId, async () => {

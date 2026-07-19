@@ -137,9 +137,9 @@ function cleanRequirement(content: string): string {
 }
 
 /**
- * Human-to-code role: translate an informal `.human` request into a deliberately
- * unreviewed change-contract draft. The material review question blocks code
- * generation until a person confirms scope, acceptance criteria, and risks.
+ * Turns an informal `.human` request into a change-contract draft that is
+ * deliberately left unreviewed. The material review question blocks generation
+ * until a person confirms the scope, acceptance criteria, and risks.
  */
 export async function createDraftContract(
   root: string,

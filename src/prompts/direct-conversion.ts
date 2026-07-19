@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: build the bounded prompt that converts one reviewed
- * natural-language instruction into one whole-file or inline code candidate.
+ * Builds the bounded prompt that turns one reviewed natural-language
+ * instruction into one whole-file or inline code candidate.
  */
 export interface DirectConversionPromptInput {
   languageLabel: string;

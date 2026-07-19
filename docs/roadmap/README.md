@@ -1,56 +1,58 @@
 # Language & framework support roadmap
 
-One file per language/framework we intend to support. Each file is an
-integration plan, not a promise of a date — items are implemented one by one,
-and a plan graduates out of this folder when its profile ships.
+One file per language or framework we want to support. Each one is an
+integration plan, not a promise about dates — items get built one at a time, and
+a plan moves out of this folder once its profile actually ships.
 
 ## The four support levels
 
-Support in human-to-code is layered; "supporting a language" means moving it
-up this ladder deliberately:
+Support here is layered. "Supporting a language" means moving it up these
+levels on purpose, one step at a time:
 
 1. **Direct path** (`src/agents/direct/`) — the language has an entry in
-   `LANGUAGE_PROFILES` (output extension + prompt label) and, if it has an
-   inline-comment form, its source extensions are in `SCANNED_EXTENSIONS` for
-   `@human` markers. This path has pre-write syntax/structure checks, but no API
-   grounding, project build/test execution, sandbox, or `VERIFIED` status.
+   `LANGUAGE_PROFILES` (output extension plus prompt label) and, if it has an
+   inline-comment form, its source extensions are in `SCANNED_EXTENSIONS` so
+   `@human` markers get found. This path has pre-write syntax and structure
+   checks, but no API grounding, no project build or test execution, no
+   sandbox, and no `VERIFIED` status.
    *Today: TypeScript, JavaScript, Python, Rust, Go, Java, Ruby, C#, C++, C.*
 2. **General fallback** (`src/analysis/adapters/general.ts`) — any declared
    language can flow through the guided pipeline ungrounded, permanently
-   `INCONCLUSIVE`. This exists for every language already; it is the floor,
-   not a goal.
-3. **Grounded profile** — a static `EcosystemAdapter` recognizes real
-   projects, collects version evidence, and emits a validation plan; the
-   variant is declared in the support matrix at `preview` tier. This is what
-   each plan in this folder describes.
+   `INCONCLUSIVE`. Every language already has this. It's the floor, not a goal.
+3. **Grounded profile** — a static `EcosystemAdapter` recognizes real projects,
+   collects version evidence, and emits a validation plan, with the variant
+   declared in the support matrix at `preview` tier. This is what every plan in
+   this folder is describing.
 4. **Certified** — the profile passes the benchmark gate in
    `src/providers/certification.ts` (≥25 tasks × 3 runs × ≥95% strong-sandbox
-   pass rate per provider/model). Never self-declared.
+   pass rate, per provider and model). Never self-declared.
 
-## What every plan must cover
+## What every plan has to cover
 
-The integration steps are fixed by [docs/SCALABILITY.md](../SCALABILITY.md#adding-an-ecosystem-eg-django-spring);
-each plan fills in the language-specific facts:
+The integration steps themselves are fixed by
+[docs/SCALABILITY.md](../SCALABILITY.md#adding-an-ecosystem-django-spring-whatever).
+Each plan just fills in the language-specific facts:
 
-| Section | It answers |
+| Section | What it answers |
 | --- | --- |
-| Status today | Which level (1/2) the language sits at right now. |
-| Target profile | The `Ecosystem` name, variants, and version range for the support matrix. |
-| Detection signals | Manifests/lockfiles/config the static adapter may read — never execute. |
-| Version evidence | Where exact resolved versions come from (lockfile, manifest pin). |
-| Validation plan | Candidate commands (argv arrays) the sandbox would run — build, test, lint. |
-| Skill pack | Conventions the `compiler-skills.ts` policy pack must encode. |
-| Risks & gates | What must be treated as elevated risk or refused (codegen hooks, FFI, migrations…). |
-| Checklist | The mechanical steps, in order, with test obligations. |
+| Status today | Which level (1 or 2) the language is at right now. |
+| Target profile | The `Ecosystem` name, its variants, and the version range for the support matrix. |
+| Detection signals | Which manifests, lockfiles, and config the static adapter may read — never execute. |
+| Version evidence | Where exact resolved versions come from (a lockfile, a manifest pin). |
+| Validation plan | The candidate commands (as argv arrays) the sandbox would run: build, test, lint. |
+| Skill pack | The conventions the `compiler-skills.ts` policy pack needs to encode. |
+| Risks & gates | What counts as elevated risk or gets refused outright: codegen hooks, FFI, migrations, and so on. |
+| Checklist | The mechanical steps in order, with their test obligations. |
 
-Ground rules that apply to every plan (from CONTRIBUTING.md's invariants):
-analysis stays static and read-only; new variants start at `preview`; support
-is declared in `support-matrix.ts`, never inferred; ambiguity returns
-`NEEDS_INPUT`/`UNSUPPORTED` rather than guessing; adding an `Ecosystem` value
-is a schema-visible change and updates `analyzer-types.ts`, skills selection,
-and the certification profile keys together.
+Ground rules that apply to every plan, straight out of CONTRIBUTING.md's
+invariants: analysis stays static and read-only; new variants start at
+`preview`; support is declared in `support-matrix.ts` and never inferred;
+ambiguity returns `NEEDS_INPUT` or `UNSUPPORTED` instead of guessing; and adding
+an `Ecosystem` value is a schema-visible change that has to update
+`analyzer-types.ts`, skills selection, and the certification profile keys
+together.
 
-## Plans
+## The plans
 
 | Plan | Kind | Sits at level | Target |
 | --- | --- | --- | --- |

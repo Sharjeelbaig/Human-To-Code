@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: translate configured language names into output-file
- * extensions and human-readable labels used by direct conversion prompts.
+ * Turns configured language names into the output-file extensions and readable
+ * labels that direct conversion prompts use.
  */
 import { languageForCodeExtension } from "../../core/languages.ts";
 import type { LanguageProfile } from "./types.ts";

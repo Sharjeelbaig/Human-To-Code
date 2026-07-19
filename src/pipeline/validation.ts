@@ -391,8 +391,8 @@ function resultFailed(result: ValidationCommandResultV1): boolean {
 }
 
 /**
- * Human-to-code role: compare the unchanged project with the generated code
- * candidate under the same frozen checks in isolated strong sandboxes.
+ * Runs the same frozen checks against the untouched project and against the
+ * generated candidate, each in its own strong sandbox, then compares them.
  */
 export async function validateBaselineAndCandidate(
   plan: ValidationPlanV1,

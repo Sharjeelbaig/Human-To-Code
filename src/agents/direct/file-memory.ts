@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: coordinate per-file direct generation while exposing
- * only bounded declarations and already-accepted code as model evidence.
+ * Runs direct generation one file at a time, showing the model only bounded
+ * declarations and code that has already been accepted.
  */
 import { readFile } from "node:fs/promises";
 import { ContextSecurityError, scanSecrets } from "../../context/context.ts";
@@ -143,8 +143,8 @@ export class FileMemory {
 }
 
 /**
- * Human-to-code role: generate one code candidate per natural-language
- * instruction unit without mutating source files.
+ * Generates one code candidate per instruction unit, without changing any
+ * source file.
  */
 export async function generateConversionUnits(
   units: readonly ConversionUnit[],

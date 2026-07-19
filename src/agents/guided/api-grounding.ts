@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: ensure external APIs introduced by a guided patch are
- * supported by selected project or exact-version documentation evidence.
+ * Makes sure any external API a guided patch introduces is actually backed by
+ * selected project evidence or exact-version documentation.
  */
 import type { WorkspaceProfileV1 } from "../../analysis/analyzer.ts";
 import type { ContextManifestV1 } from "../../context/context.ts";

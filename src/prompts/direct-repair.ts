@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: build a bounded repair prompt for one generated file
- * using normalized compiler diagnostics as untrusted evidence.
+ * Builds a bounded repair prompt for one generated file, treating the
+ * normalized compiler diagnostics as untrusted evidence.
  */
 import type { PromptMessages } from "./direct-conversion.ts";
 

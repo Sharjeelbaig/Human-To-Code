@@ -1,6 +1,6 @@
 /**
- * Human-to-code role: build prompts that audit and repair relationships among
- * generated files without expanding their approved target paths.
+ * Builds the prompts that audit and repair relationships between generated
+ * files, without letting their approved target paths grow.
  */
 import type { PromptMessages } from "./direct-conversion.ts";
 
