@@ -14,6 +14,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryPackage = JSON.parse(
+  readFileSync(join(projectRoot, "package.json"), "utf8"),
+);
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 const packed = JSON.parse(
@@ -40,7 +43,11 @@ try {
     ),
   );
   assert.equal(installedPackage.bin["human-to-code"], "./dist/cli.js");
-  assert.equal(installedPackage.version, "0.1.27");
+  assert.equal(
+    installedPackage.version,
+    repositoryPackage.version,
+    "The packed package version must match the repository manifest.",
+  );
 
   // The staged JS/TS project validation path needs the TypeScript compiler and
   // bundled node builtin typings at runtime in a clean install.
@@ -63,6 +70,10 @@ try {
   assert.equal(typeof exported.buildProjectMemory, "function");
   assert.equal(typeof exported.reconcileGeneratedIntegrations, "function");
   assert.equal(typeof exported.compactFileContract, "function");
+  assert.equal(typeof exported.discoverHumanInstructionSources, "function");
+  assert.equal(typeof exported.generateGuidedCodeChangeRun, "function");
+  assert.equal(exported.discover, exported.discoverHumanInstructionSources);
+  assert.equal(exported.generateRun, exported.generateGuidedCodeChangeRun);
 
   const cli = join(
     installRoot,

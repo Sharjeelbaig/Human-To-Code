@@ -35,20 +35,26 @@ The production pipeline is:
 
 ```text
 static project analysis
-  → reviewed ChangeContractV1
-  → grounded ContextManifestV1
-  → provider-generated PatchSetV1
-  → immutable ValidationPlanV1
-  → isolated baseline/candidate ValidationReportV1
+  → reviewed ChangeContractV1 (what is allowed to change)
+  → grounded ContextManifestV1 (the context used)
+  → provider-generated PatchSetV1 (the proposed edits)
+  → immutable ValidationPlanV1 (the checks to run)
+  → isolated baseline/candidate ValidationReportV1 (the check results)
   → explicit apply only after VERIFIED
   → provenance-bound rollback artifact and exact rollback
 ```
+
+**New here?** These are review records created by guided mode; you do not normally write them yourself. The change contract records the approved request, the context manifest records the relevant files and documentation selected, the patch set records proposed edits, the validation plan records the agreed checks, and the validation report records their results.
+
+See the [architecture glossary](docs/GLOSSARY.md) for plain-English definitions of these and other project terms.
+See the [feature and code workflows](docs/WORKFLOWS.md) to trace each CLI command through its functions, variables, artifacts, and failure points.
+Source names and comments follow the intent-first rules in [docs/CODE_CLARITY.md](docs/CODE_CLARITY.md).
 
 The LLM generates structured code edits. It is not a deterministic `strict → code` compiler, and documentation must not claim that it is. Determinism belongs to discovery, profiling, contract/schema validation, context selection, patch safety checks, validation-plan selection, provenance hashes, and application.
 
 ## Project layout
 
-Source is organized into layered domain folders; a module may import from its own layer or a layer above it in this table, never below. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency rules and [docs/MODULES.md](docs/MODULES.md) for a per-file guide.
+Source is organized into layered domain folders; a module may import from its own layer or a layer above it in this table, never below. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency rules, [docs/WORKFLOWS.md](docs/WORKFLOWS.md) for feature call chains, [docs/MODULES.md](docs/MODULES.md) for a per-file guide, and [docs/GLOSSARY.md](docs/GLOSSARY.md) for plain-English terminology.
 
 | Path | Responsibility |
 | --- | --- |
@@ -93,6 +99,8 @@ If a proposed feature cannot preserve an invariant, open a design discussion bef
 4. Update `Readme.md`, `SECURITY.md`, public types, and schemas together when behavior or guarantees change.
 5. Run all development checks from a clean install.
 6. Explain security impact, compatibility impact, and remaining limitations in the pull request.
+
+Use lifecycle-oriented names: an exported function should communicate its action, domain object, and relevant stage (for example, `discoverHumanInstructionSources`, not `discover`). Boolean names should read as conditions, units should be visible in names, and checkpoint comments should explain their human-to-code role or invariant. See [docs/CODE_CLARITY.md](docs/CODE_CLARITY.md) for the complete practice and compatibility rules.
 
 Use `apply_patch`-style focused edits rather than bulk rewrites when practical. Do not commit `dist/`, temporary snapshots, provider responses, generated run records, credentials, private fixtures, or npm tarballs.
 
@@ -205,6 +213,7 @@ Do not remove a limitation because a positive fixture works once. Certification 
 - [ ] No credentials, private paths, provider responses, or run artifacts are included.
 - [ ] New dependencies are justified, pinned, lockfile-reviewed, and license/security checked.
 - [ ] No success/certification claim exceeds the evidence.
+- [ ] New names and comments satisfy the source-clarity checklist; deprecated aliases are compatibility-only.
 
 ## Reporting security issues
 

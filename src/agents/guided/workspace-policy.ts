@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: resolve the reviewed workspaces and freeze the provider,
+ * context, budget, and validation policy for one guided code-change run.
+ */
 import type { ProjectProfileV1, WorkspaceProfileV1 } from "../../analysis/analyzer.ts";
 import type { ConfigV1 } from "../../config/config.ts";
 import {
@@ -13,7 +17,7 @@ function workspaceOverride(config: ConfigV1, workspace: WorkspaceProfileV1): Con
     candidate.root === workspace.relativeRoot || candidate.root === workspace.ownership.root);
 }
 
-export function unique<T>(values: readonly T[]): T[] {
+export function collectUniqueValues<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
 
@@ -51,8 +55,8 @@ export function resolveWorkspaceConfig(
   const docs = overrides.map((item) => item?.documentation).filter((item) => item !== undefined);
   resolved.documentation = {
     mode: docs.some((item) => item.mode === "offline") ? "offline" : config.documentation.mode,
-    privatePaths: unique([config.documentation.privatePaths, ...docs.map((item) => item.privatePaths ?? [])].flat()),
-    officialDomains: unique([config.documentation.officialDomains, ...docs.map((item) => item.officialDomains ?? [])].flat()),
+    privatePaths: collectUniqueValues([config.documentation.privatePaths, ...docs.map((item) => item.privatePaths ?? [])].flat()),
+    officialDomains: collectUniqueValues([config.documentation.officialDomains, ...docs.map((item) => item.officialDomains ?? [])].flat()),
     officialSources: [...new Map(
       [config.documentation.officialSources, ...docs.map((item) => item.officialSources ?? [])]
         .flat()
@@ -66,7 +70,7 @@ export function resolveWorkspaceConfig(
     telemetry: process.env.DO_NOT_TRACK
       ? false
       : privacy.every((item) => item.telemetry ?? config.privacy.telemetry) && config.privacy.telemetry,
-    excludedPaths: unique([config.privacy.excludedPaths, ...privacy.map((item) => item.excludedPaths ?? [])].flat()),
+    excludedPaths: collectUniqueValues([config.privacy.excludedPaths, ...privacy.map((item) => item.excludedPaths ?? [])].flat()),
     maxFileBytes: Math.min(config.privacy.maxFileBytes, ...privacy.map((item) => item.maxFileBytes ?? config.privacy.maxFileBytes)),
     maxContextTokens: Math.min(config.privacy.maxContextTokens, ...privacy.map((item) => item.maxContextTokens ?? config.privacy.maxContextTokens)),
   };

@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: build the prompt that aligns direct-mode target files
+ * and shared names before independent code-generation requests begin.
+ */
 import type { PromptMessages } from "./direct-conversion.ts";
 
 function promptPath(path: string): string {

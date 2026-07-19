@@ -273,10 +273,11 @@ function gitIgnored(root: string, relPaths: readonly string[]): Set<string> {
 }
 
 /**
- * Discover and classify all source files. Missing/unreadable roots, unreadable
+ * Human-to-code role: find and classify natural-language instruction sources
+ * without executing project code. Missing/unreadable roots, unreadable
  * descendants, and Git failures reject instead of returning partial output.
  */
-export async function discover(
+export async function discoverHumanInstructionSources(
   rootInput: string,
   extraIgnore: string[] = [],
 ): Promise<SecureDiscoveryResult> {
@@ -314,6 +315,12 @@ export async function discover(
   if (secretsFiles[0] !== undefined) result.secrets = secretsFiles[0];
   return result;
 }
+
+/**
+ * @deprecated Use `discoverHumanInstructionSources`; retained for embedding
+ * API compatibility with pre-clarity releases.
+ */
+export const discover = discoverHumanInstructionSources;
 
 function discoveryRootFor(source: SourceFile): string {
   const segments = source.relPath.split("/").filter((segment) => segment !== "");

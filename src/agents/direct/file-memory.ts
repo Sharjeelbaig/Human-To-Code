@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: coordinate per-file direct generation while exposing
+ * only bounded declarations and already-accepted code as model evidence.
+ */
 import { readFile } from "node:fs/promises";
 import { ContextSecurityError, scanSecrets } from "../../context/context.ts";
 import { extractStaticFileMemory } from "../../pipeline/file-memory.ts";
@@ -138,7 +142,10 @@ export class FileMemory {
   }
 }
 
-/** Generate each unit without mutating source files. */
+/**
+ * Human-to-code role: generate one code candidate per natural-language
+ * instruction unit without mutating source files.
+ */
 export async function generateConversionUnits(
   units: readonly ConversionUnit[],
   generator: (unit: ConversionUnit, context: UnitGenerationContext) => Promise<string>,

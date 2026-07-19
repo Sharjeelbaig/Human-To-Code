@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: build the guided prompt that asks for a structured patch
+ * within the reviewed contract, snapshot, and selected context evidence.
+ */
 import type { ProjectProfileV1, WorkspaceProfileV1 } from "../analysis/analyzer.ts";
 import { skillsForEcosystems } from "../context/compiler-skills.ts";
 import type { ContextManifestV1 } from "../context/context.ts";

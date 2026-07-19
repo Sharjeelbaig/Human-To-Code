@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: present direct conversion work before execution and
+ * reject ambiguous model output before it can become candidate code.
+ */
 import { languageProfile } from "./languages.ts";
 import { potentialIntegrationRequests } from "./integration-validation.ts";
 import type { ConversionUnit } from "./types.ts";

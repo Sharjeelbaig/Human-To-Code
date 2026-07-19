@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: send typed direct-conversion prompts through the chosen
+ * provider while keeping provider mechanics out of discovery and application.
+ */
 import {
   buildDirectBlueprintPrompt,
   type DirectBlueprintPromptInput,

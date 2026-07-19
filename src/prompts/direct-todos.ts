@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: turn one natural-language instruction into a bounded
+ * implementation checklist used to measure direct-generation coverage.
+ */
 import type { PromptMessages } from "./direct-conversion.ts";
 
 function promptPath(path: string): string {

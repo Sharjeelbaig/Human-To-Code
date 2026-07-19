@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: define inputs and outcomes for the reviewed guided
+ * request-to-patch-to-validation lifecycle.
+ */
 import type { ProjectProfileV1 } from "../../analysis/analyzer.ts";
 import type { ConfigV1 } from "../../config/config.ts";
 import type {

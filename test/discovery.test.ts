@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
-  discover,
+  discoverHumanInstructionSources,
   DiscoveryError,
   secretsTrackedError,
   sourceContentHash,
@@ -42,10 +42,10 @@ async function makeFixture(): Promise<string> {
   return root;
 }
 
-test("discover classifies sources deterministically and applies name ignores", async () => {
+test("discoverHumanInstructionSources classifies sources deterministically and applies name ignores", async () => {
   const root = await makeFixture();
   try {
-    const result = await discover(root, ["node_modules", ".git", "dist"]);
+    const result = await discoverHumanInstructionSources(root, ["node_modules", ".git", "dist"]);
     assert.deepEqual(
       result.human.map(({ relPath }) => relPath),
       ["a.human", "b.human", "sub/c.human"],
@@ -69,7 +69,7 @@ test("discover classifies sources deterministically and applies name ignores", a
 test("every nested secrets.human is enumerated even below ignore boundaries", async () => {
   const root = await makeFixture();
   try {
-    const result = await discover(root, ["node_modules", "secrets.human"]);
+    const result = await discoverHumanInstructionSources(root, ["node_modules", "secrets.human"]);
     assert.deepEqual(
       result.secretsFiles.map(({ relPath }) => relPath),
       [
@@ -89,7 +89,7 @@ test("Git-ignored human sources are excluded while ignored secrets remain visibl
   try {
     assert.equal(spawnSync("git", ["-C", root, "init", "-q"]).status, 0);
     await writeFile(join(root, ".gitignore"), "sub/\nsecrets.human\n");
-    const result = await discover(root);
+    const result = await discoverHumanInstructionSources(root);
     assert.ok(!result.human.some(({ relPath }) => relPath === "sub/c.human"));
     assert.ok(result.secretsFiles.some(({ relPath }) => relPath === "secrets.human"));
   } finally {
@@ -97,18 +97,18 @@ test("Git-ignored human sources are excluded while ignored secrets remain visibl
   }
 });
 
-test("discover rejects a missing root and a regular-file root", async () => {
+test("discoverHumanInstructionSources rejects a missing root and a regular-file root", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-disc-root-"));
   const file = join(root, "file");
   await writeFile(file, "x");
   try {
     await assert.rejects(
-      () => discover(join(root, "missing")),
+      () => discoverHumanInstructionSources(join(root, "missing")),
       (error: unknown) =>
         error instanceof DiscoveryError && error.code === "ROOT_NOT_FOUND",
     );
     await assert.rejects(
-      () => discover(file),
+      () => discoverHumanInstructionSources(file),
       (error: unknown) =>
         error instanceof DiscoveryError && error.code === "ROOT_NOT_DIRECTORY",
     );
@@ -117,7 +117,7 @@ test("discover rejects a missing root and a regular-file root", async () => {
   }
 });
 
-test("discover rejects a symlinked root", async (context) => {
+test("discoverHumanInstructionSources rejects a symlinked root", async (context) => {
   const root = await mkdtemp(join(tmpdir(), "h2c-disc-root-"));
   const target = join(root, "target");
   const link = join(root, "link");
@@ -130,7 +130,7 @@ test("discover rejects a symlinked root", async (context) => {
       return;
     }
     await assert.rejects(
-      () => discover(link),
+      () => discoverHumanInstructionSources(link),
       (error: unknown) =>
         error instanceof DiscoveryError && error.code === "ROOT_SYMLINK",
     );
@@ -151,7 +151,7 @@ test("an unreadable descendant makes the scan fail instead of becoming partial",
   await chmod(blocked, 0o000);
   try {
     await assert.rejects(
-      () => discover(root),
+      () => discoverHumanInstructionSources(root),
       (error: unknown) =>
         error instanceof DiscoveryError && error.code === "PARTIAL_SCAN",
     );
@@ -167,7 +167,7 @@ test("a corrupt Git marker fails closed instead of ignoring Git errors", async (
     await mkdir(join(root, ".git"));
     await writeFile(join(root, "source.human"), "source");
     await assert.rejects(
-      () => discover(root),
+      () => discoverHumanInstructionSources(root),
       (error: unknown) =>
         error instanceof DiscoveryError && error.code === "GIT_ERROR",
     );
@@ -179,7 +179,7 @@ test("a corrupt Git marker fails closed instead of ignoring Git errors", async (
 test("secretsTrackedError is a no-op outside Git", async () => {
   const root = await makeFixture();
   try {
-    const result = await discover(root);
+    const result = await discoverHumanInstructionSources(root);
     assert.ok(result.secrets);
     assert.equal(secretsTrackedError(result.secrets!), null);
   } finally {
@@ -203,7 +203,7 @@ test("legacy single-secret check detects any nested tracked secret", async () =>
       0,
     );
 
-    const result = await discover(root);
+    const result = await discoverHumanInstructionSources(root);
     // Pass only the compatibility property. The Git query still checks all
     // nested secrets under the discovery root.
     assert.ok(result.secrets);

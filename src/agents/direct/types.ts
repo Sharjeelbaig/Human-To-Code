@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: define the direct-mode vocabulary shared by instruction
+ * discovery, model generation, validation, presentation, and application.
+ */
 import type { StaticFileMemoryEntry } from "../../pipeline/file-memory.ts";
 import type { UnitTodoList } from "./unit-todos.ts";
 

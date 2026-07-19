@@ -137,9 +137,9 @@ function cleanRequirement(content: string): string {
 }
 
 /**
- * Create a deliberately unreviewed contract. It is useful as a deterministic
- * starting point, but the material review question prevents generation until
- * a human confirms target, scope, acceptance criteria, and elevated risks.
+ * Human-to-code role: translate an informal `.human` request into a deliberately
+ * unreviewed change-contract draft. The material review question blocks code
+ * generation until a person confirms scope, acceptance criteria, and risks.
  */
 export async function createDraftContract(
   root: string,

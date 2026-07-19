@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-/** Production CLI: analyze -> reviewed contract -> grounded patch -> validation -> explicit apply. */
+/**
+ * Human-to-code role: expose direct and guided natural-language-to-code flows
+ * as CLI commands while leaving conversion policy in agents and pipeline code.
+ */
 
 import { constants as fsConstants, realpathSync } from "node:fs";
 import { copyFile, lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -19,7 +22,7 @@ import {
 } from "./config/config.ts";
 import { ContextSecurityError } from "./context/context.ts";
 import { DocumentationError } from "./context/documentation.ts";
-import { discover, DiscoveryError, secretsTrackedError } from "./config/discovery.ts";
+import { discoverHumanInstructionSources, DiscoveryError, secretsTrackedError } from "./config/discovery.ts";
 import {
   PlanningError,
   contractPathForSource,
@@ -64,12 +67,12 @@ import {
 } from "./agents/direct/index.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
 import {
-  applyVerifiedRun,
-  buildContextPreview,
-  generateRun,
+  applyVerifiedCodeChangeRun,
+  buildGuidedContextPreview,
+  generateGuidedCodeChangeRun,
   resolveWorkspaceConfig,
-  rollbackAppliedRun,
-  validateStoredRun,
+  rollbackAppliedCodeChangeRun,
+  validateGuidedCodeChangeRun,
   type WorkflowOutcome,
 } from "./agents/guided/index.ts";
 
@@ -331,7 +334,9 @@ function providerFor(config: ConfigV1): ProviderAdapter {
   throw new ConfigError(`Provider '${config.provider.name}' has no certified HTTP adapter in this release. Use openai or ollama.`);
 }
 
-async function safeProject(root: string): Promise<{ profile: ProjectProfileV1; config: ConfigV1; fromFile: boolean }> {
+async function loadConfigAndAnalyzeProject(
+  root: string,
+): Promise<{ profile: ProjectProfileV1; config: ConfigV1; fromFile: boolean }> {
   // Load config first so its declared language can seed the ungrounded `general`
   // fallback when no framework is recognized. Standalone `analyze` deliberately
   // stays pure recognition and does not pass this hint.
@@ -340,8 +345,11 @@ async function safeProject(root: string): Promise<{ profile: ProjectProfileV1; c
   return { profile, config, fromFile };
 }
 
-async function securityDiscovery(root: string, config: ConfigV1): Promise<Awaited<ReturnType<typeof discover>>> {
-  const sources = await discover(root, config.filesToIgnore);
+async function discoverInstructionSourcesAndRejectTrackedSecrets(
+  root: string,
+  config: ConfigV1,
+): Promise<Awaited<ReturnType<typeof discoverHumanInstructionSources>>> {
+  const sources = await discoverHumanInstructionSources(root, config.filesToIgnore);
   const tracked = secretsTrackedError(sources.secretsFiles);
   if (tracked) throw new ContextSecurityError("SECRET_DETECTED", tracked);
   return sources;
@@ -349,7 +357,7 @@ async function securityDiscovery(root: string, config: ConfigV1): Promise<Awaite
 
 async function planCommand(cli: CliOptions, sourceInput: string): Promise<number> {
   const root = projectRoot(cli);
-  const { profile } = await safeProject(root);
+  const { profile } = await loadConfigAndAnalyzeProject(root);
   const exit = analysisExit(profile);
   if (exit !== 0) {
     output(cli.json ? profile : profileText(profile), cli.json);
@@ -369,7 +377,7 @@ async function planCommand(cli: CliOptions, sourceInput: string): Promise<number
 }
 
 async function loadContractFor(root: string, contractInput: string): Promise<{ profile: ProjectProfileV1; config: ConfigV1; contract: Awaited<ReturnType<typeof loadReviewedContract>> }> {
-  const { profile, config } = await safeProject(root);
+  const { profile, config } = await loadConfigAndAnalyzeProject(root);
   const exit = analysisExit(profile);
   if (exit !== 0) throw new PlanningError("ANALYSIS_NOT_SUPPORTED", `Static analysis status is ${profile.status}.`);
   const contractPath = relativeInside(root, contractInput);
@@ -382,7 +390,7 @@ async function contextCommand(cli: CliOptions, contractInput: string): Promise<n
   const root = projectRoot(cli);
   const loaded = await loadContractFor(root, contractInput);
   const config = resolveWorkspaceConfig(overrideConfig(loaded.config, cli), loaded.profile, loaded.contract.contract);
-  const manifest = await buildContextPreview(root, loaded.profile, loaded.contract.contract, config, cli.offline);
+  const manifest = await buildGuidedContextPreview(root, loaded.profile, loaded.contract.contract, config, cli.offline);
   if (cli.json) output(manifest, true);
   else {
     const lines = [
@@ -404,7 +412,7 @@ async function generateCommand(cli: CliOptions, contractInput: string): Promise<
   const loaded = await loadContractFor(root, contractInput);
   const config = resolveWorkspaceConfig(overrideConfig(loaded.config, cli), loaded.profile, loaded.contract.contract);
   const provider = providerFor(config);
-  const outcome = await generateRun({
+  const outcome = await generateGuidedCodeChangeRun({
     root,
     profile: loaded.profile,
     contract: loaded.contract.contract,
@@ -417,7 +425,7 @@ async function generateCommand(cli: CliOptions, contractInput: string): Promise<
 }
 
 async function validateCommand(cli: CliOptions, runId: string): Promise<number> {
-  const outcome = await validateStoredRun({
+  const outcome = await validateGuidedCodeChangeRun({
     runId,
     sandboxImage: cli.sandboxImage,
     dockerBinary: cli.dockerBinary,
@@ -428,26 +436,26 @@ async function validateCommand(cli: CliOptions, runId: string): Promise<number> 
 }
 
 async function applyCommand(cli: CliOptions, runId: string): Promise<number> {
-  const outcome = await applyVerifiedRun(runId);
+  const outcome = await applyVerifiedCodeChangeRun(runId);
   output(cli.json ? outcome : outcomeText(outcome), cli.json);
   return outcomeExit(outcome);
 }
 
 async function rollbackCommand(cli: CliOptions, runId: string): Promise<number> {
-  const outcome = await rollbackAppliedRun(runId);
+  const outcome = await rollbackAppliedCodeChangeRun(runId);
   output(cli.json ? outcome : outcomeText(outcome), cli.json);
   return outcomeExit(outcome);
 }
 
 async function checkCommand(cli: CliOptions, rootInput?: string): Promise<number> {
   const root = resolve(cli.root ?? rootInput ?? ".");
-  const { profile, config } = await safeProject(root);
+  const { profile, config } = await loadConfigAndAnalyzeProject(root);
   const profileExit = analysisExit(profile);
   if (profileExit !== 0) {
     output(cli.json ? profile : profileText(profile), cli.json);
     return profileExit;
   }
-  const sources = await securityDiscovery(root, config);
+  const sources = await discoverInstructionSourcesAndRejectTrackedSecrets(root, config);
   const failures: string[] = [];
   for (const source of sources.human) {
     const contractPath = contractPathForSource(root, source);
@@ -1023,7 +1031,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
 
 async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
   const root = resolve(cli.root ?? rootInput ?? ".");
-  const { profile, config: loadedConfig } = await safeProject(root);
+  const { profile, config: loadedConfig } = await loadConfigAndAnalyzeProject(root);
   const profileExit = analysisExit(profile);
   if (profileExit !== 0) {
     output(cli.json ? profile : profileText(profile), cli.json);
@@ -1034,7 +1042,7 @@ async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
     return 0;
   }
   const config = overrideConfig(loadedConfig, cli);
-  const sources = await securityDiscovery(root, config);
+  const sources = await discoverInstructionSourcesAndRejectTrackedSecrets(root, config);
   let selected = sources.human;
   if (cli.file) {
     const wanted = relativeInside(root, cli.file);
@@ -1065,12 +1073,12 @@ async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
   }
   const effectiveConfig = resolveWorkspaceConfig(config, profile, reviewed.contract);
   const provider = providerFor(effectiveConfig);
-  const generated = await generateRun({ root, profile, contract: reviewed.contract, config: effectiveConfig, provider, offline: cli.offline });
+  const generated = await generateGuidedCodeChangeRun({ root, profile, contract: reviewed.contract, config: effectiveConfig, provider, offline: cli.offline });
   if (generated.diff === undefined) {
     output(cli.json ? generated : outcomeText(generated), cli.json);
     return outcomeExit(generated);
   }
-  const validated = await validateStoredRun({
+  const validated = await validateGuidedCodeChangeRun({
     runId: generated.runId,
     sandboxImage: cli.sandboxImage,
     dockerBinary: cli.dockerBinary,
@@ -1082,7 +1090,8 @@ async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
   return outcomeExit(validated);
 }
 
-export async function run(argv: string[]): Promise<number> {
+/** Human-to-code role: map CLI commands onto direct or guided conversion workflows. */
+export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   let cli: CliOptions;
   try {
     cli = parse(argv);
@@ -1176,7 +1185,7 @@ function isMainModule(): boolean {
 }
 
 if (isMainModule()) {
-  run(process.argv.slice(2))
+  runHumanToCodeCli(process.argv.slice(2))
     .then((code) => { process.exitCode = code; })
     .catch((error: unknown) => {
       console.error(error instanceof Error ? error.stack ?? error.message : String(error));

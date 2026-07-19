@@ -1,8 +1,9 @@
 # Module guide
 
 A per-file map of `src/`, grouped by layer. Layers and dependency rules are
-explained in [ARCHITECTURE.md](ARCHITECTURE.md). Tests live in `test/` and
-mirror these modules by name.
+explained in [ARCHITECTURE.md](ARCHITECTURE.md); command-to-function data flow
+is traced in [WORKFLOWS.md](WORKFLOWS.md). Tests live in `test/` and mirror
+these modules by name.
 
 ## Entry points (`src/`)
 
@@ -24,7 +25,7 @@ mirror these modules by name.
 | Module | Purpose |
 | --- | --- |
 | `config.ts` | Strict schema-v1 `human-to-code.config.json`: `validateConfig`, `DEFAULT_CONFIG`, `CONFIG_FILENAME`, enabled languages, exact `humanFileExtensions` routing, provider/pricing/privacy/sandbox/budget policy, the default-off `direct.reconcileIntegrations` switch, endpoint trust rules, and explicit alpha-config migration. Unknown keys and credential-like values are rejected; credentials are environment-variable names only. |
-| `discovery.ts` | Fail-closed discovery of `.human` sources and protected secret files (`discover`, `DiscoveryError`, `secretsTrackedError`). Never follows symlinks; never turns a partial scan into an empty success. |
+| `discovery.ts` | Fail-closed discovery of `.human` sources and protected secret files (`discoverHumanInstructionSources`, `DiscoveryError`, `secretsTrackedError`; deprecated `discover` alias). Never follows symlinks; never turns a partial scan into an empty success. |
 
 ## `src/analysis/` — static project intelligence
 
@@ -117,7 +118,7 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `workspace-policy.ts` | Conservative workspace selection, override merging, and validation-plan construction. |
 | `patch-diff.ts` | Stable review-oriented rendering for structured patch operations. |
 | `api-grounding.ts` | Static detection and evidence checks for external APIs introduced by a patch. |
-| `workflow.ts` | Auditable `generateRun`, validate/repair, verified apply, and exact rollback lifecycle. Coordinates deterministic services but contains no prompt prose. |
+| `workflow.ts` | Auditable `generateGuidedCodeChangeRun`, validate/repair, verified apply, and exact rollback lifecycle. Coordinates deterministic services but contains no prompt prose. |
 | `index.ts` | Guided-agent export surface used by the CLI and package entry point. |
 
 ## `src/pipeline/` — deterministic execution mechanics
@@ -151,4 +152,6 @@ accept typed, already-reviewed data and perform no I/O or mutation.
 | `test/direct-reliability.test.ts` | Regression coverage for direct issues 02 and 04–11: JSDoc, output cleanup, validation, overwrite/staleness/indent guards, regex memory, C-family declarations, and discovery notices. |
 | `test/staged-validation.test.ts` | Issue 12 coverage: calculator-style cross-file rejection, consistent-candidate acceptance, bounded repair success and exhaustion, named-import/member/union/arity detection, baseline tolerance and multiplicity comparison, dependency-group isolation, and overlay write guards. |
 | `test/cli.test.ts` | Command surface and exit codes. |
+| `test/source-clarity.test.ts` | Required module responsibility headers and rejection of context-free exported names unless documented as compatibility aliases. |
+| `test/workflow-docs.test.ts` | Every registered CLI command and primary lifecycle entry point remains represented in `docs/WORKFLOWS.md`. |
 | `test/package-smoke.mjs` | Packed-tarball install, public import, installed-CLI invocation (`npm run package:check`). |

@@ -589,9 +589,19 @@ Only `VERIFIED` authorizes automatic application. See [SECURITY.md](SECURITY.md)
 
 ## Codebase documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — layers, pipeline flow, and design decisions.
-- [docs/MODULES.md](docs/MODULES.md) — per-file guide to `src/` and the test map.
-- [docs/SCALABILITY.md](docs/SCALABILITY.md) — layering rules, extension points (new ecosystems, providers, schema versions), and engineering practices.
+Choose the document that matches your question:
+
+| I want to understand… | Read |
+| --- | --- |
+| What a project term means | [Architecture glossary](docs/GLOSSARY.md) |
+| Which functions run for each CLI feature, how variables move between them, and where to debug | [Feature and code workflows](docs/WORKFLOWS.md) |
+| Why the source is split into these layers | [Architecture](docs/ARCHITECTURE.md) |
+| What each source file owns | [Module guide](docs/MODULES.md) |
+| How functions, variables, and lifecycle comments should be named | [Source clarity and naming practices](docs/CODE_CLARITY.md) |
+| Every configuration field and default | [Configuration reference](docs/CONFIGURATION.md) |
+| How to add ecosystems, providers, or schema versions safely | [Scalability and engineering practices](docs/SCALABILITY.md) |
+| Security boundaries, secrets, sandboxing, apply, and rollback | [Security model](SECURITY.md) |
+| How to prepare and review a contribution | [Contributor guide](CONTRIBUTING.md) |
 
 ## Development checks
 

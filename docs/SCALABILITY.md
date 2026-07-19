@@ -83,6 +83,11 @@ between releases:
 
 ## Code conventions
 
+The complete naming, variable, and lifecycle-comment rules live in
+[CODE_CLARITY.md](CODE_CLARITY.md). In short, names should expose the action,
+domain object, and lifecycle stage; comments should explain the human-to-code
+role, trust boundary, or invariant rather than narrating syntax.
+
 - **TypeScript strict, no escape hatches.** `strict` and
   `noUncheckedIndexedAccess` stay on; avoid `any` and non-null assertions —
   validate at the boundary and let types flow.
@@ -148,6 +153,8 @@ Documentation is layered like the code — update the layer that owns the fact:
 | Layer | Owns | Update when |
 | --- | --- | --- |
 | Module headers | What one file does | The file's behavior changes |
+| [docs/CODE_CLARITY.md](CODE_CLARITY.md) | Naming, variables, lifecycle comments, and compatibility aliases | Source-clarity practices change |
+| [docs/WORKFLOWS.md](WORKFLOWS.md) | CLI feature call chains, variables, artifacts, side effects, and debugging ownership | A command or lifecycle handoff changes |
 | [docs/MODULES.md](MODULES.md) | The per-file map | A module is added, moved, or repurposed |
 | [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Layers, flow, design decisions | A layer, stage, or invariant-relevant design changes |
 | [Readme.md](../Readme.md) | User-facing behavior and guarantees | CLI behavior, config, statuses, or limitations change |

@@ -63,9 +63,10 @@ function analysisStatus(
 }
 
 /**
- * Analyze a project root using the built-in React/NestJS, FastAPI, and Cargo
- * adapters. Custom adapters are useful for downstream/private ecosystems, but
- * are held to the same read-only context boundary.
+ * Human-to-code role: build the static project profile that grounds a natural-
+ * language change request in real workspaces, versions, and validation options.
+ * Uses built-in React/NestJS, FastAPI, and Cargo adapters without executing the
+ * project; custom adapters are held to the same read-only boundary.
  */
 export async function analyzeProject(
   root: string,

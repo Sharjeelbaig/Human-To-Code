@@ -390,6 +390,10 @@ function resultFailed(result: ValidationCommandResultV1): boolean {
   return result.status !== "passed" || result.flaky || result.outputTruncated;
 }
 
+/**
+ * Human-to-code role: compare the unchanged project with the generated code
+ * candidate under the same frozen checks in isolated strong sandboxes.
+ */
 export async function validateBaselineAndCandidate(
   plan: ValidationPlanV1,
   options: ValidationComparisonOptions,

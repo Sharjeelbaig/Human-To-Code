@@ -590,8 +590,9 @@ function readDocumentationCandidate(
 }
 
 /**
- * Select context deterministically. This function performs no network access
- * and never executes/imports project code.
+ * Human-to-code role: select the least-privilege project evidence the model may
+ * use to turn a reviewed request into code. Selection is deterministic, performs
+ * no network access, and never executes or imports project code.
  */
 export async function selectContext(options: ContextSelectionOptions): Promise<ContextManifestV1> {
   if (!/^[a-f0-9]{64}$/u.test(options.projectFingerprint)) {

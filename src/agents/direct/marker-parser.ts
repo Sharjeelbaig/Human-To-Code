@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: locate real `@human` instructions in source comments
+ * while ignoring comment-shaped text inside strings and markup attributes.
+ */
 export interface InlineMarker {
   prompt: string;
   start: number;

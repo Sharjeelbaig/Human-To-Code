@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: describe the host-enforced JSON result shape when a
+ * provider cannot enforce the patch schema natively.
+ */
 import { canonicalJson } from "../core/contracts.ts";
 import type { JsonSchemaV1 } from "../providers/provider.ts";
 

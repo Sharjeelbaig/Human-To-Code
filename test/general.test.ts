@@ -18,7 +18,7 @@ import type {
   ProviderGenerationResultV1,
 } from "../src/providers/provider.ts";
 import { RunStore } from "../src/pipeline/run-store.ts";
-import { generateRun } from "../src/agents/guided/index.ts";
+import { generateGuidedCodeChangeRun } from "../src/agents/guided/index.ts";
 
 class GeneralMockProvider implements ProviderAdapter {
   readonly name = "general-mock";
@@ -135,7 +135,7 @@ test("general generation yields a reviewable patch, stays INCONCLUSIVE, writes n
 
   const provider = new GeneralMockProvider(contract);
   const store = new RunStore(join(container, "runs"));
-  const generated = await generateRun({ root, profile, contract, config, provider, store });
+  const generated = await generateGuidedCodeChangeRun({ root, profile, contract, config, provider, store });
 
   assert.equal(generated.status, "INCONCLUSIVE", JSON.stringify(generated));
   assert.equal(provider.calls, 1);

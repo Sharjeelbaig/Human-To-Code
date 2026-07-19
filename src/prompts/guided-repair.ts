@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: build a scope-frozen guided repair prompt from validation
+ * diagnostics without allowing new files, operations, dependencies, or tests.
+ */
 import {
   canonicalJson,
   hashCanonical,

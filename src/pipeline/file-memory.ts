@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: extract bounded declarations and signatures from source
+ * text so direct generation can reuse project vocabulary without execution.
+ */
 import { extname } from "node:path";
 
 export interface StaticFileMemoryEntry {

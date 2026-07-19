@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: apply accepted direct-mode code to the working tree
+ * only after stale-input checks, with rollback protection for file batches.
+ */
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { replaceInlineMarker } from "./replacement.ts";

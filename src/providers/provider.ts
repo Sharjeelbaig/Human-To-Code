@@ -488,8 +488,9 @@ export interface GenerateValidatedOptions {
 }
 
 /**
- * The mandatory schema gate around every adapter. Native JSON-schema support
- * improves generation quality but never replaces this local validator.
+ * Human-to-code role: obtain model output and accept it only after the host
+ * validates the required code-artifact schema. Native JSON Schema support may
+ * improve generation quality but never replaces this local validator.
  */
 export async function generateValidated<T>(
   adapter: ProviderAdapter,

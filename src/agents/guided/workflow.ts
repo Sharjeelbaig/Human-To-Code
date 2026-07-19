@@ -56,7 +56,7 @@ import {
   createValidationPlan,
   resolveWorkspaceConfig,
   targetWorkspaces,
-  unique,
+  collectUniqueValues,
 } from "./workspace-policy.ts";
 import type {
   GenerateRunOptions,
@@ -152,7 +152,7 @@ function initialContextCandidates(
 }
 
 function officialDocumentationHosts(config: ConfigV1): string[] {
-  return unique([
+  return collectUniqueValues([
     "react.dev", "nextjs.org", "vite.dev", "docs.nestjs.com", "fastapi.tiangolo.com",
     "docs.pydantic.dev", "docs.python.org", "doc.rust-lang.org", "docs.rs",
     ...config.documentation.officialDomains,
@@ -249,7 +249,7 @@ async function precomputeContractContext(
   const candidates = [...initial];
   let requestNumber = 0;
   const workspaces = targetWorkspaces(profile, contract);
-  const symbols = unique(contract.targetSymbols)
+  const symbols = collectUniqueValues(contract.targetSymbols)
     .filter((symbol) => symbol.length >= 2 && symbol.length <= 256 && !/[\r\n\0]/u.test(symbol))
     .slice(0, 4);
   for (const workspace of workspaces) {
@@ -293,7 +293,7 @@ async function precomputeContractContext(
   }));
   const mentioned = workspaces.flatMap((workspace) => workspace.framework.dependencies
     .map((dependency) => {
-      const names = unique([
+      const names = collectUniqueValues([
         dependency.name.toLowerCase(),
         dependency.name.toLowerCase().replaceAll("-", "_"),
         dependency.name.toLowerCase().replace(/^@[^/]+\//u, ""),
@@ -324,7 +324,11 @@ async function precomputeContractContext(
   return candidates.filter((candidate) => permittedContextCandidate(candidate, config));
 }
 
-export async function buildContextPreview(
+/**
+ * Human-to-code role: build the exact context envelope a guided run may expose
+ * to its configured provider before any code-generation request is made.
+ */
+export async function buildGuidedContextPreview(
   rootInput: string,
   profile: ProjectProfileV1,
   contract: ChangeContractV1,
@@ -451,7 +455,11 @@ async function persistOutcome(store: RunStore, runId: string, status: RunStatus,
   }));
 }
 
-export async function generateRun(input: GenerateRunOptions): Promise<WorkflowOutcome> {
+/**
+ * Human-to-code role: convert one reviewed change contract into a bounded,
+ * provenance-linked patch artifact without mutating the working tree.
+ */
+export async function generateGuidedCodeChangeRun(input: GenerateRunOptions): Promise<WorkflowOutcome> {
   const options = { ...input, config: resolveWorkspaceConfig(input.config, input.profile, input.contract) };
   const root = resolve(options.root);
   const store = options.store ?? new RunStore();
@@ -474,7 +482,7 @@ export async function generateRun(input: GenerateRunOptions): Promise<WorkflowOu
       throw new Error("No required project validation command could be selected before generation.");
     }
     baseline = await createWorkspaceSnapshot(root, { excludeNames: [".venv", "venv", "target", ".next", "coverage"] });
-    let manifest = await buildContextPreview(
+    let manifest = await buildGuidedContextPreview(
       root,
       options.profile,
       contract,
@@ -1279,7 +1287,11 @@ async function validateStoredRunLocked(options: ValidateStoredRunOptions & { sto
   }
 }
 
-export async function validateStoredRun(options: ValidateStoredRunOptions): Promise<WorkflowOutcome> {
+/**
+ * Human-to-code role: validate a stored guided patch against its unchanged
+ * baseline and isolated candidate using the frozen validation plan.
+ */
+export async function validateGuidedCodeChangeRun(options: ValidateStoredRunOptions): Promise<WorkflowOutcome> {
   const store = options.store ?? new RunStore();
   return store.exclusive(options.runId, () => validateStoredRunLocked({ ...options, store }));
 }
@@ -1378,8 +1390,8 @@ function validateRollbackArtifact(value: unknown, patch: PatchSetV1): RollbackAr
       const after = boundedArtifactText(raw.after, `rollback.entries[${index}].after`);
       const afterHash = artifactHash(raw.afterHash, `rollback.entries[${index}].afterHash`);
       const first = before.indexOf(operation.oldText);
-      const unique = first >= 0 && before.indexOf(operation.oldText, first + 1) < 0;
-      const expectedAfter = unique
+      const hasUniqueEditAnchor = first >= 0 && before.indexOf(operation.oldText, first + 1) < 0;
+      const expectedAfter = hasUniqueEditAnchor
         ? before.slice(0, first) + operation.newText + before.slice(first + operation.oldText.length)
         : undefined;
       if (raw.kind !== "edited" || path !== operation.path || raw.from !== undefined
@@ -1430,7 +1442,8 @@ function validateApplyArtifact(value: unknown, patchHash: string): void {
   }
 }
 
-export async function applyVerifiedRun(runId: string, store = new RunStore()): Promise<WorkflowOutcome> {
+/** Human-to-code role: apply only a provenance-matching `VERIFIED` guided run. */
+export async function applyVerifiedCodeChangeRun(runId: string, store = new RunStore()): Promise<WorkflowOutcome> {
   const initialRecord = await store.read(runId);
   if (initialRecord.status !== "VERIFIED") return { runId, status: initialRecord.status, diagnostics: ["Automatic apply requires a VERIFIED run."] };
   if (!(await isGitProject(initialRecord.root))) return { runId, status: "INCONCLUSIVE", diagnostics: ["Automatic apply is disabled for non-Git projects because no verified rollback backend is available."] };
@@ -1479,7 +1492,8 @@ export async function applyVerifiedRun(runId: string, store = new RunStore()): P
   }
 }
 
-export async function rollbackAppliedRun(runId: string, store = new RunStore()): Promise<WorkflowOutcome> {
+/** Human-to-code role: restore exact pre-apply files for one applied guided run. */
+export async function rollbackAppliedCodeChangeRun(runId: string, store = new RunStore()): Promise<WorkflowOutcome> {
   try {
     const restored = await store.exclusive(runId, async () => {
       const record = await store.read(runId);
@@ -1510,7 +1524,7 @@ export async function rollbackAppliedRun(runId: string, store = new RunStore()):
         requirementIds: ["ROLLBACK"],
         proposedTests: [],
       };
-      const paths = unique(artifact.entries.flatMap((entry) => [entry.path, ...(entry.from ? [entry.from] : [])]));
+      const paths = collectUniqueValues(artifact.entries.flatMap((entry) => [entry.path, ...(entry.from ? [entry.from] : [])]));
       const result = await applyPatchAtomic(record.root, inverse, { allowedPaths: paths, allowDeletes: true, allowRenames: true });
       for (const entry of artifact.entries) {
         if (entry.kind === "created") continue;
@@ -1531,3 +1545,14 @@ export function rootRelative(root: string, path: string): string {
   if (value === ".." || value.startsWith(`..${sep}`)) throw new Error("Path escapes root.");
   return value.split(sep).join("/") || ".";
 }
+
+/** @deprecated Use `buildGuidedContextPreview`. */
+export const buildContextPreview = buildGuidedContextPreview;
+/** @deprecated Use `generateGuidedCodeChangeRun`. */
+export const generateRun = generateGuidedCodeChangeRun;
+/** @deprecated Use `validateGuidedCodeChangeRun`. */
+export const validateStoredRun = validateGuidedCodeChangeRun;
+/** @deprecated Use `applyVerifiedCodeChangeRun`. */
+export const applyVerifiedRun = applyVerifiedCodeChangeRun;
+/** @deprecated Use `rollbackAppliedCodeChangeRun`. */
+export const rollbackAppliedRun = rollbackAppliedCodeChangeRun;

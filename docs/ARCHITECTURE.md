@@ -6,8 +6,11 @@ it is that every step is **grounded, bounded, auditable, and fail-closed**.
 This document describes how the code is layered, how a run flows through it,
 and the dependency rules that keep the codebase scalable.
 
-For per-file detail see [MODULES.md](MODULES.md); for the rules new code must
-follow see [SCALABILITY.md](SCALABILITY.md); for the trust model see
+For plain-English terminology see [GLOSSARY.md](GLOSSARY.md); for command-to-
+function and variable-level traces see [WORKFLOWS.md](WORKFLOWS.md); for naming
+and lifecycle-comment practices see [CODE_CLARITY.md](CODE_CLARITY.md); for
+per-file detail see [MODULES.md](MODULES.md); for the rules new code must follow
+see [SCALABILITY.md](SCALABILITY.md); for the trust model see
 [../SECURITY.md](../SECURITY.md).
 
 ## The pipeline

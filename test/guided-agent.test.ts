@@ -23,11 +23,11 @@ import type {
 } from "../src/providers/provider.ts";
 import { RunStore } from "../src/pipeline/run-store.ts";
 import {
-  applyVerifiedRun,
-  buildContextPreview,
-  generateRun,
-  rollbackAppliedRun,
-  validateStoredRun,
+  applyVerifiedCodeChangeRun,
+  buildGuidedContextPreview,
+  generateGuidedCodeChangeRun,
+  rollbackAppliedCodeChangeRun,
+  validateGuidedCodeChangeRun,
 } from "../src/agents/guided/index.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {
@@ -299,7 +299,7 @@ async function appliedFixture(): Promise<AppliedFixture> {
       reasons: [],
     }),
   ]);
-  const applied = await applyVerifiedRun(runId, item.store);
+  const applied = await applyVerifiedCodeChangeRun(runId, item.store);
   assert.equal(applied.status, "VERIFIED", JSON.stringify(applied));
   return { ...item, contract, runId, patch };
 }
@@ -323,7 +323,7 @@ test("remote generation stops at the outbound preview without explicit consent",
     },
   };
   try {
-    const outcome = await generateRun({
+    const outcome = await generateGuidedCodeChangeRun({
       root: item.root,
       profile: item.profile,
       contract: item.contract,
@@ -365,7 +365,7 @@ test("context preview preloads installed declarations for referenced APIs", asyn
         dependencies: item.profile.workspaces[0]!.framework.dependencies,
         direct,
       }, null, 2));
-    const manifest = await buildContextPreview(item.root, item.profile, item.contract, item.config, true);
+    const manifest = await buildGuidedContextPreview(item.root, item.profile, item.contract, item.config, true);
     assert.ok(manifest.evidence.some((evidence) => evidence.origin === "dependency"
       && "path" in evidence && evidence.path === "node_modules/react/index.d.ts"), JSON.stringify(manifest, null, 2));
   } finally {
@@ -379,7 +379,7 @@ test("mock generation produces a patch, unavailable Docker stays INCONCLUSIVE, a
   item.config.provider = { name: "ollama", model: "mock-model" };
   const provider = new DeterministicPatchProvider(item.contract);
   try {
-    const generated = await generateRun({
+    const generated = await generateGuidedCodeChangeRun({
       root: item.root,
       profile: item.profile,
       contract: item.contract,
@@ -393,7 +393,7 @@ test("mock generation produces a patch, unavailable Docker stays INCONCLUSIVE, a
     const persisted = await item.store.readArtifact<PatchSetV1>(generated.runId, "patch.json");
     assert.equal(persisted.operations[0]?.kind, "create");
 
-    const validated = await validateStoredRun({
+    const validated = await validateGuidedCodeChangeRun({
       runId: generated.runId,
       store: item.store,
       dockerBinary: join(item.container, "missing-docker"),
@@ -420,7 +420,7 @@ test("guided validation performs at most two immutable diagnostic repairs on fre
   const candidateRoots = new Set<string>();
   const baselineRoots = new Set<string>();
   try {
-    const generated = await generateRun({
+    const generated = await generateGuidedCodeChangeRun({
       root: item.root,
       profile: item.profile,
       contract: item.contract,
@@ -430,7 +430,7 @@ test("guided validation performs at most two immutable diagnostic repairs on fre
     });
     assert.equal(generated.status, "INCONCLUSIVE", JSON.stringify(generated));
 
-    const validated = await validateStoredRun({
+    const validated = await validateGuidedCodeChangeRun({
       runId: generated.runId,
       store: item.store,
       provider,
@@ -511,7 +511,7 @@ test("guided validation performs at most two immutable diagnostic repairs on fre
     assert.equal(record.usage?.repairs, 2);
 
     const callsBeforeResume = provider.calls;
-    const exhausted = await validateStoredRun({
+    const exhausted = await validateGuidedCodeChangeRun({
       runId: generated.runId,
       store: item.store,
       provider,
@@ -561,7 +561,7 @@ test("baseline-unhealthy validation never invokes the repair provider", async ()
   item.config.provider = { name: "ollama", model: "mock-model" };
   const provider = new DeterministicPatchProvider(item.contract);
   try {
-    const generated = await generateRun({
+    const generated = await generateGuidedCodeChangeRun({
       root: item.root,
       profile: item.profile,
       contract: item.contract,
@@ -569,7 +569,7 @@ test("baseline-unhealthy validation never invokes the repair provider", async ()
       provider,
       store: item.store,
     });
-    const validated = await validateStoredRun({
+    const validated = await validateGuidedCodeChangeRun({
       runId: generated.runId,
       store: item.store,
       provider,
@@ -621,7 +621,7 @@ test("repair scope expansion is rejected before a second candidate executes", as
   const provider = new DeterministicRepairProvider(item.contract, true);
   let validations = 0;
   try {
-    const generated = await generateRun({
+    const generated = await generateGuidedCodeChangeRun({
       root: item.root,
       profile: item.profile,
       contract: item.contract,
@@ -629,7 +629,7 @@ test("repair scope expansion is rejected before a second candidate executes", as
       provider,
       store: item.store,
     });
-    const validated = await validateStoredRun({
+    const validated = await validateGuidedCodeChangeRun({
       runId: generated.runId,
       store: item.store,
       provider,
@@ -699,7 +699,7 @@ test("verified apply records rollback provenance and rollback restores every ope
     assert.deepEqual(artifact.entries.map((entry) => entry.kind), ["edited", "created", "deleted", "renamed"]);
     assert.ok(artifact.entries.every((entry) => entry.kind === "deleted" || entry.afterHash?.length === 64));
 
-    const rolledBack = await rollbackAppliedRun(item.runId, item.store);
+    const rolledBack = await rollbackAppliedCodeChangeRun(item.runId, item.store);
     assert.equal(rolledBack.status, "VERIFIED", JSON.stringify(rolledBack));
     assert.equal(await readFile(join(item.root, "src/value.ts"), "utf8"), "export const value = 1;\n");
     assert.equal(await readFile(join(item.root, "src/delete.ts"), "utf8"), "export const removeMe = true;\n");
@@ -719,7 +719,7 @@ test("rollback refuses post-apply drift before restoring any operation", async (
   const item = await appliedFixture();
   try {
     await put(item.root, "src/status.ts", "export const status = 'operator-edited';\n");
-    const outcome = await rollbackAppliedRun(item.runId, item.store);
+    const outcome = await rollbackAppliedCodeChangeRun(item.runId, item.store);
     assert.equal(outcome.status, "INCONCLUSIVE");
     assert.match(outcome.diagnostics.join("\n"), /base hash does not match/u);
 
@@ -741,7 +741,7 @@ test("rollback rejects a tampered out-of-root artifact before reading or mutatin
     entries[0] = { ...entries[0], path: "../../outside.txt" };
     await item.store.writeArtifact(item.runId, "rollback.json", artifact);
 
-    const outcome = await rollbackAppliedRun(item.runId, item.store);
+    const outcome = await rollbackAppliedCodeChangeRun(item.runId, item.store);
     assert.equal(outcome.status, "INCONCLUSIVE");
     assert.match(outcome.diagnostics.join("\n"), /escapes the root|canonical confined path/u);
     assert.equal(await readFile(join(item.root, "src/value.ts"), "utf8"), "export const value = 2;\n");

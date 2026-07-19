@@ -1,3 +1,7 @@
+/**
+ * Human-to-code role: turn discovered `.human` files and `@human` comments
+ * into bounded conversion units with explicit target paths and languages.
+ */
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { inferUnitLanguage } from "./language-inference.ts";
@@ -219,7 +223,7 @@ export async function discoverDirectUnits(
   return { units, notices, scannedPaths };
 }
 
-/** Compatibility helper returning only runnable units. */
+/** Human-to-code role: return only runnable natural-language conversion units. */
 export async function discoverUnits(
   root: string,
   language: string | readonly string[],
