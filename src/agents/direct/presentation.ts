@@ -15,6 +15,43 @@ export interface ConditionalRequestAllowance {
   compilerRepairUpTo: number;
 }
 
+/** Planning knobs the receipt needs; a subset of `direct.planning` config. */
+export interface PlanningDisclosureOptions {
+  enabled: boolean;
+  projectBlueprint: boolean;
+  fileTodo: boolean;
+  markerTodo: boolean;
+  maxCodingPassesPerUnit: number;
+}
+
+export interface PlannedRequestCounts {
+  /** 0 or 1: the shared contract is skipped when there is nothing to agree. */
+  blueprint: number;
+  todo: number;
+  /** One per unit; refinement is conditional and reported separately. */
+  coding: number;
+  /** Additional coding requests only issued on a real todo coverage gap. */
+  refinementUpTo: number;
+}
+
+/** Exact planned request counts, for disclosure before the confirmation prompt. */
+export function plannedRequestCounts(
+  units: readonly ConversionUnit[],
+  planning: PlanningDisclosureOptions,
+): PlannedRequestCounts {
+  if (!planning.enabled) {
+    return { blueprint: 0, todo: units.length, coding: units.length, refinementUpTo: 0 };
+  }
+  const fileUnits = units.filter((unit) => unit.kind === "file").length;
+  const todo = units.filter((unit) => unit.kind === "file" ? planning.fileTodo : planning.markerTodo).length;
+  return {
+    blueprint: planning.projectBlueprint && fileUnits >= 2 ? 1 : 0,
+    todo,
+    coding: units.length,
+    refinementUpTo: todo * Math.max(0, planning.maxCodingPassesPerUnit - 1),
+  };
+}
+
 /** Conservative opt-in request ceilings for pre-generation disclosure. */
 export function conditionalRequestAllowance(
   units: readonly ConversionUnit[],
@@ -38,7 +75,7 @@ export function renderReceipt(
   provider: string,
   model: string,
   configuredLanguages: string | readonly string[],
-  options: { reconcileIntegrations?: boolean } = {},
+  options: { reconcileIntegrations?: boolean; planning?: PlanningDisclosureOptions } = {},
 ): string {
   const configured = typeof configuredLanguages === "string"
     ? [configuredLanguages]
@@ -67,7 +104,20 @@ export function renderReceipt(
     ? conditionalRequestAllowance(units, configured)
     : undefined;
   const integrationDisclaimer = conditional !== undefined && conditional.integrationAuditUpTo > 0
-    ? `  Additional: opt-in cross-file reconciliation may issue up to ${conditional.integrationAuditUpTo} bounded audit request${conditional.integrationAuditUpTo === 1 ? "" : "s"} and ${conditional.integrationRepairUpTo} target-repair request${conditional.integrationRepairUpTo === 1 ? "" : "s"}; only ProjectMemory-evidenced generated relationships are audited.`
+    ? `  Additional: cross-file reconciliation may issue up to ${conditional.integrationAuditUpTo} bounded audit request${conditional.integrationAuditUpTo === 1 ? "" : "s"} and ${conditional.integrationRepairUpTo} target-repair request${conditional.integrationRepairUpTo === 1 ? "" : "s"}; only ProjectMemory-evidenced generated relationships are audited.`
+    : undefined;
+  const planning = options.planning;
+  const planned = planning === undefined ? undefined : plannedRequestCounts(units, planning);
+  const multiPass = planning?.enabled === true;
+  const plannedTotal = planned === undefined
+    ? units.length
+    : planned.blueprint + planned.todo + planned.coding;
+  const requestBreakdown = planned === undefined || !multiPass
+    ? `${units.length} planned`
+    : `${plannedTotal} planned (${planned.blueprint} shared contract, ${planned.todo} per-target todo,`
+      + ` ${planned.coding} coding)`;
+  const refinementDisclaimer = planned !== undefined && planned.refinementUpTo > 0
+    ? `  Additional: up to ${planned.refinementUpTo} completion request(s), only for targets whose todo list is not fully covered by the first pass.`
     : undefined;
   const lines = [
     "human-to-code — conversion receipt",
@@ -75,9 +125,12 @@ export function renderReceipt(
     `  ${selected.length > 1 ? "Languages:" : "Language :"} ${rendered}`,
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
-    `  Engine   : direct (one model request per prompt; bounded cross-file repair may add requests)`,
+    `  Engine   : ${multiPass
+      ? "direct (shared contract, per-target todo, then coding; bounded cross-file repair may add requests)"
+      : "direct (one model request per prompt; bounded cross-file repair may add requests)"}`,
     `  Context  : compact current/projected ProjectMemory (target-specific, bounded)`,
-    `  Requests : ${units.length} planned${options.reconcileIntegrations ? "" : repairAllowance}`,
+    `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
+    ...(refinementDisclaimer ? [refinementDisclaimer] : []),
     ...(integrationDisclaimer ? [integrationDisclaimer] : []),
     ...(conditional !== undefined && conditional.compilerRepairUpTo > 0
       ? [`  Validation: up to ${conditional.compilerRepairUpTo} additional bounded JS/TS compiler-repair request${conditional.compilerRepairUpTo === 1 ? "" : "s"}, only if validation fails.`]

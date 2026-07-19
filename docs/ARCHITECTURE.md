@@ -145,9 +145,20 @@ runtime dependency still requires design review.
 ## The generation paths
 
 1. **Direct agent** (`agents/direct/`, the default
-   `npx human-to-code .` flow): host code discovers the worklist, and for each
-   unit issues **one plain model completion** (no tool calls), applying the
-   result only after output normalization and candidate syntax validation. It
+   `npx human-to-code .` flow): host code discovers the worklist and issues
+   **plain model completions** (no tool calls), applying each result only after
+   output normalization and candidate syntax validation. With
+   `direct.planning` enabled (the default) a run begins with one shared
+   *blueprint* request that fixes the file roster and the naming vocabulary
+   every target must use verbatim (`project-blueprint.ts`) — the only point at
+   which independently generated files can agree. Each unit then gets a *todo*
+   request, a coding request, and, only when a deterministic coverage check
+   finds unaddressed items, one conditional completion request whose output is
+   accepted solely if it preserves everything the previous pass produced
+   (`unit-todos.ts`). Every planning pass is best-effort: an unparseable
+   blueprint or todo list is discarded and the unit falls back to the
+   single-completion path, which is exactly what `planning.enabled: false`
+   restores. It
    statically indexes declarations into ephemeral FileMemory so the model
    reuses rather than re-declares symbols. A separate ephemeral ProjectMemory
    models both the current repository and the projected successful post-run
@@ -169,9 +180,15 @@ runtime dependency still requires design review.
    attributed through the resolved import graph (`dependency-graph.ts`); a
    failing dependency-connected group gets at most one bounded repair
    completion per whole-file unit and is otherwise rejected whole
-   (`staged-validation.ts`), while units proven independent still apply. This
-   is fast and works with small models that cannot do tool-calling. When
-   `direct.reconcileIntegrations` is explicitly enabled, a separate generic
+   (`staged-validation.ts`), while units proven independent still apply.
+   Independently, `direct.crossFileChecks` cross-references generated HTML,
+   CSS, and browser JavaScript against one another using the same static
+   extractors ProjectMemory uses, with **no model requests**
+   (`reference-validation.ts`): a script selector or linked asset that does not
+   exist is blocking, while markup/stylesheet naming drift is advisory. That is
+   reference checking, not verification. This is fast and works with small
+   models that cannot do tool-calling. When
+   `direct.reconcileIntegrations` is enabled (the default), a separate generic
    audit/repair/verification stage consumes structured relationships from
    `language-relationships.ts`. Its orchestration contains no web-only branch:
    ecosystem conventions for Python, Rust, Go, Java, C/C++, C#, Ruby,

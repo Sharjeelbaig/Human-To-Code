@@ -3,6 +3,15 @@ import { ContextSecurityError, scanSecrets } from "../../context/context.ts";
 import { extractStaticFileMemory } from "../../pipeline/file-memory.ts";
 import { declaredIdentifiers } from "./declarations.ts";
 import { formatInlineReplacement } from "./replacement.ts";
+import {
+  acceptsRefinement,
+  contractRegression,
+  renderTodoList,
+  todoCoverage,
+  unaddressedRequirements,
+  type TodoCoverage,
+  type UnitTodoList,
+} from "./unit-todos.ts";
 import type {
   ConversionUnit,
   FileMemoryEntry,
@@ -144,6 +153,9 @@ export async function generateConversionUnits(
   const memories = new Map<string, FileMemory>();
   const generated: GeneratedConversionUnit[] = [];
   const maxAttempts = 1 + Math.max(0, options.retries ?? 1);
+  // Orthogonal to `retries`: retries recover from a failed request and restart
+  // from pass 1 with no draft, while coding passes close a todo coverage gap.
+  const maxCodingPasses = Math.max(1, options.maxCodingPasses ?? 1);
   const contextCharBudget = options.contextCharBudget ?? Number.MAX_SAFE_INTEGER;
 
   for (const unit of ordered) {
@@ -158,6 +170,10 @@ export async function generateConversionUnits(
 
     let code: string | undefined;
     let failure: string | undefined;
+    let todoRequests = 0;
+    let codingRequests = 0;
+    let refinementRejected: string | undefined;
+    let coverage: TodoCoverage = { addressed: [], unaddressed: [], unverifiable: [] };
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       options.onProgress?.({ kind: "start", unit, attempt });
       try {
@@ -171,13 +187,69 @@ export async function generateConversionUnits(
         }
         const remaining = Math.max(0, contextCharBudget - (renderedMemory?.length ?? 0));
         const renderedProjectMemory = options.projectMemory?.renderFor(unit, remaining);
-        const rawCode = await generator(unit, {
+        const baseContext: UnitGenerationContext = {
           inline: unit.kind === "inline",
           ...(renderedMemory ? { fileMemory: renderedMemory } : {}),
           ...(renderedProjectMemory ? { projectMemory: renderedProjectMemory } : {}),
+        };
+
+        // Planning enriches context; it is never allowed to fail the unit.
+        let todos: UnitTodoList | undefined;
+        if (options.plan) {
+          options.onProgress?.({ kind: "plan", unit });
+          try {
+            todos = await options.plan(unit, baseContext);
+            todoRequests += 1;
+          } catch {
+            todos = undefined;
+          }
+        }
+        const todoBlock = todos === undefined ? undefined : renderTodoList(todos.todos);
+
+        const rawCode = await generator(unit, {
+          ...baseContext,
+          ...(todoBlock ? { todos: todoBlock } : {}),
         });
+        codingRequests += 1;
         code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
         await options.validate?.(unit, code);
+
+        // Refine only on a real coverage gap, and keep the refinement only if it
+        // preserves everything this pass already produced.
+        const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+        if (todos !== undefined) coverage = todoCoverage(todos.todos, target, code);
+        for (
+          let pass = 2;
+          todos !== undefined && pass <= maxCodingPasses && coverage.unaddressed.length > 0;
+          pass += 1
+        ) {
+          const unaddressed = unaddressedRequirements(todos.todos, coverage);
+          options.onProgress?.({ kind: "refine", unit, pass, unaddressed: unaddressed.length });
+          let refined: string;
+          try {
+            const rawRefined = await generator(unit, {
+              ...baseContext,
+              ...(todoBlock ? { todos: todoBlock } : {}),
+              currentDraft: code,
+              unaddressedTodos: unaddressed,
+            });
+            codingRequests += 1;
+            refined = memory && renderedMemory ? memory.normalizeReplacement(rawRefined) : rawRefined;
+            await options.validate?.(unit, refined);
+          } catch (error) {
+            refinementRejected = error instanceof Error ? error.message : String(error);
+            break;
+          }
+          const regression = contractRegression(target, code, refined);
+          if (!acceptsRefinement(regression)) {
+            refinementRejected = regression.lost.length > 0
+              ? `refinement dropped ${regression.lost.length} existing item(s); previous pass kept`
+              : `refinement shrank the file to ${Math.round(regression.shrinkRatio * 100)}% of the previous pass; previous pass kept`;
+            break;
+          }
+          code = refined;
+          coverage = todoCoverage(todos.todos, target, code);
+        }
         failure = undefined;
         break;
       } catch (error) {
@@ -186,6 +258,15 @@ export async function generateConversionUnits(
         code = undefined;
       }
     }
+    options.onPlanningOutcome?.({
+      unit,
+      todoRequests,
+      codingRequests,
+      ...(refinementRejected !== undefined ? { refinementRejected } : {}),
+      addressed: coverage.addressed.length,
+      unaddressed: coverage.unaddressed.length,
+      unverifiable: coverage.unverifiable.length,
+    });
 
     if (failure !== undefined || code === undefined) {
       generated.push({ unit, code: "", error: failure ?? "generation produced no code" });

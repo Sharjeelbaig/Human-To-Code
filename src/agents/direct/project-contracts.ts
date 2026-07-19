@@ -56,70 +56,127 @@ function listLine(label: string, values: readonly string[]): string | undefined 
   return values.length === 0 ? undefined : `${label}: ${values.join(", ")}`;
 }
 
-function htmlContract(content: string): string[] {
-  const stylesheets = matches(
-    content,
-    /<link\b(?=[^>]*\brel\s*=\s*["'][^"']*stylesheet[^"']*["'])[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/giu,
-  );
-  const scripts = matches(content, /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/giu);
-  const ids = matches(content, /\bid\s*=\s*["']([^"']+)["']/giu)
-    .flatMap((value) => value.split(/\s+/u));
-  const classes = matches(content, /\bclass\s*=\s*["']([^"']+)["']/giu)
-    .flatMap((value) => value.split(/\s+/u));
-  const landmarks = matches(content, /<(header|nav|main|section|article|aside|footer|form)\b/giu);
-  const elements = matches(content, /<([a-z][a-z0-9-]*)\b/giu);
+/**
+ * Raw extraction results. These are deliberately uncapped and unformatted: the
+ * `*Contract` renderers below apply the compact `unique()` limits, while
+ * cross-file reference checking needs the complete sets. One parser, two
+ * consumers — never add a second scanner for the same syntax.
+ */
+export interface HtmlFacts {
+  stylesheets: string[];
+  scripts: string[];
+  ids: string[];
+  classes: string[];
+  handlerCalls: string[];
+  operationLabels: string[];
+  numberLabels: string[];
+  landmarks: string[];
+  elements: string[];
+}
+
+export interface CssFacts {
+  imports: string[];
+  urls: string[];
+  customProperties: string[];
+  selectors: string[];
+}
+
+export interface JavaScriptFacts {
+  modules: string[];
+  selectors: string[];
+  /** Class names passed to classList add/remove/toggle/contains. */
+  toggledClasses: string[];
+  /** True when the source assigns `.hidden` or sets the `hidden` attribute. */
+  togglesHiddenAttribute: boolean;
+}
+
+export function htmlFacts(content: string): HtmlFacts {
   const handlerExpressions = [...content.matchAll(/\bon[a-z][a-z0-9_-]*\s*=\s*(?:"([^"]*)"|'([^']*)')/giu)]
     .map((match) => match[1] ?? match[2] ?? "");
-  const handlerCalls = handlerExpressions
-    .flatMap((handler) => matches(handler, /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/gu));
-  const operationLabels = matches(
-    content,
-    /<button\b(?=[^>]*\bdata-operation(?:\s|=|>))[^>]*>\s*([^<]*?)\s*<\/button>/giu,
-  );
-  const numberLabels = matches(
-    content,
-    /<button\b(?=[^>]*\bdata-number(?:\s|=|>))[^>]*>\s*([^<]*?)\s*<\/button>/giu,
-  );
+  return {
+    stylesheets: matches(
+      content,
+      /<link\b(?=[^>]*\brel\s*=\s*["'][^"']*stylesheet[^"']*["'])[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/giu,
+    ),
+    scripts: matches(content, /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/giu),
+    ids: matches(content, /\bid\s*=\s*["']([^"']+)["']/giu).flatMap((value) => value.split(/\s+/u)),
+    classes: matches(content, /\bclass\s*=\s*["']([^"']+)["']/giu).flatMap((value) => value.split(/\s+/u)),
+    handlerCalls: handlerExpressions
+      .flatMap((handler) => matches(handler, /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/gu)),
+    operationLabels: matches(
+      content,
+      /<button\b(?=[^>]*\bdata-operation(?:\s|=|>))[^>]*>\s*([^<]*?)\s*<\/button>/giu,
+    ),
+    numberLabels: matches(
+      content,
+      /<button\b(?=[^>]*\bdata-number(?:\s|=|>))[^>]*>\s*([^<]*?)\s*<\/button>/giu,
+    ),
+    landmarks: matches(content, /<(header|nav|main|section|article|aside|footer|form)\b/giu),
+    elements: matches(content, /<([a-z][a-z0-9-]*)\b/giu),
+  };
+}
+
+export function cssFacts(content: string): CssFacts {
+  return {
+    imports: matches(content, /@import\s+(?:url\(\s*)?["']([^"']+)["']/giu),
+    urls: matches(content, /url\(\s*["']?([^"')\s]+)["']?\s*\)/giu),
+    customProperties: matches(content, /(^|[;{]\s*)(--[A-Za-z0-9_-]+)\s*:/gmu, 2),
+    selectors: matches(content, /(?:^|\})\s*([^@{}][^{}]{0,240})\s*\{/gmu)
+      .flatMap((value) => value.split(",")),
+  };
+}
+
+export function javaScriptFacts(content: string): JavaScriptFacts {
+  return {
+    modules: [
+      ...matches(content, /\b(?:import|export)\b[\s\S]{0,240}?\bfrom\s*["']([^"']+)["']/gu),
+      ...matches(content, /\bimport\s*["']([^"']+)["']/gu),
+      ...matches(content, /\brequire\s*\(\s*["']([^"']+)["']\s*\)/gu),
+    ],
+    selectors: [
+      ...matches(content, /\bquerySelector(?:All)?\s*\(\s*["']([^"']+)["']/gu),
+      ...matches(content, /\bgetElementById\s*\(\s*["']([^"']+)["']/gu).map((value) => `#${value}`),
+    ],
+    toggledClasses: matches(
+      content,
+      /\bclassList\s*\.\s*(?:add|remove|toggle|contains)\s*\(\s*["']([^"']+)["']/gu,
+    ).flatMap((value) => value.split(/\s+/u)),
+    togglesHiddenAttribute: /\.hidden\s*=|\b(?:set|remove)Attribute\s*\(\s*["']hidden["']/u.test(content),
+  };
+}
+
+function htmlContract(content: string): string[] {
+  const facts = htmlFacts(content);
   return [
-    listLine("stylesheets", unique(stylesheets)),
-    listLine("scripts", unique(scripts)),
-    listLine("ids", unique(ids)),
-    listLine("classes", unique(classes)),
-    listLine("inline handler calls", unique(handlerCalls)),
-    listLine("data-operation button labels", unique(operationLabels)),
-    listLine("data-number button labels", unique(numberLabels)),
-    listLine("landmarks", unique(landmarks)),
-    listLine("elements", unique(elements)),
+    listLine("stylesheets", unique(facts.stylesheets)),
+    listLine("scripts", unique(facts.scripts)),
+    listLine("ids", unique(facts.ids)),
+    listLine("classes", unique(facts.classes)),
+    listLine("inline handler calls", unique(facts.handlerCalls)),
+    listLine("data-operation button labels", unique(facts.operationLabels)),
+    listLine("data-number button labels", unique(facts.numberLabels)),
+    listLine("landmarks", unique(facts.landmarks)),
+    listLine("elements", unique(facts.elements)),
   ].filter((line): line is string => line !== undefined);
 }
 
 function cssContract(content: string): string[] {
-  const imports = matches(content, /@import\s+(?:url\(\s*)?["']([^"']+)["']/giu);
-  const urls = matches(content, /url\(\s*["']?([^"')\s]+)["']?\s*\)/giu);
-  const customProperties = matches(content, /(^|[;{]\s*)(--[A-Za-z0-9_-]+)\s*:/gmu, 2);
-  const selectors = matches(content, /(?:^|\})\s*([^@{}][^{}]{0,240})\s*\{/gmu)
-    .flatMap((value) => value.split(","));
+  const facts = cssFacts(content);
   return [
-    listLine("imports", unique(imports)),
-    listLine("asset URLs", unique(urls)),
-    listLine("custom properties", unique(customProperties)),
-    listLine("selectors", unique(selectors)),
+    listLine("imports", unique(facts.imports)),
+    listLine("asset URLs", unique(facts.urls)),
+    listLine("custom properties", unique(facts.customProperties)),
+    listLine("selectors", unique(facts.selectors)),
   ].filter((line): line is string => line !== undefined);
 }
 
 function javascriptContract(content: string): string[] {
-  const modules = [
-    ...matches(content, /\b(?:import|export)\b[\s\S]{0,240}?\bfrom\s*["']([^"']+)["']/gu),
-    ...matches(content, /\bimport\s*["']([^"']+)["']/gu),
-    ...matches(content, /\brequire\s*\(\s*["']([^"']+)["']\s*\)/gu),
-  ];
-  const selectors = [
-    ...matches(content, /\bquerySelector(?:All)?\s*\(\s*["']([^"']+)["']/gu),
-    ...matches(content, /\bgetElementById\s*\(\s*["']([^"']+)["']/gu).map((value) => `#${value}`),
-  ];
+  const facts = javaScriptFacts(content);
+  // `toggledClasses` and `togglesHiddenAttribute` are reference-check facts
+  // only; adding them here would change every existing contract snapshot.
   return [
-    listLine("module references", unique(modules)),
-    listLine("DOM selectors", unique(selectors)),
+    listLine("module references", unique(facts.modules)),
+    listLine("DOM selectors", unique(facts.selectors)),
   ].filter((line): line is string => line !== undefined);
 }
 

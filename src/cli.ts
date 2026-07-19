@@ -3,7 +3,7 @@
 
 import { constants as fsConstants, realpathSync } from "node:fs";
 import { copyFile, lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { analyzeProject, type ProjectProfileV1 } from "./analysis/analyzer.ts";
@@ -34,21 +34,33 @@ import {
   applyWholeFileBatch,
   applyUnit,
   buildProjectMemory,
+  collectReferenceFindings,
   conditionalRequestAllowance,
+  plannedRequestCounts,
   discoverDirectUnits,
+  generateBlueprint,
   generateConversionUnits,
   generateCode,
   generateIntegrationAudit,
   generateIntegrationRepairCode,
   generateRepairCode,
+  generateUnitTodos,
+  parseProjectBlueprint,
+  parseUnitTodoList,
   reconcileGeneratedIntegrations,
+  REFERENCE_EXTENSIONS,
+  renderBlueprintFor,
   renderReceipt,
   validateCandidateProject,
   validateGeneratedUnit,
   type ConversionUnit,
   type ConversionProgress,
   type IntegrationProgress,
+  type ProjectBlueprint,
+  type ReferenceFile,
+  type ReferenceFinding,
   type StagedValidationProgress,
+  type UnitPlanningOutcome,
 } from "./agents/direct/index.ts";
 import type { ProviderName, SourceFile } from "./core/types.ts";
 import {
@@ -556,7 +568,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       provider: providerName,
       model,
       context: "project-memory-v1",
+      // `requests` keeps its established meaning — the planned minimum — so an
+      // existing consumer is not silently redefined. The breakdown is additive.
       requests: units.length,
+      plannedRequests: plannedRequestCounts(units, effective.direct.planning),
       ...(conditionalRequests !== undefined ? {
         additionalRequests: {
           conditional: true,
@@ -580,6 +595,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   } else {
     output(renderReceipt(units, providerName, model, languages, {
       reconcileIntegrations: effective.direct.reconcileIntegrations,
+      planning: effective.direct.planning,
     }), false);
     for (const notice of discovery.notices) output(`  ! ${notice.message}`, false);
   }
@@ -615,9 +631,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     maxFileBytes: effective.privacy.maxFileBytes,
   });
 
-  // Default engine: deterministic per-marker generation. Each marker is one
-  // plain model completion (no tool calls), applied by exact range. One marker
-  // failing never aborts the others.
+  // Default engine: deterministic per-target generation, optionally preceded by
+  // a shared planning pass. One target failing never aborts the others.
   const describeUnit = (unit: ConversionUnit): string =>
     unit.kind === "file"
       ? `${unit.sourcePath} → ${unit.outputPath}`
@@ -630,6 +645,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         if (event.kind === "start") {
           const retry = event.attempt > 1 ? ` (retry ${event.attempt - 1})` : "";
           spinner.label(`generating ${describeUnit(event.unit)}${retry}`);
+        } else if (event.kind === "plan") {
+          spinner.label(`planning ${describeUnit(event.unit)}`);
+        } else if (event.kind === "refine") {
+          spinner.label(`completing ${describeUnit(event.unit)} (${event.unaddressed} unaddressed item(s))`);
         } else if (event.kind === "skip") {
           spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
         }
@@ -637,6 +656,66 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     : undefined;
 
   if (interactive) output(`\nConverting ${units.length} item(s) with ${model}…`, false);
+
+  const planning = effective.direct.planning;
+  const requestOptions = {
+    provider: providerName,
+    model,
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(apiKey ? { apiKey } : {}),
+  };
+  // One shared planning request, before any file is generated. Each target is
+  // generated in isolation afterwards, so this is the only chance for them to
+  // agree on names. Best-effort: a failure loses the shared contract, never the
+  // run.
+  const plannedTargets = projectMemory.plannedTargets;
+  let blueprint: ProjectBlueprint | undefined;
+  let blueprintRequests = 0;
+  let blueprintNotice: string | undefined;
+  if (planning.enabled && planning.projectBlueprint && plannedTargets.length >= 2) {
+    if (interactive) spinner.label(`agreeing a shared contract across ${plannedTargets.length} file(s)`);
+    blueprintRequests = 1;
+    try {
+      const raw = await generateBlueprint({
+        targets: plannedTargets.map((target) => ({
+          path: target.path,
+          language: target.language,
+          instruction: target.purposes.join(" | "),
+        })),
+        currentTree: discovery.scannedPaths.slice(0, 72),
+      }, { ...requestOptions, language });
+      blueprint = parseProjectBlueprint(raw, new Set(plannedTargets.map((target) => target.path)));
+      projectMemory.adoptBlueprint(blueprint);
+    } catch (error) {
+      blueprintNotice = `shared contract unavailable (${error instanceof Error ? error.message : String(error)});`
+        + " files were generated without it";
+      if (interactive) spinner.note(`  ! ${blueprintNotice}`);
+    }
+  }
+  // One todo request per unit, when its kind is enabled. Returning undefined
+  // leaves that unit on the single-pass path.
+  const planningOutcomes: UnitPlanningOutcome[] = [];
+  const todoEnabled = (unit: ConversionUnit): boolean =>
+    planning.enabled && (unit.kind === "file" ? planning.fileTodo : planning.markerTodo);
+  const planningEnabledFor = planning.enabled && (planning.fileTodo || planning.markerTodo)
+    ? async (unit: ConversionUnit, context: { projectMemory?: string }) => {
+        if (!todoEnabled(unit)) return undefined;
+        const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+        const raw = await generateUnitTodos({
+          targetPath: target,
+          instruction: unit.prompt,
+          inline: unit.kind === "inline",
+          ...(blueprint ? { blueprint: renderBlueprintFor(blueprint, target) } : {}),
+          ...(context.projectMemory ? { projectMemory: context.projectMemory } : {}),
+        }, { ...requestOptions, language: unit.language ?? language, targetPath: target });
+        // Deliberately unconstrained by the shared vocabulary: a todo may also
+        // expect target-local artifacts the blueprint has no reason to name
+        // (a @media block, a local helper). Injection safety comes from the
+        // name charset in the parser, and cross-file drift is caught
+        // deterministically by reference checking, not by dropping coverage.
+        return parseUnitTodoList(raw);
+      }
+    : undefined;
   let generated;
   try {
     generated = await generateConversionUnits(
@@ -651,11 +730,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         }
         return generateCode(unit.prompt, {
           language: unit.language ?? language,
-          provider: providerName,
-          model,
+          ...requestOptions,
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
-          ...(baseUrl ? { baseUrl } : {}),
-          ...(apiKey ? { apiKey } : {}),
           ...context,
         });
       },
@@ -664,6 +740,9 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         validate: validateGeneratedUnit,
         projectMemory,
         contextCharBudget,
+        maxCodingPasses: planning.enabled ? planning.maxCodingPassesPerUnit : 1,
+        ...(planningEnabledFor !== undefined ? { plan: planningEnabledFor } : {}),
+        onPlanningOutcome: (outcome) => planningOutcomes.push(outcome),
         ...(onProgress ? { onProgress } : {}),
       },
     );
@@ -677,6 +756,40 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
 
   // Optional and off by default. ProjectMemory supplies language-aware
   // relationships; this orchestrator remains cross-language and performs a
+  // Deterministic cross-file reference checking. No model request: the same
+  // static extractors ProjectMemory uses are cross-referenced across the
+  // candidate web files. This is reference checking, not verification.
+  let referenceFindings: ReferenceFinding[] = [];
+  if (effective.direct.crossFileChecks) {
+    if (interactive) spinner.label("cross-checking generated references");
+    const referenceFiles: ReferenceFile[] = [];
+    const seenReferencePaths = new Set<string>();
+    for (const item of generated) {
+      if (item.error !== undefined || item.code.trim().length === 0) continue;
+      const target = item.unit.kind === "file" ? item.unit.outputPath! : item.unit.sourcePath;
+      if (!REFERENCE_EXTENSIONS.has(extname(target).toLowerCase()) || seenReferencePaths.has(target)) continue;
+      seenReferencePaths.add(target);
+      referenceFiles.push({ path: target, content: item.code, generated: true });
+    }
+    // Untouched project files provide the other half of every cross-reference.
+    for (const path of discovery.scannedPaths) {
+      if (seenReferencePaths.has(path) || !REFERENCE_EXTENSIONS.has(extname(path).toLowerCase())) continue;
+      try {
+        const content = await readFile(resolve(root, path), "utf8");
+        seenReferencePaths.add(path);
+        referenceFiles.push({ path, content, generated: false });
+      } catch {
+        continue;
+      }
+    }
+    referenceFindings = collectReferenceFindings(referenceFiles);
+    if (interactive) {
+      for (const finding of referenceFindings) {
+        spinner.note(`  ${finding.severity === "blocking" ? "✖" : "!"} ${finding.code}: ${finding.detail}`);
+      }
+    }
+  }
+
   // bounded audit -> target repair -> verification cycle over generated groups.
   let integrationAuditRequests = 0;
   let integrationRepairRequests = 0;
@@ -856,12 +969,33 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     }
   }
   const seconds = Math.round((Date.now() - started) / 1000);
+  const todoRequests = planningOutcomes.reduce((total, outcome) => total + outcome.todoRequests, 0);
+  const codingRequests = planningOutcomes.reduce((total, outcome) => total + outcome.codingRequests, 0);
+  const refinementsRejected = planningOutcomes.filter((outcome) => outcome.refinementRejected !== undefined);
   if (cli.json) {
     output({
       status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE",
       engine: "simple",
       written,
       skipped,
+      blueprintRequests,
+      ...(blueprintNotice !== undefined ? { blueprintNotice } : {}),
+      todoRequests,
+      codingRequests,
+      ...(refinementsRejected.length > 0 ? {
+        refinementsRejected: refinementsRejected.map((outcome) => ({
+          target: outcome.unit.kind === "file" ? outcome.unit.outputPath! : outcome.unit.sourcePath,
+          reason: outcome.refinementRejected!,
+        })),
+      } : {}),
+      ...(effective.direct.crossFileChecks ? {
+        referenceFindings: referenceFindings.map((finding) => ({
+          code: finding.code,
+          severity: finding.severity,
+          path: finding.path,
+          detail: finding.detail,
+        })),
+      } : {}),
       ...(effective.direct.reconcileIntegrations ? {
         integrationAuditRequests,
         integrationRepairRequests,
@@ -875,7 +1009,14 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       ? `, ${integrationAuditRequests} integration audit request(s), ${integrationRepairRequests} integration repair request(s)`
       : "";
     const repairs = repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
-    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${integrations}${repairs}.`, false);
+    const planned = blueprintRequests + todoRequests > 0
+      ? `, ${blueprintRequests} blueprint and ${todoRequests} todo request(s)`
+      : "";
+    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${planned}${integrations}${repairs}.`, false);
+    for (const outcome of refinementsRejected) {
+      const target = outcome.unit.kind === "file" ? outcome.unit.outputPath! : outcome.unit.sourcePath;
+      output(`  ! ${target}: ${outcome.refinementRejected}`, false);
+    }
   }
   return written.length === 0 && skipped.length > 0 ? 5 : 0;
 }

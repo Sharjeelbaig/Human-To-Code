@@ -1,4 +1,9 @@
+import {
+  buildDirectBlueprintPrompt,
+  type DirectBlueprintPromptInput,
+} from "../../prompts/direct-blueprint.ts";
 import { buildDirectConversionPrompt, type PromptMessages } from "../../prompts/direct-conversion.ts";
+import { buildDirectTodoPrompt, type DirectTodoPromptInput } from "../../prompts/direct-todos.ts";
 import {
   buildDirectIntegrationAuditPrompt,
   buildDirectIntegrationRepairPrompt,
@@ -70,8 +75,33 @@ export async function generateCode(instruction: string, options: GenerateOptions
     inline: options.inline ?? false,
     ...(options.fileMemory ? { fileMemory: options.fileMemory } : {}),
     ...(options.projectMemory ? { projectMemory: options.projectMemory } : {}),
+    ...(options.blueprint ? { blueprint: options.blueprint } : {}),
+    ...(options.todos ? { todos: options.todos } : {}),
+    ...(options.currentDraft ? { currentDraft: options.currentDraft } : {}),
+    ...(options.unaddressedTodos ? { unaddressedTodos: options.unaddressedTodos } : {}),
   });
   return requestChatCompletion(prompt, options);
+}
+
+/**
+ * One shared planning request per run. Its output is strict JSON, so it is not
+ * passed through the code-fence stripper's expectations beyond the shared
+ * transport; the caller parses and bounds it.
+ */
+export async function generateBlueprint(
+  request: DirectBlueprintPromptInput,
+  options: GenerateOptions,
+): Promise<string> {
+  return requestChatCompletion(buildDirectBlueprintPrompt(request), options);
+}
+
+/** One todo-list planning request for exactly one target. */
+export async function generateUnitTodos(
+  request: Omit<DirectTodoPromptInput, "languageLabel">,
+  options: GenerateOptions,
+): Promise<string> {
+  const profile = languageProfile(options.language);
+  return requestChatCompletion(buildDirectTodoPrompt({ languageLabel: profile.label, ...request }), options);
 }
 
 export interface IntegrationAuditGenerationRequest {

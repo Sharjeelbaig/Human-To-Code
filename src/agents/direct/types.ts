@@ -1,4 +1,5 @@
 import type { StaticFileMemoryEntry } from "../../pipeline/file-memory.ts";
+import type { UnitTodoList } from "./unit-todos.ts";
 
 export interface LanguageProfile {
   /** Output file extension without a dot. */
@@ -37,6 +38,14 @@ export interface UnitGenerationContext {
   fileMemory?: string;
   /** Target-specific current/projected repository evidence. */
   projectMemory?: string;
+  /** Shared contract agreed for this run, when planning is enabled. */
+  blueprint?: string;
+  /** Rendered todo list for this target, when a todo pass ran. */
+  todos?: string;
+  /** Previous complete candidate; present only on a refinement pass. */
+  currentDraft?: string;
+  /** Todo items the deterministic coverage check did not find in the draft. */
+  unaddressedTodos?: readonly string[];
 }
 
 export interface ProjectRelationship {
@@ -64,8 +73,22 @@ export interface GeneratedConversionUnit {
 /** Live progress for one unit during a deterministic conversion run. */
 export type ConversionProgress =
   | { kind: "start"; unit: ConversionUnit; attempt: number }
+  | { kind: "plan"; unit: ConversionUnit }
+  | { kind: "refine"; unit: ConversionUnit; pass: number; unaddressed: number }
   | { kind: "done"; unit: ConversionUnit }
   | { kind: "skip"; unit: ConversionUnit; reason: string };
+
+/** What one unit's planning passes produced, for honest run disclosure. */
+export interface UnitPlanningOutcome {
+  unit: ConversionUnit;
+  todoRequests: number;
+  codingRequests: number;
+  /** Set when a refinement was generated and then rejected by the ratchet. */
+  refinementRejected?: string;
+  addressed: number;
+  unaddressed: number;
+  unverifiable: number;
+}
 
 export interface GenerateUnitsOptions {
   /** Extra generation attempts when a unit trips the FileMemory guard or the provider errors. */
@@ -77,6 +100,15 @@ export interface GenerateUnitsOptions {
   projectMemory?: ProjectMemoryProvider;
   /** Total FileMemory + ProjectMemory character allowance for one request. */
   contextCharBudget?: number;
+  /**
+   * Per-unit todo planning. Returning undefined, or throwing, leaves the unit on
+   * the single-pass path: planning enriches context and must never fail a unit.
+   */
+  plan?: (unit: ConversionUnit, context: UnitGenerationContext) => Promise<UnitTodoList | undefined>;
+  /** Coding requests allowed per unit. 1 disables refinement entirely. */
+  maxCodingPasses?: number;
+  /** Collected per-unit planning outcomes, for run disclosure. */
+  onPlanningOutcome?: (outcome: UnitPlanningOutcome) => void;
 }
 
 export interface DirectDiscoveryNotice {
@@ -110,6 +142,14 @@ export interface GenerateOptions {
   fileMemory?: string;
   /** Compact current/projected repository evidence for this exact target. */
   projectMemory?: string;
+  /** Shared contract agreed for this run. */
+  blueprint?: string;
+  /** Rendered todo list for this target. */
+  todos?: string;
+  /** Previous complete candidate on a refinement pass. */
+  currentDraft?: string;
+  /** Todo items not found in the draft. */
+  unaddressedTodos?: readonly string[];
   signal?: AbortSignal;
 }
 

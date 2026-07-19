@@ -11,6 +11,7 @@ import { basename, dirname, extname, relative, resolve, sep } from "node:path";
 import { isProtectedContextPath, scanSecrets } from "../../context/context.ts";
 import { languageForCodeExtension } from "../../core/languages.ts";
 import { walkDirectFiles } from "./discovery.ts";
+import { renderBlueprintFor, type ProjectBlueprint } from "./project-blueprint.ts";
 import {
   PROJECT_CONTRACT_EXTENSIONS,
   PROJECT_MANIFEST_NAMES,
@@ -32,6 +33,7 @@ const MAX_RENDERED_CONTRACTS = 8;
 const MAX_RENDERED_CONTRACT_CHARS = 1_200;
 const MAX_PURPOSE_CHARS = 280;
 const MAX_CONTRACT_ITEMS = 24;
+const MAX_RENDERED_VOCABULARY = 40;
 
 export interface ProjectMemoryOptions {
   /** Reuse discovery's already-bounded walk instead of walking the tree twice. */
@@ -191,6 +193,7 @@ export class ProjectMemory implements ProjectMemoryProvider {
   readonly #generatedPaths = new Set<string>();
   readonly #generatedSnippets = new Map<string, string[]>();
   readonly #renderCharLimit: number;
+  #blueprint: ProjectBlueprint | undefined;
 
   constructor(input: {
     root: string;
@@ -252,6 +255,20 @@ export class ProjectMemory implements ProjectMemoryProvider {
     snippets.push(contract);
     this.#generatedSnippets.set(path, snippets.slice(-MAX_CONTRACT_ITEMS));
     this.#generatedContracts.set(path, uniqueEvidence(snippets, MAX_CONTRACT_ITEMS).join("\n"));
+  }
+
+  /** Adopt the shared contract agreed for this run, before any unit is generated. */
+  adoptBlueprint(blueprint: ProjectBlueprint): void {
+    this.#blueprint = blueprint;
+  }
+
+  get blueprint(): ProjectBlueprint | undefined {
+    return this.#blueprint;
+  }
+
+  /** Planned targets, for seeding the blueprint request. */
+  get plannedTargets(): readonly PlannedProjectFile[] {
+    return this.#sortedPlannedPaths.map((path) => this.#planned.get(path)!);
   }
 
   relationsFor(unit: ConversionUnit): readonly ProjectRelationship[] {
@@ -325,6 +342,18 @@ export class ProjectMemory implements ProjectMemoryProvider {
       "AFTER-STATE NOTE: planned output files are added; .human source files remain present.",
     ];
     if (planned) output.push(`TARGET PURPOSE: ${planned.purposes.join(" | ")}`);
+
+    // The shared contract is the highest-value context in the block: it is the
+    // only thing that makes independently generated files agree on names.
+    // `appendSection` truncates against the running budget, so it goes first.
+    if (this.#blueprint !== undefined) {
+      appendSection(
+        output,
+        "SHARED PROJECT CONTRACT (agreed for this run; use these exact names)",
+        renderBlueprintFor(this.#blueprint, path, MAX_RENDERED_VOCABULARY).split("\n").filter((line) => line.length > 0),
+        budget,
+      );
+    }
 
     appendSection(output, "RELATED PATHS FOR THIS TARGET", related.map((entry) =>
       `${entry.path} [${entry.state}] — ${relationshipReferenceDescription(path, entry.path, entry.reference)} — ${entry.role}`), budget);

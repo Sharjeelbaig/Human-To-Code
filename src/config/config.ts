@@ -124,9 +124,31 @@ export interface BudgetConfigV1 {
   timeoutMs: number;
 }
 
+export interface DirectPlanningConfigV1 {
+  /** Master switch. False restores exactly one model request per unit. */
+  enabled: boolean;
+  /** One shared blueprint request per run, before any file is generated. */
+  projectBlueprint: boolean;
+  /** One todo-list request per whole-file unit. */
+  fileTodo: boolean;
+  /** One todo-list request per inline `@human` marker. */
+  markerTodo: boolean;
+  /**
+   * Coding requests allowed for one unit. A second pass is issued only when the
+   * deterministic coverage check finds unaddressed todo items, and is discarded
+   * unless it keeps everything the previous pass already produced. Set to 1 to
+   * code every unit in a single request.
+   */
+  maxCodingPassesPerUnit: number;
+}
+
 export interface DirectConfigV1 {
-  /** Opt in to bounded post-generation cross-file integration reconciliation. */
+  /** Bounded post-generation cross-file integration reconciliation. */
   reconcileIntegrations: boolean;
+  /** Deterministic cross-file reference checks. Adds no model requests. */
+  crossFileChecks: boolean;
+  /** Shared blueprint, per-unit todo lists, and adaptive coding requests. */
+  planning: DirectPlanningConfigV1;
 }
 
 export interface WorkspaceOverrideV1 {
@@ -207,14 +229,27 @@ const DEFAULT_CONFIG_VALUE: ConfigV1 = {
     // tokenizer-independent upper bound and charges failed remote attempts.
     maxInputTokens: 2_000_000,
     maxOutputTokens: 120_000,
-    maxRequests: 12,
+    // Multi-pass planning issues a blueprint request, one todo request per
+    // unit, and one or more coding requests per unit, so a realistic ceiling
+    // is well above one-request-per-unit. Spend stays bounded by maxCostUsd.
+    maxRequests: 60,
     maxRepairs: 2,
     timeoutMs: 900_000,
   },
   direct: {
-    // ProjectMemory-based first-pass linking is always active. This separate
-    // repair phase is conservative opt-in so upgrades add no provider calls.
-    reconcileIntegrations: false,
+    // A single request per file cannot hold a whole spec and a shared naming
+    // vocabulary at once, so files drifted apart. Both cross-file checks are
+    // on by default; `planning.enabled: false` restores the old single-request
+    // behavior for operators who want the minimum number of provider calls.
+    reconcileIntegrations: true,
+    crossFileChecks: true,
+    planning: {
+      enabled: true,
+      projectBlueprint: true,
+      fileTodo: true,
+      markerTodo: true,
+      maxCodingPassesPerUnit: 2,
+    },
   },
 };
 
@@ -864,15 +899,49 @@ function validateSandbox(raw: unknown, path: string): Partial<SandboxConfigV1> {
   return result;
 }
 
-function validateDirect(raw: unknown, path: string): Partial<DirectConfigV1> {
+function validateDirectPlanning(raw: unknown, path: string): Partial<DirectPlanningConfigV1> {
   const value = expectObject(raw, path);
-  assertKnownKeys(value, ["reconcileIntegrations"], path);
-  const result: Partial<DirectConfigV1> = {};
+  assertKnownKeys(
+    value,
+    ["enabled", "projectBlueprint", "fileTodo", "markerTodo", "maxCodingPassesPerUnit"],
+    path,
+  );
+  const result: Partial<DirectPlanningConfigV1> = {};
+  for (const key of ["enabled", "projectBlueprint", "fileTodo", "markerTodo"] as const) {
+    if (value[key] !== undefined) result[key] = expectBoolean(value[key], `${path}.${key}`);
+  }
+  if (value.maxCodingPassesPerUnit !== undefined) {
+    result.maxCodingPassesPerUnit = expectNumber(
+      value.maxCodingPassesPerUnit,
+      `${path}.maxCodingPassesPerUnit`,
+      1,
+      3,
+      true,
+    );
+  }
+  return result;
+}
+
+/** `planning` is nested, so it patches field-by-field instead of wholesale. */
+type DirectConfigPatch = Omit<Partial<DirectConfigV1>, "planning"> & {
+  planning?: Partial<DirectPlanningConfigV1>;
+};
+
+function validateDirect(raw: unknown, path: string): DirectConfigPatch {
+  const value = expectObject(raw, path);
+  assertKnownKeys(value, ["reconcileIntegrations", "crossFileChecks", "planning"], path);
+  const result: DirectConfigPatch = {};
   if (value.reconcileIntegrations !== undefined) {
     result.reconcileIntegrations = expectBoolean(
       value.reconcileIntegrations,
       `${path}.reconcileIntegrations`,
     );
+  }
+  if (value.crossFileChecks !== undefined) {
+    result.crossFileChecks = expectBoolean(value.crossFileChecks, `${path}.crossFileChecks`);
+  }
+  if (value.planning !== undefined) {
+    result.planning = validateDirectPlanning(value.planning, `${path}.planning`);
   }
   return result;
 }
@@ -1045,9 +1114,11 @@ export function validateConfig(raw: unknown): ConfigV1 {
     };
   }
   if (raw.direct !== undefined) {
+    const direct = validateDirect(raw.direct, "direct");
     config.direct = {
       ...config.direct,
-      ...validateDirect(raw.direct, "direct"),
+      ...direct,
+      planning: { ...config.direct.planning, ...direct.planning },
     };
   }
 

@@ -266,7 +266,12 @@ Configuration is strict schema-versioned JSON. Unknown keys and credential-like 
 
 For OpenAI or Ollama Cloud, leave `remoteProviderConsent` false while planning, run `human-to-code context <contract> --explain`, review every item, configure model-specific conservative pricing upper bounds, then set consent true. Remote providers receive no follow-up context tools, so this is the complete code/documentation envelope for the current project/config state. Re-run the preview after changing project files, private documentation, workspace overrides, or context policy.
 
-This complete local-Ollama example shows the policy fields:
+**[docs/CONFIGURATION.md](docs/CONFIGURATION.md) is the complete field-by-field
+reference** — every key, its type, default, valid range, and validation rule,
+plus the exact file `--init` writes. The rest of this section covers the
+decisions worth understanding before you edit it.
+
+This local-Ollama example shows the policy fields most projects touch:
 
 ```json
 {
@@ -277,59 +282,74 @@ This complete local-Ollama example shows the policy fields:
     { "path": "script.human", "extension": "js" },
     { "path": "styles.human", "extension": "css" }
   ],
-  "filesToIgnore": ["node_modules", ".git", "dist"],
-  "allowNonHumanFiles": false,
   "provider": {
     "name": "ollama",
     "model": "qwen2.5-coder:14b"
   },
-  "workspaces": [],
-  "documentation": {
-    "mode": "local-first",
-    "privatePaths": [],
-    "officialDomains": [],
-    "officialSources": []
-  },
   "privacy": {
     "remoteProviderConsent": false,
-    "telemetry": false,
-    "excludedPaths": [],
     "maxFileBytes": 512000,
     "maxContextTokens": 64000
   },
-  "sandbox": {
-    "required": true,
-    "engine": "auto",
-    "network": "none"
-  },
-  "budgets": {
-    "maxCostUsd": 10,
-    "maxInputTokens": 2000000,
-    "maxOutputTokens": 120000,
-    "maxRequests": 12,
-    "maxRepairs": 2,
-    "timeoutMs": 900000
-  },
   "direct": {
-    "reconcileIntegrations": false
+    "reconcileIntegrations": true,
+    "crossFileChecks": true,
+    "planning": {
+      "enabled": true,
+      "maxCodingPassesPerUnit": 2
+    }
   }
 }
 ```
+
+Omitted sections keep their documented defaults; `documentation`, `privacy`,
+`sandbox`, `budgets`, `direct`, and `direct.planning` merge field-by-field, so a
+partial section does not discard its siblings.
 
 `languages` lists every output language enabled for direct conversion (`typescript`, `javascript`, `python`, `rust`, `html`, `css`); its first entry is the default. The receipt lists only the languages selected by the discovered units, not every configured possibility.
 
 `humanFileExtensions` provides the strongest routing signal. Each entry binds one exact, portable project-relative `.human` path to an output extension; a leading dot is optional, and the extension's language must appear in `languages`. This prevents prompt vocabulary from changing the output: the example always routes `script.human` to `script.js`, even if its instruction repeatedly mentions stylesheets, CSS classes, colors, or themes. Recognized inner extensions are replaced when an explicit mapping is present, so mapping `page.html.human` to `js` produces `page.js`.
 
-`direct.reconcileIntegrations` is an opt-in post-generation safety net. The
-default `false` keeps the established ProjectMemory first pass unchanged and
-adds no provider calls, checks, group coupling, or receipt fields. With `true`,
-the receipt/JSON plan discloses conservative audit and target-repair ceilings.
-ProjectMemory supplies structured relationships using extensible language
-profiles; the generic orchestrator audits only connected generated groups,
-validates strict JSON against real generated paths, repairs each named target at
-most once, and performs at most one verification audit. A failed bounded cycle
-rejects that evidenced group instead of writing a known-inconsistent partial
-result.
+### Multi-request planning
+
+A single request per file has to decide a file's design, cover every requirement
+in the spec, and invent a naming vocabulary all at once — and nothing makes two
+independently generated files agree on that vocabulary. `direct.planning`
+(default on) splits the work:
+
+1. **Shared contract** — one request before any file is generated, agreeing the
+   file roster and the class names, ids, symbols, and routes every target must
+   use verbatim. Skipped when fewer than two files are planned.
+2. **Per-target todo list** — one request per `.human` file and, unless
+   `markerTodo` is off, per inline `@human` marker.
+3. **Coding** — one request per target, grounded in both of the above. A second
+   pass is issued *only* when a deterministic coverage check finds todo items the
+   first pass did not address, and is kept only if it preserves everything the
+   previous pass produced. That ratchet is what makes re-emitting a whole file
+   safe: a pass that drops content loses itself, not your output.
+
+Set `direct.planning.enabled` to `false` to restore exactly one model request
+per unit, or `maxCodingPassesPerUnit` to `1` to keep planning but never refine.
+Every planning pass is best-effort — an unparseable blueprint or todo list is
+discarded and the run continues on the single-pass path. The receipt and
+`--json` plan disclose the exact request breakdown before the confirmation
+prompt.
+
+`direct.crossFileChecks` (default on) then cross-references the generated HTML,
+CSS, and browser JavaScript against each other using the same static extractors
+ProjectMemory already uses — **no model requests**. A script selecting a class
+no markup defines, or markup linking an asset the project does not contain, is
+reported as blocking; naming drift between markup and stylesheet is reported as
+advisory. This is reference checking, not verification: a clean result means the
+named references line up, never that the project behaves correctly.
+
+`direct.reconcileIntegrations` (default on) is the bounded post-generation
+reconciliation pass. ProjectMemory supplies structured relationships using
+extensible language profiles; the generic orchestrator audits only connected
+generated groups, validates strict JSON against real generated paths, repairs
+each named target at most once, and performs at most one verification audit. A
+failed bounded cycle rejects that evidenced group instead of writing a
+known-inconsistent partial result. Set it to `false` to skip those requests.
 
 The direct engine uses `privacy.maxContextTokens` as the combined upper bound
 for FileMemory and ProjectMemory. ProjectMemory additionally caps each rendered

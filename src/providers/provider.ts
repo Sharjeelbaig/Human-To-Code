@@ -224,7 +224,9 @@ export interface ProviderRequestReservationV1 {
 export const DEFAULT_PROVIDER_BUDGETS: Readonly<ProviderBudgetLimitsV1> = Object.freeze({
   maxInputTokens: 250_000,
   maxOutputTokens: 32_000,
-  maxRequests: 12,
+  // Matches `budgets.maxRequests` in DEFAULT_CONFIG: multi-pass planning needs
+  // headroom well above one request per unit.
+  maxRequests: 60,
   maxRepairs: 2,
   maxCostUsd: 25,
   maxElapsedMs: 15 * 60_000,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -28,7 +28,50 @@ test("validateConfig fills v1 defaults", () => {
   assert.equal(config.sandbox.network, "none");
   assert.equal(config.privacy.remoteProviderConsent, false);
   assert.equal(config.budgets.maxRepairs, 2);
-  assert.equal(config.direct.reconcileIntegrations, false);
+  assert.equal(config.budgets.maxRequests, 60);
+  assert.equal(config.direct.reconcileIntegrations, true);
+  assert.equal(config.direct.crossFileChecks, true);
+  assert.deepEqual(config.direct.planning, {
+    enabled: true,
+    projectBlueprint: true,
+    fileTodo: true,
+    markerTodo: true,
+    maxCodingPassesPerUnit: 2,
+  });
+});
+
+test("direct.planning merges field-by-field instead of replacing the section", () => {
+  const config = validateConfig({ ...V1, direct: { planning: { markerTodo: false } } });
+  assert.equal(config.direct.planning.markerTodo, false);
+  assert.equal(config.direct.planning.enabled, true);
+  assert.equal(config.direct.planning.maxCodingPassesPerUnit, 2);
+  assert.equal(config.direct.reconcileIntegrations, true);
+});
+
+test("direct.planning rejects unknown keys and out-of-range values", () => {
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { planning: { enabled: true, unknown: 1 } } }),
+    /direct\.planning\.unknown/u,
+  );
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { planning: { maxCodingPassesPerUnit: 0 } } }),
+    /direct\.planning\.maxCodingPassesPerUnit/u,
+  );
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { planning: { maxCodingPassesPerUnit: 4 } } }),
+    /direct\.planning\.maxCodingPassesPerUnit/u,
+  );
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { planning: { enabled: "yes" } } }),
+    /direct\.planning\.enabled/u,
+  );
+});
+
+test("planning defaults are frozen and callers receive their own copy", () => {
+  assert.ok(Object.isFrozen(DEFAULT_CONFIG.direct.planning));
+  const first = validateConfig(V1);
+  first.direct.planning.enabled = false;
+  assert.equal(validateConfig(V1).direct.planning.enabled, true);
 });
 
 test("schema version is mandatory and unsupported versions fail", () => {
@@ -545,4 +588,37 @@ test("loadConfig rejects invalid JSON and symlinked config", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("docs/CONFIGURATION.md documents every key in DEFAULT_CONFIG", async () => {
+  const reference = await readFile(
+    new URL("../docs/CONFIGURATION.md", import.meta.url),
+    "utf8",
+  );
+  const paths: string[] = [];
+  const walk = (value: unknown, prefix: string): void => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return;
+    for (const [key, nested] of Object.entries(value)) {
+      const path = prefix.length === 0 ? key : `${prefix}.${key}`;
+      paths.push(path);
+      walk(nested, path);
+    }
+  };
+  walk(DEFAULT_CONFIG, "");
+  const missing = paths.filter((path) => {
+    const leaf = path.split(".").at(-1)!;
+    return !reference.includes(`\`${path}\``) && !reference.includes(`| \`${leaf}\``);
+  });
+  assert.deepEqual(missing, [], `undocumented config keys: ${missing.join(", ")}`);
+});
+
+test("the documented default file is exactly what --init writes", async () => {
+  const reference = await readFile(
+    new URL("../docs/CONFIGURATION.md", import.meta.url),
+    "utf8",
+  );
+  const blocks = [...reference.matchAll(/```json\n([\s\S]*?)```/gu)].map((match) => match[1]!);
+  const documented = blocks.find((block) => block.includes("\"schemaVersion\""));
+  assert.ok(documented, "the reference must contain a complete default JSON block");
+  assert.deepEqual(JSON.parse(documented), JSON.parse(defaultConfigJson()));
 });

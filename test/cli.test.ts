@@ -145,6 +145,9 @@ test("multi-language receipt reports the inferred outputs instead of the configu
       languages: ["typescript", "html", "css", "javascript"],
       humanFileExtensions: [{ path: "script.human", extension: "js" }],
       provider: { name: "ollama", model: "fixture-model" },
+      // This test is about language inference, so the receipt is pinned to the
+      // pre-reconciliation shape; the default-on receipt is covered separately.
+      direct: { reconcileIntegrations: false },
     }));
     await put(root, "index.human", "html\nadd head section here\nadd styles\nclose head\nadd body\n");
     await put(root, "script.human", "Read stylesheet colors, fonts, spacing, backgrounds, borders, and themes, then update them on clicks.\n");
@@ -157,7 +160,9 @@ test("multi-language receipt reports the inferred outputs instead of the configu
     assert.match(receipt.stdout, /index\.human\s+->\s+index\.html/u);
     assert.match(receipt.stdout, /script\.human\s+->\s+script\.js/u);
     assert.match(receipt.stdout, /styles\.human\s+->\s+styles\.css/u);
-    assert.match(receipt.stdout, /3 planned \(up to 1 extra bounded repair request for JavaScript\)/u);
+    // Planning is on by default; reconciliation is pinned off above, so the
+    // JavaScript repair allowance still shows alongside the planning breakdown.
+    assert.match(receipt.stdout, /7 planned \(1 shared contract, 3 per-target todo, 3 coding\) \(up to 1 extra bounded repair request for JavaScript\)/u);
     assert.match(receipt.stdout, /Context\s+: compact current\/projected ProjectMemory/u);
     assert.doesNotMatch(receipt.stdout, /integration reconciliation|generated cross-file links/u);
     assert.doesNotMatch(receipt.stdout, /TypeScript|\.ts\b/u);
@@ -224,6 +229,9 @@ test("plain browser JavaScript is not rewritten for an unrequested TypeScript ch
         baseUrl: `http://127.0.0.1:${address.port}`,
         trustCustomEndpoint: true,
       },
+      // Subject here is the TypeScript-check policy for plain JS, so the exact
+      // request count is pinned to generation only.
+      direct: { reconcileIntegrations: false },
     }));
     await put(root, "index.human", "Build the page.\n");
     await put(root, "script.human", "Build the browser behavior.\n");
@@ -235,7 +243,10 @@ test("plain browser JavaScript is not rewritten for an unrequested TypeScript ch
     assert.deepEqual(done.written, ["index.html", "script.js", "styles.css"]);
     assert.equal(done.repairRequests, 0);
     assert.equal(repairs, 0);
-    assert.equal(requests, 3);
+    // 1 blueprint + 3 todo + 3 coding. This stub answers every request with
+    // markup, so both planning parses fail and each unit falls back to a single
+    // coding pass — which is exactly the graceful-degradation path.
+    assert.equal(requests, 7);
     assert.match(await readFile(join(root, "script.js"), "utf8"), /innerText/u);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -286,7 +297,11 @@ test("a failed whole-file candidate withholds the complete conversion batch", as
     assert.equal(done.status, "FAILED");
     assert.deepEqual(done.written, []);
     assert.equal(done.skipped.length, 2);
-    assert.ok(done.skipped.some(({ reason }) => /whole-file conversion batch was withheld/u.test(reason)));
+    // With cross-file reconciliation on by default the incomplete group is
+    // rejected first and names the sibling that failed; with it off the batch
+    // is withheld later. Either way no file is written and both units skip.
+    assert.ok(done.skipped.some(({ reason }) =>
+      /whole-file conversion batch was withheld|cross-file integration group is incomplete/u.test(reason)));
     await assert.rejects(access(join(root, "index.html")));
     await assert.rejects(access(join(root, "script.js")));
   } finally {
@@ -315,8 +330,10 @@ test("opt-in integration reconciliation is disclosed while the default receipt s
 
     const receipt = await cli([root, "--dry-run"]);
     assert.equal(receipt.code, 0, receipt.stderr || receipt.stdout);
-    assert.match(receipt.stdout, /Requests\s+: 3 planned/u);
-    assert.match(receipt.stdout, /Additional: opt-in cross-file reconciliation may issue up to 6 bounded audit requests and 3 target-repair requests/u);
+    // 1 shared contract + 3 todo + 3 coding, disclosed before confirmation.
+    assert.match(receipt.stdout, /Requests\s+: 7 planned \(1 shared contract, 3 per-target todo, 3 coding\)/u);
+    assert.match(receipt.stdout, /Additional: up to 3 completion request\(s\), only for targets whose todo list is not fully covered/u);
+    assert.match(receipt.stdout, /Additional: cross-file reconciliation may issue up to 6 bounded audit requests and 3 target-repair requests/u);
     assert.match(receipt.stdout, /ProjectMemory-evidenced generated relationships/u);
 
     const json = await cli([root, "--json"]);
@@ -420,7 +437,10 @@ test("opt-in CLI performs a generic audit, target repair, and verification cycle
     assert.equal(done.integrationAuditRequests, 2);
     assert.equal(done.integrationRepairRequests, 1);
     assert.equal(done.repairRequests, 0);
-    assert.equal(requests, 6);
+    // 6 pre-planning requests (3 coding + 3 integration) plus 1 blueprint and
+    // 3 todo requests. This stub answers planning requests with code, so both
+    // parses fail and generation stays single-pass.
+    assert.equal(requests, 10);
     const html = await readFile(join(root, "index.html"), "utf8");
     assert.match(html, /href="styles\.css"/u);
     assert.match(html, /src="script\.js"/u);
@@ -575,5 +595,170 @@ test("CLI rollback restores an applied run from the configured private run store
     assert.ok(await store.readArtifact(runId, "rollback-result.json"));
   } finally {
     await rm(container, { recursive: true, force: true });
+  }
+});
+
+test("planning agrees a shared vocabulary and completes an incomplete first pass", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-planning-"));
+  const seen: string[] = [];
+  let cssCodingRequests = 0;
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
+      const user = parsed.messages.find((message) => message.role === "user")?.content ?? "";
+      let content: string;
+      if (system.includes("planning a shared contract")) {
+        seen.push("blueprint");
+        content = JSON.stringify({
+          files: [
+            { path: "index.html", responsibility: "Structure." },
+            { path: "styles.css", responsibility: "Presentation." },
+          ],
+          vocabulary: [
+            { name: "project-card", kind: "class", definedIn: "index.html", usedIn: ["styles.css"] },
+          ],
+        });
+      } else if (system.includes("A separate later request will write the code")) {
+        seen.push(`todo:${system.includes("styles.css") ? "css" : "html"}`);
+        content = system.includes("styles.css")
+          ? JSON.stringify({
+              todos: [
+                { id: "T1", requirement: "Card rule.", expects: { kind: "class", names: ["project-card"] } },
+                { id: "T2", requirement: "Breakpoints.", expects: { kind: "selector", names: ["media"] } },
+              ],
+            })
+          : JSON.stringify({
+              todos: [{ id: "T1", requirement: "Card markup.", expects: { kind: "class", names: ["project-card"] } }],
+            });
+      } else if (system.includes("target: index.html")) {
+        seen.push("code:html");
+        content = '<link rel="stylesheet" href="styles.css"><article class="project-card">Hi</article>';
+      } else {
+        cssCodingRequests += 1;
+        seen.push(`code:css:${cssCodingRequests}`);
+        // First pass deliberately omits the breakpoints T2 asked for; the
+        // refinement adds them without losing the card rule.
+        content = cssCodingRequests === 1
+          ? ".project-card{display:flex}"
+          : ".project-card{display:flex}\n@media (max-width:600px){.project-card{display:block}}";
+      }
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+      void user;
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["html", "css"],
+      humanFileExtensions: [
+        { path: "index.human", extension: "html" },
+        { path: "styles.human", extension: "css" },
+      ],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: { reconcileIntegrations: false },
+    }));
+    await put(root, "index.human", "Build a card list.\n");
+    await put(root, "styles.human", "Style the cards responsively.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as {
+      written: string[];
+      blueprintRequests: number;
+      todoRequests: number;
+      codingRequests: number;
+      referenceFindings: Array<{ code: string }>;
+    };
+    assert.deepEqual(done.written, ["index.html", "styles.css"]);
+    assert.equal(done.blueprintRequests, 1);
+    assert.equal(done.todoRequests, 2);
+    // 2 first passes plus exactly one refinement for the incomplete stylesheet.
+    assert.equal(done.codingRequests, 3);
+    assert.equal(seen.filter((entry) => entry === "blueprint").length, 1);
+    assert.equal(cssCodingRequests, 2);
+
+    const css = await readFile(join(root, "styles.css"), "utf8");
+    assert.match(css, /@media/u, "the refinement must add the missing breakpoints");
+    assert.match(css, /project-card/u, "the refinement must keep the first pass's rule");
+    const html = await readFile(join(root, "index.html"), "utf8");
+    assert.match(html, /project-card/u, "markup must use the agreed shared name");
+    assert.deepEqual(done.referenceFindings, [], "agreed vocabulary must leave no drift");
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("planning.enabled false restores exactly one request per unit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-planning-off-"));
+  let requests = 0;
+  const systems: string[] = [];
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      requests += 1;
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      systems.push(parsed.messages.find((message) => message.role === "system")?.content ?? "");
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content: ".project-card{display:flex}" } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["css"],
+      humanFileExtensions: [
+        { path: "a.human", extension: "css" },
+        { path: "b.human", extension: "css" },
+      ],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: { reconcileIntegrations: false, planning: { enabled: false } },
+    }));
+    await put(root, "a.human", "Style the cards.\n");
+    await put(root, "b.human", "Style the footer.\n");
+
+    const receipt = await cli([root, "--dry-run"]);
+    assert.match(receipt.stdout, /Requests\s+: 2 planned/u);
+    assert.match(receipt.stdout, /Engine\s+: direct \(one model request per prompt/u);
+    assert.doesNotMatch(receipt.stdout, /shared contract|per-target todo/u);
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as {
+      written: string[]; blueprintRequests: number; todoRequests: number; codingRequests: number;
+    };
+    assert.deepEqual(done.written, ["a.css", "b.css"]);
+    assert.equal(requests, 2);
+    assert.equal(done.blueprintRequests, 0);
+    assert.equal(done.todoRequests, 0);
+    assert.equal(done.codingRequests, 2);
+    assert.ok(systems.every((system) => !system.includes("planning a shared contract")));
+    assert.ok(systems.every((system) => !system.includes("A separate later request will write the code")));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
   }
 });
