@@ -51,7 +51,7 @@ export interface Config {
   filesToIgnore: string[];
   /**
    * If true, non-.human files carrying `@Human:` directives may also be
-   * processed. Off by default — it widens the surface area (see plan §1.6).
+   * processed. Off by default - it widens the surface area (see plan Section 1.6).
    */
   allowNonHumanFiles: boolean;
   /** Provider used only for the human -> strict step. */

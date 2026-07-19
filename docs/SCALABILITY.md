@@ -8,7 +8,7 @@ readable and extensible as it gets bigger.
 
 ## Layering rules
 
-Source lives in layered domain folders — see [ARCHITECTURE.md](ARCHITECTURE.md)
+Source lives in layered domain folders  -  see [ARCHITECTURE.md](ARCHITECTURE.md)
 for the map. The rules:
 
 1. **Imports point upward only.** A module can import from its own folder or
@@ -25,9 +25,9 @@ for the map. The rules:
 4. **One module, one responsibility.** New functionality gets a new file in the
    right folder instead of stretching an existing file past its purpose. If a
    file takes a paragraph to describe, it's two files.
-5. **Every module opens with a `/** … */` header** saying what it does and,
+5. **Every module opens with a `/** ... */` header** saying what it does and,
    where it matters, what it deliberately doesn't do. Those headers are the
-   first documentation anyone reads — keep them true when behavior changes.
+   first documentation anyone reads  -  keep them true when behavior changes.
 6. **Prompts live in `src/prompts/`.** Agent and provider modules call typed,
    pure prompt builders. Don't embed system or user instruction prose in
    transports, lifecycle orchestration, or pipeline mechanics.
@@ -49,7 +49,7 @@ require touching the layers above.
 3. Register the adapter in `DEFAULT_ECOSYSTEM_ADAPTERS`
    (`analysis/analyzer.ts`).
 4. Add a skill pack in `context/compiler-skills.ts` for the ecosystem's
-   conventions. Policy data only — it grants no authority.
+   conventions. Policy data only  -  it grants no authority.
 5. Add positive and adversarial fixtures per the analyzer checklist in
    CONTRIBUTING.md: conflicting lockfiles, ambiguous workspaces, symlinks,
    partial scans, stable ordering and fingerprints.
@@ -60,7 +60,7 @@ require touching the layers above.
    `providers/providers.ts` or a sibling file, using only Node built-ins plus
    `security/pinned-http.ts` for transport. No new runtime dependencies.
 2. Route all output through the existing schema gate (`generateValidated`) and
-   the budget accounting — pessimistic pre-request reservation, reconciliation
+   the budget accounting  -  pessimistic pre-request reservation, reconciliation
    against provider-reported usage, conservative charge on failure.
 3. Bind credentials to the endpoint through `apiKeyEnv` and nothing else,
    require reviewed pricing bounds for remote endpoints, and never advertise
@@ -79,7 +79,7 @@ between releases:
   together, plus the JSON Schema in `providers/schemas.ts` if the artifact
   crosses the provider boundary.
 - **Meaning changing?** That's a new version (`*V2`), a new validator, and an
-  explicit migration — the `migrate-config` command is the pattern to copy.
+  explicit migration  -  the `migrate-config` command is the pattern to copy.
   Never silently reinterpret a stored artifact; run records outlive releases.
 - Unknown fields stay errors, always. Loosening exact-key validation is a design
   discussion, not a patch.
@@ -93,12 +93,12 @@ the trust boundary, or the invariant rather than narrating the syntax below
 them.
 
 - **TypeScript strict, no escape hatches.** `strict` and
-  `noUncheckedIndexedAccess` stay on. Avoid `any` and non-null assertions —
+  `noUncheckedIndexedAccess` stay on. Avoid `any` and non-null assertions  - 
   validate at the boundary and let the types flow from there.
 - **Minimal production dependencies.** HTTP, hashing, JSON, process handling,
   provider access, and orchestration all use Node built-ins. TypeScript is the
   one deliberate runtime compiler dependency, used for direct JS/TS candidate
-  validation — both the per-file syntax checks and the combined
+  validation  -  both the per-file syntax checks and the combined
   TypeScript/opted-in-JavaScript check. `@types/node` ships alongside it so
   `node:` builtin imports resolve in target projects that have no type
   dependencies of their own. Combined validation builds a TypeScript program
@@ -126,7 +126,7 @@ them.
   before the confirmation prompt. New ecosystems extend the relationship and
   contract profiles instead of adding scenario branches to the orchestration.
 - **Errors are typed and named.** Each layer exports its own error classes
-  (`ArtifactValidationError`, `ProviderError`, `PatchSafetyError`, …) so the CLI
+  (`ArtifactValidationError`, `ProviderError`, `PatchSafetyError`, ...) so the CLI
   can map failures to exit codes without matching on strings. Error messages
   never carry secret values.
 - **Determinism by default.** Stable ordering for anything hashed, listed, or
@@ -167,12 +167,12 @@ Documentation is layered like the code. Update the layer that owns the fact:
 
 A pull request that changes behavior updates the affected documentation in the
 same change. Documentation drift is treated as a defect here, and honest wording
-is part of review — never describe a fail-closed limitation as a missing feature
+is part of review  -  never describe a fail-closed limitation as a missing feature
 somebody should cover up.
 
 ## Growth guardrails
 
-- **When a folder starts accumulating unrelated concerns, split the folder** —
+- **When a folder starts accumulating unrelated concerns, split the folder**  - 
   not just the file. The layer list in ARCHITECTURE.md is expected to grow.
 - **New capability starts fail-closed.** Ship recognition at `preview`, refuse
   ambiguity, and let certification evidence promote it. Not confidence. This is

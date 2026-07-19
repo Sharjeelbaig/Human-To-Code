@@ -1,7 +1,7 @@
 # YAML config support plan
 
 ## Status today
-Level 2 only. YAML is not a programming language here — the meaningful
+Level 2 only. YAML is not a programming language here  -  the meaningful
 target is *schema-validated configuration editing* (CI workflows, K8s
 manifests, app config), where correctness is checkable without execution.
 
@@ -11,7 +11,7 @@ manifests, app config), where correctness is checkable without execution.
   (`.github/workflows/*.yml`), `kubernetes` (apiVersion/kind docs),
   `generic` (only when a JSON Schema is discoverable via
   `# yaml-language-server: $schema=` or operator config).
-- Unschema'd YAML stays on the general fallback — there is nothing to
+- Unschema'd YAML stays on the general fallback  -  there is nothing to
   validate, so nothing to profile.
 
 ## Detection signals (static only)

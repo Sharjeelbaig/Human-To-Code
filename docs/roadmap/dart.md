@@ -6,7 +6,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.dart` not scanned for markers.
 ## Target profile
 - `Ecosystem`: `dart`.
 - Variants: `package` (pure Dart), `flutter-app` (validation limited to
-  `flutter test` unit/widget tests — no device/emulator).
+  `flutter test` unit/widget tests  -  no device/emulator).
 - Versions: Dart ≥ 3.0 (from `environment.sdk` in `pubspec.yaml`).
 
 ## Detection signals (static only)
@@ -31,7 +31,7 @@ generated files.
 ## Risks & gates
 `build_runner` codegen (never run by the tool; generated files protected),
 platform channels/FFI, and Flutter platform folders (`android/`, `ios/`)
-which follow their own ecosystems' rules — treat as prohibited paths
+which follow their own ecosystems' rules  -  treat as prohibited paths
 initially.
 
 ## Checklist

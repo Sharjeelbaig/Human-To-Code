@@ -8,7 +8,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.tf` not scanned for markers
 - `Ecosystem`: `terraform`.
 - Variants: `root-module` (has backend/provider config) and `child-module`
   (reusable module without backend). Workspaces with multiple root modules
-  need explicit targeting → `NEEDS_INPUT`, mirroring the multi-app rule.
+  need explicit targeting -> `NEEDS_INPUT`, mirroring the multi-app rule.
 - Versions: `required_version` and `required_providers` blocks.
 
 ## Detection signals (static only)
@@ -17,7 +17,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.tf` not scanned for markers
   `modules/` layout.
 
 ## Version evidence
-`.terraform.lock.hcl` pins exact provider versions with hashes — first-class
+`.terraform.lock.hcl` pins exact provider versions with hashes  -  first-class
 grounding evidence. Module registry sources with versions count; git-ref
 module sources without a pinned rev are unproven.
 
@@ -25,7 +25,7 @@ module sources without a pinned rev are unproven.
 - `["terraform", "fmt", "-check"]` and `["terraform", "validate"]` with a
   pre-initialized `.terraform` directory baked into the image/fixture
   (validation has no network for `init`). `plan`/`apply` are out of scope:
-  plan needs credentials and state — never available in the sandbox.
+  plan needs credentials and state  -  never available in the sandbox.
 
 ## Skill pack
 Variable/output descriptions and types, no inline credentials (secret
@@ -37,7 +37,7 @@ rename awareness (`moved` blocks).
 Everything that changes resource addresses (renames without `moved`),
 `destroy`-provoking changes, provider version bumps, and backend changes
 are elevated-risk. The tool must be explicit that `validate`-clean ≠
-apply-safe — plan/apply stay human-owned.
+apply-safe  -  plan/apply stay human-owned.
 
 ## Checklist
 0. Scan `.tf` for `# @human` markers (direct-path quick win, `LANGUAGE_PROFILES` entry `hcl`/`.tf`).

@@ -6,12 +6,12 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.swift` not scanned for markers.
 ## Target profile
 - `Ecosystem`: `swift`.
 - Variants: `spm-package` (Package.swift) first. Xcode-project apps
-  (`.xcodeproj`/`.xcworkspace`) are explicitly **out of scope** initially —
+  (`.xcodeproj`/`.xcworkspace`) are explicitly **out of scope** initially  - 
   pbxproj is too dynamic to analyze honestly; declare `UNSUPPORTED`.
 - Versions: Swift ≥ 5.9 (from `// swift-tools-version:` header).
 
 ## Detection signals (static only)
-- `Package.swift` tools-version comment line (parsed textually — the
+- `Package.swift` tools-version comment line (parsed textually  -  the
   manifest itself is Swift code and must never be evaluated), `Package.resolved`,
   `Sources/`, `Tests/` layout.
 
@@ -23,7 +23,7 @@ computed manifests with `NEEDS_INPUT`.
 ## Validation plan
 - `["swift", "build"]`, `["swift", "test"]` in a Swift toolchain image
   (Linux). Apple-platform-only packages (UIKit imports) are `INCONCLUSIVE`
-  on a Linux sandbox — say so rather than skipping silently.
+  on a Linux sandbox  -  say so rather than skipping silently.
 
 ## Skill pack
 Target/directory correspondence, XCTest conventions, access-control

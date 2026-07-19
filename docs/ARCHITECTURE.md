@@ -35,8 +35,8 @@ explicit apply + exact rollback    (src/pipeline/patch.ts, src/agents/guided/wor
 
 Every arrow is a checkpoint. Each stage validates the artifact it received
 against an exact schema, records provenance hashes, and stops with a typed
-status — `NEEDS_INPUT`, `UNSUPPORTED`, `INCONCLUSIVE`, `FAILED`,
-`SECURITY_BLOCKED` — rather than guessing its way forward. For a generated run,
+status  -  `NEEDS_INPUT`, `UNSUPPORTED`, `INCONCLUSIVE`, `FAILED`,
+`SECURITY_BLOCKED`  -  rather than guessing its way forward. For a generated run,
 `VERIFIED` is the only thing that means success.
 
 ## Layers
@@ -86,13 +86,13 @@ graph TD
 
 | Layer | What's in it | Why it's on its own |
 | --- | --- | --- |
-| `src/core/` | `types.ts`, `contracts.ts` | The versioned artifact vocabulary (`ChangeContractV1`, `PatchSetV1`, `ValidationPlanV1`, `RunRecordV1`, …), exact validators, canonical JSON, and SHA-256 helpers. Everything else talks in these types, which is exactly why they can't depend on anything. |
-| `src/config/` | `config.ts`, `discovery.ts` | Operator policy coming in. Strict schema-versioned JSON — unknown keys rejected, credentials environment-only — plus fail-closed discovery of `.human` sources. |
-| `src/analysis/` | `analyzer.ts`, `analyzer-types.ts`, `analyzer-utils.ts`, `support-matrix.ts`, `adapters/` | Read-only static project intelligence. Adapters recognize ecosystems without ever executing project code, and the support matrix declares what's supported — it never infers it. |
+| `src/core/` | `types.ts`, `contracts.ts` | The versioned artifact vocabulary (`ChangeContractV1`, `PatchSetV1`, `ValidationPlanV1`, `RunRecordV1`, ...), exact validators, canonical JSON, and SHA-256 helpers. Everything else talks in these types, which is exactly why they can't depend on anything. |
+| `src/config/` | `config.ts`, `discovery.ts` | Operator policy coming in. Strict schema-versioned JSON  -  unknown keys rejected, credentials environment-only  -  plus fail-closed discovery of `.human` sources. |
+| `src/analysis/` | `analyzer.ts`, `analyzer-types.ts`, `analyzer-utils.ts`, `support-matrix.ts`, `adapters/` | Read-only static project intelligence. Adapters recognize ecosystems without ever executing project code, and the support matrix declares what's supported  -  it never infers it. |
 | `src/security/` | `secret-scan.ts`, `pinned-http.ts` | The cross-cutting fail-closed guards: repository-wide credential scanning before any provider access, and a DNS-vetted, address-pinned HTTPS client for every outbound fetch. |
 | `src/context/` | `context.ts`, `documentation.ts`, `compiler-skills.ts`, `compiler-tools.ts` | Everything the model is allowed to *see*: provenance-bound context selection, allowlisted exact-version documentation, immutable policy skills, and the bounded read-only context tool executor. |
 | `src/providers/` | `provider.ts`, `providers.ts`, `certification.ts`, `schemas.ts` | Everything the model is allowed to *do*: the provider-neutral adapter contract, the bundled OpenAI/Ollama HTTP adapters, the JSON output schemas providers have to satisfy, and the evidence-based certification gate that decides whether a provider/model result can ever become `VERIFIED`. |
-| `src/prompts/` | `direct-conversion.ts`, `direct-integration.ts`, `direct-repair.ts`, `guided-patch.ts`, `guided-repair.ts`, `provider-output.ts` | Every model-facing message gets built here. Prompt builders take typed inputs and return strings or messages — no I/O, no provider calls, no host mutation. |
+| `src/prompts/` | `direct-conversion.ts`, `direct-integration.ts`, `direct-repair.ts`, `guided-patch.ts`, `guided-repair.ts`, `provider-output.ts` | Every model-facing message gets built here. Prompt builders take typed inputs and return strings or messages  -  no I/O, no provider calls, no host mutation. |
 | `src/pipeline/` | `planner.ts`, `snapshot.ts`, `patch.ts`, `validation.ts`, `run-store.ts`, `file-memory.ts` | Deterministic execution mechanics: contract drafting, immutable snapshots, patch safety and atomic apply/rollback, strong-sandbox validation, private run storage, and static declaration indexing. `simple.ts` and `workflow.ts` are compatibility re-exports and nothing more. |
 | `src/agents/` | `direct/`, `guided/` | The two services that actually use a model. `direct/` splits apart discovery, marker parsing, local FileMemory, project-level ProjectMemory, optional post-generation integration reconciliation, prompt invocation, presentation, and application. `guided/` owns reviewed-run policy and the auditable generate/validate/apply/rollback lifecycle. |
 | root | `index.ts`, `cli.ts` | Entry points, nothing else. `index.ts` re-exports the stable embedding API grouped by layer; `cli.ts` maps commands, flags, and exit codes onto that same surface. They sit at the source root so the published `dist/index.js` and `dist/cli.js` paths never move. |
@@ -104,7 +104,7 @@ Two deliberate wrinkles in the layering, so they don't look like accidents:
   library lives in exactly one place and gets imported everywhere a value
   crosses a boundary.
 - `providers/schemas.ts` sits with providers rather than core, because its JSON
-  schemas are the provider-facing *wire format* for `PatchSetV1` — a different
+  schemas are the provider-facing *wire format* for `PatchSetV1`  -  a different
   thing from the host-side validators in `core/contracts.ts`.
 
 ## Key design decisions
@@ -112,7 +112,7 @@ Two deliberate wrinkles in the layering, so they don't look like accidents:
 **Versioned artifacts, exact validation.** Every hand-off between stages is a
 `*V1` JSON artifact validated with exact-object semantics, so unknown fields are
 errors. Changing what an artifact means requires a new schema version and an
-explicit migration (see `migrate-config`) — never a silent reinterpretation.
+explicit migration (see `migrate-config`)  -  never a silent reinterpretation.
 
 **Provenance by hash.** Contracts bind to the SHA-256 of the `.human` source and
 the project-profile fingerprint. Patches carry exact base hashes. Apply and
@@ -120,8 +120,8 @@ rollback verify hashes before touching a file. Staleness gets detected, not
 tolerated.
 
 **Determinism where it belongs.** The LLM writes framework-specific patch
-operations. Everything around it — discovery, profiling, contract validation,
-context selection, patch safety checks, validation-plan selection, apply — is
+operations. Everything around it  -  discovery, profiling, contract validation,
+context selection, patch safety checks, validation-plan selection, apply  -  is
 deterministic host code. The model never picks its own scope, tools, commands,
 credentials, or acceptance criteria.
 
@@ -140,8 +140,8 @@ in `src/prompts/` and nowhere else. Agent orchestration passes typed, validated
 inputs into pure prompt builders. Provider transports don't invent agent policy,
 and pipeline mechanics don't have prose instructions buried in them.
 
-**Minimal-dependency host.** The guided pipeline and the host safety code —
-hashing, patch validation, sandbox validation, HTTP adapters, secret scanning —
+**Minimal-dependency host.** The guided pipeline and the host safety code  - 
+hashing, patch validation, sandbox validation, HTTP adapters, secret scanning  - 
 run on Node built-ins. The direct agent has two deliberate runtime dependencies:
 the TypeScript compiler, which both rejects malformed JavaScript/TypeScript
 candidates and type-checks TypeScript plus explicitly opted-in JavaScript before
@@ -161,8 +161,8 @@ another runtime dependency still needs design review.
    *blueprint* request that fixes the file roster and the naming vocabulary
    every target has to use verbatim (`project-blueprint.ts`). That's the only
    moment where independently generated files can agree on anything. Each unit
-   then gets a *todo* request, a coding request, and — only when a deterministic
-   coverage check spots unaddressed items — one conditional completion request
+   then gets a *todo* request, a coding request, and  -  only when a deterministic
+   coverage check spots unaddressed items  -  one conditional completion request
    whose output is accepted solely if it preserved everything the previous pass
    produced (`unit-todos.ts`). Every planning pass is best-effort: an
    unparseable blueprint or todo list is thrown away and the unit falls back to
@@ -180,7 +180,7 @@ another runtime dependency still needs design review.
 
    Rollback-protected batch creation prevents sibling overwrite and partial
    whole-file runs, while exact marker-byte checks and shared indentation
-   formatting keep inline application stale-safe. Every marker is isolated — a
+   formatting keep inline application stale-safe. Every marker is isolated  -  a
    bad or failing unit gets retried, then skipped with a reason, and the rest
    still convert. Only a security stop aborts the whole run.
 
@@ -216,17 +216,17 @@ another runtime dependency still needs design review.
    no state with the guided pipeline and never reaches `VERIFIED`.
 
 2. **Guided agent** (`agents/guided/`, the `guided` subcommand). The full
-   contract → grounding → sandbox validation lifecycle described above. This is
+   contract -> grounding -> sandbox validation lifecycle described above. This is
    the production-architecture path, and the only one that can reach `VERIFIED`.
 
 ## Where things live at runtime
 
-- **Working tree** — never mutated by `generate` or `validate`. Only an explicit
+- **Working tree**  -  never mutated by `generate` or `validate`. Only an explicit
   `apply` of a `VERIFIED` run writes to it, atomically per file.
 - **Private run store** (`run-store.ts`, platform cache or
-  `HUMAN_TO_CODE_CACHE/runs`) — run records, patches, reports, rollback
+  `HUMAN_TO_CODE_CACHE/runs`)  -  run records, patches, reports, rollback
   artifacts. Every write is recursively secret-gated.
-- **Snapshots** (`snapshot.ts`) — immutable baseline and candidate copies used
+- **Snapshots** (`snapshot.ts`)  -  immutable baseline and candidate copies used
   for generation and sandbox validation, thrown away afterward.
 
 ## Testing shape

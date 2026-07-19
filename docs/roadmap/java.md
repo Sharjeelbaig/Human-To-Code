@@ -13,8 +13,8 @@ inline `// @human` markers. No grounded profile.
 
 ## Detection signals (static only)
 - `pom.xml` parent/modules for Maven multi-module ownership.
-- `settings.gradle(.kts)` `include(...)` for Gradle subprojects — parsed
-  textually and conservatively; unresolvable dynamic includes → `NEEDS_INPUT`.
+- `settings.gradle(.kts)` `include(...)` for Gradle subprojects  -  parsed
+  textually and conservatively; unresolvable dynamic includes -> `NEEDS_INPUT`.
 - `src/main/java`, `src/test/java` for source/test roots; `@SpringBootApplication`
   as an entry-point signal. Never execute Maven/Gradle.
 
@@ -27,7 +27,7 @@ API grounding for it must refuse.
 
 ## Validation plan
 - Maven: `["mvn", "-B", "-q", "verify"]`. Gradle: `["./gradlew", "--no-daemon", "build"]`
-  only when the wrapper exists (wrapper jars are arbitrary code — sandbox only).
+  only when the wrapper exists (wrapper jars are arbitrary code  -  sandbox only).
 - JDK image recorded by version; mismatch is `INCONCLUSIVE`.
 
 ## Skill pack

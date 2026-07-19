@@ -14,7 +14,7 @@ generating and editing Dockerfiles/Compose files as change targets.
 
 ## Detection signals (static only)
 - `Dockerfile*`, `Containerfile`, `compose*.y(a)ml`, `.dockerignore`;
-  `FROM` lines (stage graph), `COPY --from` references — all textual.
+  `FROM` lines (stage graph), `COPY --from` references  -  all textual.
 
 ## Version evidence
 Base images pinned by digest are proven; tag-only `FROM` lines are recorded
@@ -25,7 +25,7 @@ as unpinned evidence and the skill pack pushes toward digests. Compose
 - `["hadolint", "Dockerfile"]` lint in the sandbox image;
   `["docker", "compose", "config", "-q"]` for Compose syntax (offline,
   no engine calls beyond config parsing). An actual `docker build` is
-  arbitrary remote-fetching execution — out of scope for validation; at
+  arbitrary remote-fetching execution  -  out of scope for validation; at
   most a later opt-in tier with a network-off buildkit and preloaded bases.
 
 ## Skill pack
@@ -34,7 +34,7 @@ layers/ARGs (aligns with the secret scanner), `.dockerignore` completeness,
 healthchecks, digest pinning.
 
 ## Risks & gates
-`FROM` changes, new `RUN curl | sh` patterns (refuse — matches the
+`FROM` changes, new `RUN curl | sh` patterns (refuse  -  matches the
 implicit-downloader rejection), privileged/host-mount Compose options, and
 port/secret exposure are elevated-risk requiring contract authorization.
 

@@ -2,7 +2,7 @@
 
 The source should be able to explain how reviewed human language becomes bounded
 code, even to someone who hasn't read a single architecture document. Names and
-comments are part of the safety design here — unclear code makes it easier to
+comments are part of the safety design here  -  unclear code makes it easier to
 introduce a scope, trust, or mutation mistake without noticing.
 
 For the friendly folder and file map these names describe, see
@@ -10,7 +10,7 @@ For the friendly folder and file map these names describe, see
 
 These practices apply to new code right away. Existing code should drift toward
 them whenever its module gets touched for another reason. Please don't do
-unrelated mass renames — they create review noise and can break the embedding
+unrelated mass renames  -  they create review noise and can break the embedding
 API.
 
 ## Name from the lifecycle outward
@@ -137,5 +137,5 @@ symbol, so the two can't drift apart.
 
 `test/source-clarity.test.ts` enforces that every module has a responsibility
 header and rejects context-free exported names unless they're documented
-compatibility aliases. It can't judge whether a name is *good* — that's still on
+compatibility aliases. It can't judge whether a name is *good*  -  that's still on
 human review.

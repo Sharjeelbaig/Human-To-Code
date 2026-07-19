@@ -7,7 +7,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.kt` not scanned for markers.
 - `Ecosystem`: `kotlin` (JVM/Gradle first; Android later as its own variant
   because of SDK/emulator validation constraints).
 - Variants: `gradle-jvm`, then `android` (deferred until a headless
-  validation story exists — unit tests only, no instrumented tests).
+  validation story exists  -  unit tests only, no instrumented tests).
 - Versions: Kotlin ≥ 1.9 (from the Kotlin Gradle plugin version in the
   version catalog or build script literals).
 
@@ -32,7 +32,7 @@ KSP/KAPT output protected.
 
 ## Risks & gates
 KSP/KAPT processors, Gradle script edits, multiplatform targets, and JNI are
-elevated-risk. Shares most gates with the Java plan — build one Gradle
+elevated-risk. Shares most gates with the Java plan  -  build one Gradle
 inventory helper both adapters reuse (`analyzer-utils.ts` addition).
 
 ## Checklist

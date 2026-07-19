@@ -6,13 +6,13 @@ The opposing chevrons represent human intent and executable code. Their shared c
 
 ## Core assets
 
-- `logo-mark.svg` — primary mark for light surfaces
-- `logo-mark-dark.svg` — reversed mark for dark surfaces
-- `wordmark.svg` — horizontal lockup for light surfaces
-- `wordmark-dark.svg` — horizontal lockup for dark surfaces
-- `favicon.svg` — self-contained app/browser icon
-- `social-card.svg` — 1280 × 640 social and repository preview
-- `logo-concept.png` — generated visual-origin concept with transparency
+- `logo-mark.svg`  -  primary mark for light surfaces
+- `logo-mark-dark.svg`  -  reversed mark for dark surfaces
+- `wordmark.svg`  -  horizontal lockup for light surfaces
+- `wordmark-dark.svg`  -  horizontal lockup for dark surfaces
+- `favicon.svg`  -  self-contained app/browser icon
+- `social-card.svg`  -  1280 × 640 social and repository preview
+- `logo-concept.png`  -  generated visual-origin concept with transparency
 
 ## Palette
 

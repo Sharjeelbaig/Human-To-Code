@@ -7,7 +7,7 @@ turn human instructions into code?**
 You don't need to learn every type and security term first. Start with the two
 ways people actually use the product, then use the folder and file maps as you
 explore. The "Important names" column lists the functions, classes, or
-types that best explain what a file is for — the tiny private helpers are left
+types that best explain what a file is for  -  the tiny private helpers are left
 for you to find once the file itself makes sense.
 
 ## The conclusion first: how the product works
@@ -57,7 +57,7 @@ pipeline/planner.ts creates or loads the human-reviewed change contract
         ↓
 context/ picks the source and documentation the model is allowed to see
         ↓
-providers/ asks the model for a structured patch — not arbitrary commands
+providers/ asks the model for a structured patch  -  not arbitrary commands
         ↓
 pipeline/patch.ts checks the patch stayed inside the reviewed scope
         ↓
@@ -105,7 +105,7 @@ Once you know these habits, the files stop looking scattered.
    turn into success.
 5. **Names describe lifecycle roles.** Functions like
    `discoverHumanInstructionSources` and `applyVerifiedCodeChangeRun` are long
-   on purpose — you should be able to tell which part of human-to-code they
+   on purpose  -  you should be able to tell which part of human-to-code they
    belong to without opening them. See [CODE_CLARITY.md](CODE_CLARITY.md).
 6. **Artifacts are checkpoints.** The contract, context manifest, patch,
    validation plan, and report let you see exactly what went into and came out
@@ -118,35 +118,35 @@ Once you know these habits, the files stop looking scattered.
 
 For direct mode, open files in this order:
 
-1. [`src/cli.ts`](../src/cli.ts) — find `buildCommand`.
-2. [`src/agents/direct/discovery.ts`](../src/agents/direct/discovery.ts) — see
+1. [`src/cli.ts`](../src/cli.ts)  -  find `buildCommand`.
+2. [`src/agents/direct/discovery.ts`](../src/agents/direct/discovery.ts)  -  see
    how instructions become conversion units.
 3. [`src/agents/direct/project-memory.ts`](../src/agents/direct/project-memory.ts)
-   and [`file-memory.ts`](../src/agents/direct/file-memory.ts) — see what project
+   and [`file-memory.ts`](../src/agents/direct/file-memory.ts)  -  see what project
    knowledge actually reaches generation.
 4. [`src/agents/direct/generation-client.ts`](../src/agents/direct/generation-client.ts)
    and [`src/prompts/direct-conversion.ts`](../src/prompts/direct-conversion.ts)
-   — see how the model request gets built.
+    -  see how the model request gets built.
 5. [`src/agents/direct/staged-validation.ts`](../src/agents/direct/staged-validation.ts)
-   — see how generated files get checked together.
-6. [`src/agents/direct/application.ts`](../src/agents/direct/application.ts) —
+    -  see how generated files get checked together.
+6. [`src/agents/direct/application.ts`](../src/agents/direct/application.ts)  - 
    see the final guarded write.
 
 For guided mode, open files in this order:
 
-1. [`src/cli.ts`](../src/cli.ts) — find `guided` or an explicit command handler.
-2. [`src/analysis/analyzer.ts`](../src/analysis/analyzer.ts) — see how the
+1. [`src/cli.ts`](../src/cli.ts)  -  find `guided` or an explicit command handler.
+2. [`src/analysis/analyzer.ts`](../src/analysis/analyzer.ts)  -  see how the
    project profile gets built.
-3. [`src/pipeline/planner.ts`](../src/pipeline/planner.ts) — see how a human
+3. [`src/pipeline/planner.ts`](../src/pipeline/planner.ts)  -  see how a human
    request becomes a reviewed contract.
-4. [`src/agents/guided/workflow.ts`](../src/agents/guided/workflow.ts) — follow
+4. [`src/agents/guided/workflow.ts`](../src/agents/guided/workflow.ts)  -  follow
    generation, validation, apply, and rollback.
-5. [`src/context/context.ts`](../src/context/context.ts) — see how model-visible
+5. [`src/context/context.ts`](../src/context/context.ts)  -  see how model-visible
    evidence gets selected.
-6. [`src/providers/provider.ts`](../src/providers/provider.ts) — see the common
+6. [`src/providers/provider.ts`](../src/providers/provider.ts)  -  see the common
    provider boundary and schema check.
 7. [`src/pipeline/patch.ts`](../src/pipeline/patch.ts) and
-   [`validation.ts`](../src/pipeline/validation.ts) — see patch safety and the
+   [`validation.ts`](../src/pipeline/validation.ts)  -  see patch safety and the
    sandbox checks.
 
 ## Top-level files and folders
@@ -166,7 +166,7 @@ For guided mode, open files in this order:
 
 | File | Important names | What and why | How it does the job |
 | --- | --- | --- | --- |
-| [`src/cli.ts`](../src/cli.ts) | `runHumanToCodeCli`; internally `buildCommand`, `guided`, and the command handlers | The reception desk for every terminal command. Its job is deciding where a request goes — not implementing each feature itself. | Parses flags, loads the right handler, formats results, and turns typed outcomes and errors into exit codes. |
+| [`src/cli.ts`](../src/cli.ts) | `runHumanToCodeCli`; internally `buildCommand`, `guided`, and the command handlers | The reception desk for every terminal command. Its job is deciding where a request goes  -  not implementing each feature itself. | Parses flags, loads the right handler, formats results, and turns typed outcomes and errors into exit codes. |
 | [`src/index.ts`](../src/index.ts) | Re-exports only | The way in for developers importing `human-to-code` as a library. | Re-exports stable functions and types from the folders that own them, adding no behavior. |
 
 ## `src/core/`: the shared language of the program
@@ -176,7 +176,7 @@ about providers, agents, the CLI, or any specific framework.
 
 | File | Important names | What and why | How it does the job |
 | --- | --- | --- | --- |
-| [`src/core/types.ts`](../src/core/types.ts) | `Config`, `ProviderConfig`, `SourceFile`, `DiscoveryResult`, `TargetLanguage` | The small shared shapes for configuration and discovered human instructions. | Defines TypeScript types and nothing else — zero runtime work. |
+| [`src/core/types.ts`](../src/core/types.ts) | `Config`, `ProviderConfig`, `SourceFile`, `DiscoveryResult`, `TargetLanguage` | The small shared shapes for configuration and discovered human instructions. | Defines TypeScript types and nothing else  -  zero runtime work. |
 | [`src/core/languages.ts`](../src/core/languages.ts) | `CODE_EXTENSION_LANGUAGES`, `languageForCodeExtension` | Gives every folder one answer to "which language owns this extension?" | An immutable extension-to-language table plus a small lookup function. |
 | [`src/core/contracts.ts`](../src/core/contracts.ts) | `ChangeContractV1`, `PatchSetV1`, `ValidationPlanV1`, `ValidationReportV1`, `canonicalJson`, `hashCanonical`, `validate*` | Defines the guided workflow's official records, and rejects malformed ones. | Exact-key validators, predictable JSON serialization, and SHA-256 hashes, so stored stages can't be quietly altered or mixed up. |
 
@@ -195,7 +195,7 @@ about providers, agents, the CLI, or any specific framework.
 | [`src/analysis/analyzer-types.ts`](../src/analysis/analyzer-types.ts) | `ProjectProfileV1`, `WorkspaceProfileV1`, `EcosystemAdapter`, `AnalyzerContext`, `AnalyzerDiagnostic` | Gives the analyzer modules a common vocabulary. | Defines the evidence, workspace, support, command, and diagnostic shapes that adapters and consumers share. |
 | [`src/analysis/analyzer-utils.ts`](../src/analysis/analyzer-utils.ts) | `scanProject`, `createAnalyzerContext`, `finalizeWorkspace`, `evidenceFor`, parsing and path helpers | Stops every adapter from reinventing risky file walking and parsing. | Bounded scans, normalized paths, simple JSON/TOML fact parsing, evidence hashing, sorted output, and absolute-root details stripped from fingerprints. |
 | [`src/analysis/support-matrix.ts`](../src/analysis/support-matrix.ts) | `SUPPORT_MATRIX`, `supportFor` | Keeps support claims honest and reviewable. | Looks up declared ecosystem/version entries and returns a tier, instead of guessing from confidence. |
-| [`src/analysis/adapters/node.ts`](../src/analysis/adapters/node.ts) | `NodeEcosystemAdapter`, `nodeEcosystemAdapter` | Recognizes React and NestJS projects. | Reads manifests, lockfiles, workspaces, framework signals, routes, and scripts — without importing or executing any of them. |
+| [`src/analysis/adapters/node.ts`](../src/analysis/adapters/node.ts) | `NodeEcosystemAdapter`, `nodeEcosystemAdapter` | Recognizes React and NestJS projects. | Reads manifests, lockfiles, workspaces, framework signals, routes, and scripts  -  without importing or executing any of them. |
 | [`src/analysis/adapters/python.ts`](../src/analysis/adapters/python.ts) | `FastApiEcosystemAdapter`, `fastApiEcosystemAdapter` | Recognizes FastAPI projects and Python environment choices. | Reads dependency files and source signals for routers, Pydantic, dependency injection, and sync/async patterns. |
 | [`src/analysis/adapters/rust.ts`](../src/analysis/adapters/rust.ts) | `RustEcosystemAdapter`, `rustEcosystemAdapter` | Recognizes Cargo crates and workspaces. | Reads Cargo and toolchain files, detecting editions, targets, features, build scripts, proc macros, unsafe code, and FFI signals. |
 | [`src/analysis/adapters/general.ts`](../src/analysis/adapters/general.ts) | `normalizeGeneralLanguage`, `buildGeneralWorkspace` | The explicit lowest-trust fallback for ecosystems nobody recognized. | Creates a preview-only workspace with no validation plan, so the run stays inconclusive rather than pretending it understood everything. |
@@ -269,7 +269,7 @@ planning, snapshot, patch, validation, and storage work.
 | [`src/agents/direct/types.ts`](../src/agents/direct/types.ts) | `ConversionUnit`, `GeneratedConversionUnit`, `DirectDiscoveryResult`, `GenerateOptions` | Defines what one direct task looks like as it travels through discovery, generation, validation, and application. | TypeScript types only. No runtime behavior. |
 | [`src/agents/direct/discovery.ts`](../src/agents/direct/discovery.ts) | `discoverDirectUnits`, `walkDirectFiles`, plus the compatibility `discoverUnits` | Turns files and comments into runnable tasks with target paths and languages. | Walks bounded files, calls the marker parser, reads `.human` declarations, prevents overwrites and conflicts, and returns units plus notices. |
 | [`src/agents/direct/marker-parser.ts`](../src/agents/direct/marker-parser.ts) | `extractInlineMarkers` | Finds real `@human` comments without mistaking examples or strings for instructions. | A lightweight lexical scanner for line, block, JSDoc, HTML, script, and style comments that skips quoted regions. |
-| [`src/agents/direct/language-inference.ts`](../src/agents/direct/language-inference.ts) | `inferUnitLanguage` | Decides an instruction's language when configuration hasn't already decided it. | Checks explicit first-line declarations, file extensions, configured languages, and bounded vocabulary signals — in a fixed priority order. |
+| [`src/agents/direct/language-inference.ts`](../src/agents/direct/language-inference.ts) | `inferUnitLanguage` | Decides an instruction's language when configuration hasn't already decided it. | Checks explicit first-line declarations, file extensions, configured languages, and bounded vocabulary signals  -  in a fixed priority order. |
 | [`src/agents/direct/languages.ts`](../src/agents/direct/languages.ts) | `LANGUAGE_PROFILES`, `languageProfile`, `resolveLanguageDeclaration` | Converts language names into the extensions and labels direct mode uses. | Leaves extension ownership to core, then adds prompt labels and the accepted declaration spellings. |
 
 ### Give generation enough project memory
@@ -300,7 +300,7 @@ planning, snapshot, patch, validation, and storage work.
 | [`src/agents/direct/dependency-graph.ts`](../src/agents/direct/dependency-graph.ts) | `buildOverlayDependencyGroups`, `attributeDiagnostics` | Decides which generated files should fail together when imports connect them. | Resolves imports into groups and maps diagnostics back to the smallest safe set of conversion units. |
 | [`src/agents/direct/staged-validation.ts`](../src/agents/direct/staged-validation.ts) | `validateCandidateProject` | Coordinates combined project checking plus one bounded repair per failing whole-file unit. | Builds the overlay, runs program diagnostics, groups the failures, calls the repair callback, rebuilds a fresh overlay, and returns accepted/rejected results. |
 | [`src/agents/direct/reference-validation.ts`](../src/agents/direct/reference-validation.ts) | `collectReferenceFindings`, `scanCssRules`, `selectorSpecificity`, `hasBlockingFindings` | Catches the deterministic browser-file mistakes that compilation would miss. | Cross-checks HTML assets/ids/classes, CSS selectors/imports/URLs, JavaScript selectors, and reveal/hidden cascade rules. |
-| [`src/agents/direct/language-relationships.ts`](../src/agents/direct/language-relationships.ts) | `LANGUAGE_RELATIONSHIP_RULES`, `languageRelationshipRole`, `relationshipReferenceDescription` | Describes which files in different languages are likely to work together. | Declarative extension, path, and reference rules — rather than ecosystem branches hard-coded into the orchestration. |
+| [`src/agents/direct/language-relationships.ts`](../src/agents/direct/language-relationships.ts) | `LANGUAGE_RELATIONSHIP_RULES`, `languageRelationshipRole`, `relationshipReferenceDescription` | Describes which files in different languages are likely to work together. | Declarative extension, path, and reference rules  -  rather than ecosystem branches hard-coded into the orchestration. |
 | [`src/agents/direct/integration-validation.ts`](../src/agents/direct/integration-validation.ts) | `reconcileGeneratedIntegrations`, `parseIntegrationAuditOutput`, `generatedRelationshipsFor` | Asks the model to audit and repair the relationships between generated files. | Builds bounded related groups, validates strict audit JSON against real paths, allows one repair per target, verifies again, and rejects groups that stay unresolved. |
 
 ### Write accepted code
@@ -318,7 +318,7 @@ planning, snapshot, patch, validation, and storage work.
 | [`src/agents/guided/types.ts`](../src/agents/guided/types.ts) | `GenerateRunOptions`, `ValidateStoredRunOptions`, `WorkflowOutcome`, the certification types | Defines what callers hand in and get back for each guided stage. | Typed options and outcomes, so the workflow never depends on CLI parsing. |
 | [`src/agents/guided/workspace-policy.ts`](../src/agents/guided/workspace-policy.ts) | `targetWorkspaces`, `resolveWorkspaceConfig`, `createValidationPlan`, `collectUniqueValues` | Freezes one consistent workspace/provider/context/validation policy before generation starts. | Matches reviewed workspace IDs, merges overrides conservatively, rejects conflicts, and builds commands from analyzer evidence. |
 | [`src/agents/guided/api-grounding.ts`](../src/agents/guided/api-grounding.ts) | `assertExternalApisGrounded` | Stops a patch from introducing external APIs with no matching project or docs evidence. | Extracts the introduced imports and uses, then compares them against workspace dependencies and the context manifest. |
-| [`src/agents/guided/patch-diff.ts`](../src/agents/guided/patch-diff.ts) | `renderPatchDiff` | Gives people a stable review view of structured operations. | Renders create, edit, delete, and rename operations in deterministic order — without applying any of them. |
+| [`src/agents/guided/patch-diff.ts`](../src/agents/guided/patch-diff.ts) | `renderPatchDiff` | Gives people a stable review view of structured operations. | Renders create, edit, delete, and rename operations in deterministic order  -  without applying any of them. |
 | [`src/agents/guided/workflow.ts`](../src/agents/guided/workflow.ts) | `buildGuidedContextPreview`, `generateGuidedCodeChangeRun`, `validateGuidedCodeChangeRun`, `applyVerifiedCodeChangeRun`, `rollbackAppliedCodeChangeRun` | The guided coordinator. It decides the order of the trusted checkpoints, not the internals of each one. | Creates run records and snapshots, persists artifacts, calls the context/provider/patch/validation services, manages bounded repairs, checks provenance and certification, writes rollback data before apply, and reverses exactly the operations that were applied. |
 
 ## Where should you make a change?
@@ -343,7 +343,7 @@ planning, snapshot, patch, validation, and storage work.
 
 When you open a file you don't know:
 
-1. Read the header comment at the top — it should tell you what the file is for.
+1. Read the header comment at the top  -  it should tell you what the file is for.
 2. Look at the imports to see which earlier layer feeds it.
 3. Look at the exports to see what a later layer can ask it to do.
 4. Find the test with the matching name before you change any behavior.
@@ -352,5 +352,5 @@ When you open a file you don't know:
 
 That's the culture this project is going for: lots of small, explicit boundaries
 so you can always see where human intent becomes model input, where model output
-becomes candidate code, and where candidate code finally gets allowed — or
-refused — to become real code in your project.
+becomes candidate code, and where candidate code finally gets allowed  -  or
+refused  -  to become real code in your project.

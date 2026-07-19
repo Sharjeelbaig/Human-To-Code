@@ -9,7 +9,7 @@ The `0.1.x` line is a preview. The ecosystem and provider/model combinations
 that ship aren't certified, which means guided generated runs never reach
 `VERIFIED` through the CLI, and guided automatic application and rollback stay
 unavailable for normal generated runs. The default direct converter is a
-separate convenience path — it writes accepted units to your working tree after
+separate convenience path  -  it writes accepted units to your working tree after
 you confirm, and it never claims `VERIFIED`. Please don't weaken either boundary
 just to make a preview run look successful.
 
@@ -63,7 +63,7 @@ JavaScript/TypeScript units go through staged combined validation on top of
 that: the generated files form an in-memory candidate overlay while your working
 tree stays untouched. The TypeScript Compiler API type-checks TypeScript, and
 JavaScript semantic checking runs only when `checkJs` or `@ts-check` explicitly
-opts in — plain JavaScript never gets rewritten to satisfy a TypeScript policy
+opts in  -  plain JavaScript never gets rewritten to satisfy a TypeScript policy
 you didn't ask for. Newly introduced cross-file diagnostics (wrong imports or
 exports, missing members, argument counts, literal unions, object shapes,
 readonly violations, incompatible calls) reject the whole dependency-connected
@@ -71,7 +71,7 @@ group during validation. If safe isolation can't be proven, the entire staged
 batch is rejected before application. A failing whole-file unit can get one
 bounded repair request using the same provider and model, and the repair context
 holds only generated candidate content, normalized compiler diagnostics, and
-bounded ProjectMemory — all of it treated as untrusted data. Generated candidate
+bounded ProjectMemory  -  all of it treated as untrusted data. Generated candidate
 content gets secret-scanned before it's allowed to leave the host. No project
 code is imported or executed, and no project scripts run during this validation.
 
@@ -83,7 +83,7 @@ own separate stale-range and per-marker behavior.
 
 Direct ProjectMemory is rebuilt from the static discovery inventory on every
 run. It can send project-relative filenames and compact source-derived contracts
-to the selected model — declarations, imports and includes, modules, packages
+to the selected model  -  declarations, imports and includes, modules, packages
 and namespaces, language-specific references, markup/style/asset contracts where
 those apply, and limited package metadata. It also carries the planned
 post-conversion output tree and the purposes of other `.human` files, so the
@@ -107,7 +107,7 @@ credential-scanned, and file purposes, contracts, diagnostics, and source are
 prompt-isolated as untrusted evidence. Malformed output, invented paths,
 exhausted context, or issues that stay unresolved reject the connected opt-in
 group before anything is written. This is model-assisted static consistency
-checking — not compiler, runtime, or sandbox verification.
+checking  -  not compiler, runtime, or sandbox verification.
 
 These controls stop exactly the malformed-output, overwrite, stale-range,
 indentation, and cross-file-contract failures they check for. Static compilation
@@ -133,14 +133,14 @@ Repository text can't authorize itself.
 ### The repository is scanned before provider access
 
 Before context selection and before any provider request, a dedicated
-fail-closed scanner reads first-party regular files across the repository —
+fail-closed scanner reads first-party regular files across the repository  - 
 including ignored and untracked fixtures, logs, and configuration. It skips
 third-party dependency and build stores (`node_modules`, Python virtual
 environments, Cargo `target`) and VCS/private tool internals, because those
 aren't first-party provider context.
 
 The scan never follows symlinks. A hardlink, special file, read or race error,
-or an exhausted file/byte budget becomes `PARTIAL_SCAN` — it can't quietly skip
+or an exhausted file/byte budget becomes `PARTIAL_SCAN`  -  it can't quietly skip
 ahead to provider access. A finding reports the project-relative path, the line,
 and the kind of secret. Never the matched value. And it returns
 `SECURITY_BLOCKED`, with no remote-transmission override anywhere.
@@ -163,12 +163,12 @@ content-hash-bound evidence. Built-in discovery retrieves exact-version Rust
 `docs.rs` evidence and nothing else, selected either by deterministic
 pre-provider grounding or requested through a local compiler tool. You can
 configure an exact ecosystem/dependency/version `officialSources` URL on an
-allowed public HTTPS domain — that's a fixed mapping enabled after
+allowed public HTTPS domain  -  that's a fixed mapping enabled after
 installed-version proof, not search and not crawling. Offline mode requires the
 exact item to already be in the cache. There is no automatic React, NestJS,
 FastAPI, or Python crawler. Generic model memory is not documentation
 provenance: recognized external imports and use paths, and the symbols they
-name, are rejected without evidence — though the static extraction is not a
+name, are rejected without evidence  -  though the static extraction is not a
 complete language-semantic proof.
 
 Documentation retrieval is a different network boundary from the LLM provider.
@@ -206,8 +206,8 @@ rejected.
 
 ### Provider credentials and endpoints are bound
 
-Configuration may contain an environment-variable name — `OPENAI_API_KEY`,
-`OLLAMA_API_KEY` — and that's it. Credential values in configuration are
+Configuration may contain an environment-variable name  -  `OPENAI_API_KEY`,
+`OLLAMA_API_KEY`  -  and that's it. Credential values in configuration are
 rejected. Errors, run artifacts, context manifests, and prompts must never
 persist environment values.
 
@@ -248,7 +248,7 @@ cumulative `maxCostUsd`. Successful usage reconciles the reservation, while
 failed or in-flight attempts stay conservatively charged. Loopback-local Ollama
 counts as zero remote API cost. Both remote rates can be zero only with an
 explicit `unmetered: true` operator assertion. Neither the pricing values nor
-that assertion is a live price feed or independently verified — understated
+that assertion is a live price feed or independently verified  -  understated
 rates or inaccurate provider usage reporting can undercount what you're actually
 charged, which is why provider-side spend limits remain required defense in
 depth.
@@ -258,7 +258,7 @@ non-HTTPS remote URLs, unsafe/private/link-local/multicast/documentation-network
 destinations, suspicious local domains, unsafe redirects, and DNS answers that
 change mid-request. Plain HTTP is allowed only for explicitly trusted loopback
 Ollama. In production, provider and documentation HTTP(S) sockets connect to a
-vetted resolved address while keeping the approved hostname for TLS — DNS safety
+vetted resolved address while keeping the approved hostname for TLS  -  DNS safety
 here is not just an unpinned preflight check. Injected fetch functions are test
 seams and stay trusted test code.
 
@@ -272,7 +272,7 @@ twice. Authentication, cancellation, refusal, safety, schema, configuration, and
 budget failures are terminal. Provider and model fallback is prohibited.
 
 The run record stores the configured model string, the identifier the provider
-response reported, and the request IDs. Those give you audit provenance — not
+response reported, and the request IDs. Those give you audit provenance  -  not
 independent attestation of model weights. OpenAI aliases and Ollama tags can
 move, and the Ollama response used here doesn't include a model-blob digest.
 Pick an immutable provider version or digest where one exists if exact
@@ -280,7 +280,7 @@ reproduction matters to you.
 
 ### Model output is an untrusted patch artifact
 
-The model returns a `PatchSetV1` — not a shell script, not an arbitrary diff.
+The model returns a `PatchSetV1`  -  not a shell script, not an arbitrary diff.
 Before any candidate execution, the host checks contract and snapshot hashes,
 base-file hashes, requirement mappings, allowed paths and operations, protected
 paths, exact edit anchors, duplicate and overlapping operations, operation and
@@ -373,7 +373,7 @@ Before it applies anything, the private run store receives a provenance-bound
 `rollback.json` holding the patch hash, prior file content and modes, created
 paths, and expected post-apply hashes. A successful apply then records
 `apply.json`. Application uses exact preflight checks, per-file atomic
-replacement, and best-effort in-process rollback on failure — it is not one
+replacement, and best-effort in-process rollback on failure  -  it is not one
 filesystem-wide transaction.
 
 `human-to-code rollback <run-id>` needs both artifacts, takes the exclusive run
@@ -386,7 +386,7 @@ for them. Database migrations are never executed.
 ## Secrets and privacy guidance
 
 Automated secret detection is defense in depth. It is not proof that arbitrary
-data is non-sensitive — novel credential formats, proprietary identifiers,
+data is non-sensitive  -  novel credential formats, proprietary identifiers,
 customer data, and business-sensitive code often look nothing like a known
 token.
 
@@ -420,7 +420,7 @@ responses, credentials, or stable project identity.
   replace the compiler, typechecker, and tests.
 - An `officialSources` entry you configure asserts that its URL content applies
   to the exact installed version. The host verifies the mapping key, the
-  transport, and the content hash — but not publisher ownership or semantic and
+  transport, and the content hash  -  but not publisher ownership or semantic and
   version accuracy. Don't map an unversioned or untrusted page as exact
   evidence.
 - A patch can be valid, in scope, and still semantically wrong. Strong
@@ -446,7 +446,7 @@ responses, credentials, or stable project identity.
   serialize repository mutation yourself.
 - A process or host crash during multi-file application can leave partial
   changes. The prewritten `rollback.json` preserves the recovery material, but
-  the CLI rollback command requires the completion-only `apply.json` — so an
+  the CLI rollback command requires the completion-only `apply.json`  -  so an
   interrupted application may need manual recovery.
 - Rollback material lives in the private platform-cache run store, not in a Git
   commit or index transaction. Cache cleanup can destroy recovery data, so put
@@ -479,7 +479,7 @@ Include:
 
 Use synthetic credentials and minimized sample repositories. If the advisory
 form isn't available, contact the repository owner through their GitHub profile
-to ask for a private channel — without disclosing the vulnerability details
+to ask for a private channel  -  without disclosing the vulnerability details
 publicly.
 
 Maintainers will coordinate investigation, remediation, release timing, and

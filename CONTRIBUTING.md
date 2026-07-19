@@ -41,16 +41,16 @@ The production pipeline looks like this:
 
 ```text
 static project analysis
-  → reviewed ChangeContractV1 (what is allowed to change)
-  → grounded ContextManifestV1 (the context used)
-  → provider-generated PatchSetV1 (the proposed edits)
-  → immutable ValidationPlanV1 (the checks to run)
-  → isolated baseline/candidate ValidationReportV1 (the check results)
-  → explicit apply only after VERIFIED
-  → provenance-bound rollback artifact and exact rollback
+  -> reviewed ChangeContractV1 (what is allowed to change)
+  -> grounded ContextManifestV1 (the context used)
+  -> provider-generated PatchSetV1 (the proposed edits)
+  -> immutable ValidationPlanV1 (the checks to run)
+  -> isolated baseline/candidate ValidationReportV1 (the check results)
+  -> explicit apply only after VERIFIED
+  -> provenance-bound rollback artifact and exact rollback
 ```
 
-**New here?** Those are review records that guided mode creates — you don't
+**New here?** Those are review records that guided mode creates  -  you don't
 normally write them by hand. The change contract records the approved request,
 the context manifest records which files and documentation got selected, the
 patch set records the proposed edits, the validation plan records the checks
@@ -64,7 +64,7 @@ functions, and who owns what when you're debugging, see the
 intent-first rules in [docs/CODE_CLARITY.md](docs/CODE_CLARITY.md).
 
 One framing that matters: the LLM generates structured code edits. It is *not* a
-deterministic `strict → code` compiler, and the docs must never claim it is.
+deterministic `strict -> code` compiler, and the docs must never claim it is.
 Determinism lives in discovery, profiling, contract and schema validation,
 context selection, patch safety checks, validation-plan selection, provenance
 hashes, and application.
@@ -72,7 +72,7 @@ hashes, and application.
 ## Project layout
 
 Source sits in layered domain folders. A module can import from its own layer or
-from a layer above it in this table — never below. For the full dependency
+from a layer above it in this table  -  never below. For the full dependency
 rules see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); for the newcomer tour see
 [docs/CODEBASE_TOUR.md](docs/CODEBASE_TOUR.md); for a tight per-file reference
 see [docs/MODULES.md](docs/MODULES.md); for terminology see
@@ -107,7 +107,7 @@ Whatever you change, these have to survive it:
 3. **The reviewed contract owns scope.** Models can't add paths, operations,
    risks, dependencies, validation commands, acceptance criteria, or budgets.
 4. **Repository and documentation text is untrusted data.** It can't change
-   policy or tool authority — not in a comment, not in a diagnostic, not in a
+   policy or tool authority  -  not in a comment, not in a diagnostic, not in a
    README, not in an installed dependency, not on an official-looking page.
 5. **A credential found at a trust boundary never reaches a provider, cache,
    report, error, telemetry event, or test snapshot.** Scan first-party
@@ -161,7 +161,7 @@ result into a success.
    limitations in the pull request.
 
 Name things for their lifecycle. An exported function should tell you its
-action, its domain object, and the stage it belongs to — `discoverHumanInstructionSources`,
+action, its domain object, and the stage it belongs to  -  `discoverHumanInstructionSources`,
 not `discover`. Boolean names should read as conditions, units should be visible
 in the name, and checkpoint comments should explain the human-to-code role or
 invariant they're guarding. [docs/CODE_CLARITY.md](docs/CODE_CLARITY.md) has the
@@ -175,7 +175,7 @@ credentials, private fixtures, or npm tarballs.
 
 Tests have to be deterministic. They must not need a real provider, public
 network, Docker/Podman daemon, database, cloud account, or developer
-credential — unless they're clearly isolated optional integration tests.
+credential  -  unless they're clearly isolated optional integration tests.
 
 ### Analyzer and discovery changes
 
@@ -199,7 +199,7 @@ catastrophic backtracking.
 
 ### Schema, contract, context, and patch changes
 
-Use exact-object validation — unknown fields must fail. Add tests for malformed
+Use exact-object validation  -  unknown fields must fail. Add tests for malformed
 types, missing keys, duplicate IDs, non-canonical paths, stale hashes,
 unauthorized inferred risk, material questions, scope expansion, prompt
 injection, secret detection and redaction, content-hash mismatch, exact-version
@@ -209,7 +209,7 @@ limits, path traversal, symlink and hardlink races, case collisions, and patch
 bombs.
 
 Schema semantics are versioned. Reinterpreting something in a breaking way needs
-a new schema version and an explicit migration — never silently reinterpret an
+a new schema version and an explicit migration  -  never silently reinterpret an
 alpha or older artifact.
 
 ### Provider changes
@@ -320,7 +320,7 @@ Lead with the real outcome and the current limitations. Specifically:
 - Keep static analyzer status `SUPPORTED` distinct from run status `VERIFIED`.
 - Keep local Ollama distinct from remote Ollama Cloud and custom endpoints.
 - Describe official retrieval precisely: built-in exact-version Rust `docs.rs`
-  evidence plus exact operator-configured dependency/version mappings — not
+  evidence plus exact operator-configured dependency/version mappings  -  not
   unrestricted browsing and not complete language knowledge. Say that online
   preview and tool retrieval can disclose dependency and version metadata before
   provider consent, and that offline mode forbids it.
@@ -344,7 +344,7 @@ Lead with the real outcome and the current limitations. Specifically:
 These limitations stay visible until the evidence behind them actually changes:
 
 - Every shipped ecosystem profile is still `preview` or `legacy`, and no CLI
-  provider/model certification entry exists — so generated runs can't become
+  provider/model certification entry exists  -  so generated runs can't become
   `VERIFIED`.
 - Apply and rollback are implemented, but stay gated behind that unavailable
   certified status for normal preview runs.

@@ -17,24 +17,24 @@ work through the direct path. No grounded profile exists yet.
   `spec/` (RSpec) vs `test/` (Minitest) for test roots. Never run `bundle`.
 
 ## Version evidence
-`Gemfile.lock` `GEM/specs` entries are exact — this is the grounding source;
+`Gemfile.lock` `GEM/specs` entries are exact  -  this is the grounding source;
 a Gemfile without a lockfile leaves dependencies unproven.
 
 ## Validation plan
 - `["bundle", "exec", "rspec"]` or `["bundle", "exec", "rails", "test"]`
   depending on detected harness; `["bundle", "exec", "rubocop"]` when
-  `.rubocop.yml` exists. Gems must be vendored/preinstalled in the image —
+  `.rubocop.yml` exists. Gems must be vendored/preinstalled in the image  - 
   no network in the sandbox.
 
 ## Skill pack
 Rails conventions (strong parameters, concerns, service objects), RSpec
 structure, frozen-string-literal pragma, Zeitwerk autoloading constraints
-(file path ↔ constant name), `db/schema.rb` and migrations protected.
+(file path <-> constant name), `db/schema.rb` and migrations protected.
 
 ## Risks & gates
 Rails migrations (review-only, never applied), monkey-patching core classes,
 `method_missing` metaprogramming, and native-extension gems are
-elevated-risk. Dynamic requires make import grounding partially opaque —
+elevated-risk. Dynamic requires make import grounding partially opaque  - 
 document as an accepted limitation like Python's.
 
 ## Checklist

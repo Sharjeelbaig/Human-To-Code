@@ -2,12 +2,12 @@
 
 ## Status today
 Level 2 only: not in `LANGUAGE_PROFILES`; `.sh` not scanned for markers
-(`# @human` markers would already parse — the `#` comment form is supported
-by the marker regex — but `.sh` files are not in `SCANNED_EXTENSIONS`).
+(`# @human` markers would already parse  -  the `#` comment form is supported
+by the marker regex  -  but `.sh` files are not in `SCANNED_EXTENSIONS`).
 
 ## Target profile
 - `Ecosystem`: `shell`.
-- Variant: `script-collection` — a repo (or subtree) of `*.sh`/`*.bash`
+- Variant: `script-collection`  -  a repo (or subtree) of `*.sh`/`*.bash`
   scripts. There is no manifest, so this profile is signal-based:
   shebang lines + extension inventory, and it should stay deliberately
   narrow. Anything ambiguous stays with the general fallback.
@@ -25,7 +25,7 @@ rather than external APIs.
 ## Validation plan
 - `["shellcheck", "<changed scripts>"]` and `["bash", "-n", "<script>"]`
   syntax checks; `["bats", "test/"]` when a bats suite exists. All in the
-  sandbox image — scripts themselves are never executed outside it.
+  sandbox image  -  scripts themselves are never executed outside it.
 
 ## Skill pack
 `set -euo pipefail` discipline, quoting rules, `trap` cleanup, no curl-pipe
@@ -33,7 +33,7 @@ patterns (aligns with the validator's implicit-downloader rejection),
 portable vs bash-specific constructs by shebang.
 
 ## Risks & gates
-Every script is arbitrary code — validation runs syntax/lint/bats only,
+Every script is arbitrary code  -  validation runs syntax/lint/bats only,
 never the script itself. Scripts that self-modify or fetch remote content
 must be flagged as elevated risk in contracts.
 

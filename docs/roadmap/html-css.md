@@ -10,7 +10,7 @@ their component markup and styling covered by the existing node adapter.
 ProjectMemory shows an HTML request its current and planned sibling CSS and
 JavaScript files with exact relative references, then carries the accepted HTML
 ids, classes, and references forward as compact contracts for the CSS and
-JavaScript requests that follow. That's generation *context* — not the
+JavaScript requests that follow. That's generation *context*  -  not the
 link-graph validation planned below.
 
 There's also a safety net in `direct.reconcileIntegrations` (on by default): the
@@ -24,7 +24,7 @@ guided profile, which doesn't exist yet.
 
 ## Target profile
 - `Ecosystem`: `static-web`.
-- Variant: `static-site` — plain HTML/CSS/vanilla-JS trees (like this
+- Variant: `static-site`  -  plain HTML/CSS/vanilla-JS trees (like this
   repo's `website/`), optionally with a recognized static generator config
   (Eleventy, Astro static) as a later variant.
 - Signals: `index.html` at a root, no framework manifest claiming the tree.
@@ -37,7 +37,7 @@ guided profile, which doesn't exist yet.
 
 ## Version evidence
 CDN dependencies (script/link URLs) are recorded as evidence with their
-pinned versions when the URL encodes one; unpinned CDN URLs are flagged —
+pinned versions when the URL encodes one; unpinned CDN URLs are flagged  - 
 the skill pack should push toward pinned or vendored assets.
 
 ## Validation plan
@@ -48,10 +48,10 @@ the skill pack should push toward pinned or vendored assets.
 ## Skill pack
 Semantic landmarks, heading order, alt text, `prefers-reduced-motion` and
 `prefers-color-scheme` support, no inline event handlers, responsive images
-— accessibility is the correctness bar for markup.
+ -  accessibility is the correctness bar for markup.
 
 ## Risks & gates
-Third-party `<script src>` additions are supply-chain-sensitive →
+Third-party `<script src>` additions are supply-chain-sensitive ->
 elevated-risk, must be pinned and contract-authorized. Inline scripts are
 ordinary code and reviewed as such.
 

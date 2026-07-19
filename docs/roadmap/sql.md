@@ -3,11 +3,11 @@
 ## Status today
 Level 2 only: not in `LANGUAGE_PROFILES`. SQL also intersects an existing
 invariant: database migrations may be *generated for review* but are never
-applied — any SQL profile inherits that rule wholesale.
+applied  -  any SQL profile inherits that rule wholesale.
 
 ## Target profile
 - `Ecosystem`: `sql`.
-- Variant: `migration-set` — a directory of ordered migration files managed
+- Variant: `migration-set`  -  a directory of ordered migration files managed
   by a recognizable tool (Flyway `V__*.sql`, dbmate, golang-migrate,
   Prisma/TypeORM/Alembic SQL output). Free-floating `.sql` files stay on the
   general fallback.
@@ -27,7 +27,7 @@ grounding evidence a new migration builds on. No package versions.
 - Syntax-only gates in the sandbox: `["sqlfluff", "lint", "--dialect", "<dialect>"]`
   or the tool's dry-run/check mode where one exists **without a database**.
 - Optional stronger tier later: apply to a disposable in-container database
-  (sqlite/postgres in the image) — still never the operator's database.
+  (sqlite/postgres in the image)  -  still never the operator's database.
 
 ## Skill pack
 One reversible change per migration (paired down-migration when the tool
@@ -37,7 +37,7 @@ idempotence patterns, naming convention of the detected tool.
 ## Risks & gates
 Everything: destructive statements, data backfills, and permission changes
 are elevated-risk requiring explicit authorization in the contract. Applied
-migration files are immutable history — protected paths; only new files may
+migration files are immutable history  -  protected paths; only new files may
 be created.
 
 ## Checklist

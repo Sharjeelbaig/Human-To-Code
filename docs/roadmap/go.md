@@ -13,9 +13,9 @@ already work through the direct path. No grounded profile.
 - Versions: Go ≥ 1.21 (from the `go` directive in `go.mod`).
 
 ## Detection signals (static only)
-- `go.mod` — module path, `go`/`toolchain` directives, `require` blocks.
-- `go.sum` — presence distinguishes resolved deps; `go.work`/`go.work.sum`
-  for workspaces. Conflicting nested modules without `go.work` → `NEEDS_INPUT`.
+- `go.mod`  -  module path, `go`/`toolchain` directives, `require` blocks.
+- `go.sum`  -  presence distinguishes resolved deps; `go.work`/`go.work.sum`
+  for workspaces. Conflicting nested modules without `go.work` -> `NEEDS_INPUT`.
 - `*_test.go` naming for test roots; `cmd/`, `internal/`, `pkg/` conventions
   for entry-point/source-root inventory. Never run `go list`.
 
@@ -36,7 +36,7 @@ Module-path-relative imports only; table-driven tests; error-wrapping
 
 ## Risks & gates
 `cgo`, `unsafe`, `//go:generate`, build tags, and replace directives are
-elevated-risk and need explicit contract authorization — same posture as
+elevated-risk and need explicit contract authorization  -  same posture as
 Rust's `unsafe`/FFI gates.
 
 ## Checklist

@@ -25,7 +25,7 @@ leave dependencies unproven.
   `vendor/` must be preinstalled in the image (no network).
 
 ## Skill pack
-PSR-4 path↔namespace correspondence, PSR-12 style, Laravel conventions
+PSR-4 path<->namespace correspondence, PSR-12 style, Laravel conventions
 (form requests for validation, Eloquent scopes), `vendor/` and framework
 cache dirs protected.
 
@@ -34,7 +34,7 @@ Laravel migrations review-only; `eval`/dynamic includes opaque to import
 grounding; service-provider registration changes are elevated-risk.
 
 ## Checklist
-0. Add `php` to `LANGUAGE_PROFILES` (`.php`) and `.php` to `SCANNED_EXTENSIONS` — direct-path quick win.
+0. Add `php` to `LANGUAGE_PROFILES` (`.php`) and `.php` to `SCANNED_EXTENSIONS`  -  direct-path quick win.
 1. `Ecosystem` union + `analysis/adapters/php.ts`.
 2. `php/composer-app`, `php/laravel` at `preview`.
 3. Register adapter; PHP/Laravel skill pack.

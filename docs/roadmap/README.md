@@ -1,7 +1,7 @@
 # Language & framework support roadmap
 
 One file per language or framework we want to support. Each one is an
-integration plan, not a promise about dates — items get built one at a time, and
+integration plan, not a promise about dates  -  items get built one at a time, and
 a plan moves out of this folder once its profile actually ships.
 
 ## The four support levels
@@ -9,21 +9,21 @@ a plan moves out of this folder once its profile actually ships.
 Support here is layered. "Supporting a language" means moving it up these
 levels on purpose, one step at a time:
 
-1. **Direct path** (`src/agents/direct/`) — the language has an entry in
+1. **Direct path** (`src/agents/direct/`)  -  the language has an entry in
    `LANGUAGE_PROFILES` (output extension plus prompt label) and, if it has an
    inline-comment form, its source extensions are in `SCANNED_EXTENSIONS` so
    `@human` markers get found. This path has pre-write syntax and structure
    checks, but no API grounding, no project build or test execution, no
    sandbox, and no `VERIFIED` status.
    *Today: TypeScript, JavaScript, Python, Rust, Go, Java, Ruby, C#, C++, C.*
-2. **General fallback** (`src/analysis/adapters/general.ts`) — any declared
+2. **General fallback** (`src/analysis/adapters/general.ts`)  -  any declared
    language can flow through the guided pipeline ungrounded, permanently
    `INCONCLUSIVE`. Every language already has this. It's the floor, not a goal.
-3. **Grounded profile** — a static `EcosystemAdapter` recognizes real projects,
+3. **Grounded profile**  -  a static `EcosystemAdapter` recognizes real projects,
    collects version evidence, and emits a validation plan, with the variant
    declared in the support matrix at `preview` tier. This is what every plan in
    this folder is describing.
-4. **Certified** — the profile passes the benchmark gate in
+4. **Certified**  -  the profile passes the benchmark gate in
    `src/providers/certification.ts` (≥25 tasks × 3 runs × ≥95% strong-sandbox
    pass rate, per provider and model). Never self-declared.
 
@@ -37,7 +37,7 @@ Each plan just fills in the language-specific facts:
 | --- | --- |
 | Status today | Which level (1 or 2) the language is at right now. |
 | Target profile | The `Ecosystem` name, its variants, and the version range for the support matrix. |
-| Detection signals | Which manifests, lockfiles, and config the static adapter may read — never execute. |
+| Detection signals | Which manifests, lockfiles, and config the static adapter may read  -  never execute. |
 | Version evidence | Where exact resolved versions come from (a lockfile, a manifest pin). |
 | Validation plan | The candidate commands (as argv arrays) the sandbox would run: build, test, lint. |
 | Skill pack | The conventions the `compiler-skills.ts` policy pack needs to encode. |

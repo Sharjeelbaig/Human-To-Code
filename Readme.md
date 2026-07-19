@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="human-to-code — write intent in plain language, compile it to real code" width="100%">
+  <img src="assets/banner.svg" alt="human-to-code  -  write intent in plain language, compile it to real code" width="100%">
 </p>
 
 <p align="center">
@@ -12,8 +12,8 @@
 You know the loop: you're in your IDE, you jump over to ChatGPT, paste some
 context, copy the answer back, fix the indentation. Again.
 
-human-to-code removes that loop. Write a comment saying what you want —
-`// @human add a function named health that returns { status: 200 }` — then run
+human-to-code removes that loop. Write a comment saying what you want  - 
+`// @human add a function named health that returns { status: 200 }`  -  then run
 `npx human-to-code .`. The comment becomes the code, right there in your file.
 
 Building something from scratch? Don't start in `.ts` or `.py`. Make a
@@ -25,11 +25,11 @@ agent and hoping it comes back with something you recognize.
 
 There are two ways to run it:
 
-- **Direct mode** — the default, `npx human-to-code .`. It finds your requests,
+- **Direct mode**  -  the default, `npx human-to-code .`. It finds your requests,
   shows you exactly what it's about to do, and writes the code once you confirm.
   Fast, and it works fine with small local models. It writes straight to your
   working tree, with no change contract and no sandbox behind it.
-- **Guided mode** — `human-to-code guided`. The careful path. It reads your
+- **Guided mode**  -  `human-to-code guided`. The careful path. It reads your
   project first, writes down what it's allowed to touch, limits what the model
   can see and ask for, checks the result in an isolated sandbox, and won't write
   anything to disk until you say so.
@@ -53,7 +53,7 @@ reviewed diff ── explicit apply only after VERIFIED ── exact rollback ar
 To be clear about what this isn't: it's not a deterministic source-to-source
 compiler. The LLM does write the actual framework-specific edits. What it
 doesn't get to do is pick its own scope, validation commands, credentials,
-documentation sources, or pass/fail criteria — those come from you. The
+documentation sources, or pass/fail criteria  -  those come from you. The
 `.strict.human.json` contract, the `VERIFIED` status, and the `apply`/`rollback`
 machinery all live in guided mode. Direct mode doesn't use any of them.
 
@@ -66,7 +66,7 @@ machinery all live in guided mode. Direct mode doesn't use any of them.
 The React, NestJS, FastAPI, and Rust profiles that ship today are all marked
 `preview` (CRA is `legacy`), and the CLI doesn't enable a single certification
 benchmark entry for any provider or model. So a generated run in this release
-can't honestly call itself `VERIFIED` — even a clean sandbox validation comes
+can't honestly call itself `VERIFIED`  -  even a clean sandbox validation comes
 back `INCONCLUSIVE`, which means `apply` (and therefore `rollback`) stays
 unavailable in a normal preview run. That's on purpose. It fails closed.
 
@@ -77,7 +77,7 @@ generation is that a bare `.human` request against an unfamiliar project still
 gives you something you can review instead of a hard `UNSUPPORTED` stop. But it
 is the lowest-trust path here: there's no dependency evidence to ground
 against, so API grounding is skipped, no toolchain is assumed, and every general
-run is pinned to `INCONCLUSIVE` — never `VERIFIED`, never auto-applied. Plain
+run is pinned to `INCONCLUSIVE`  -  never `VERIFIED`, never auto-applied. Plain
 `analyze` stays pure recognition and won't emit the general fallback at all.
 Point it at a recognized project if you want grounded, sandbox-validated output.
 
@@ -94,7 +94,7 @@ The published package entry point is:
 npx human-to-code .
 ```
 
-That `.` isn't an instruction to rewrite your whole directory — it's just the
+That `.` isn't an instruction to rewrite your whole directory  -  it's just the
 root to scan. By default you get the **direct converter**, which:
 
 1. Loads your config and scans for `.human` files and inline `@human` markers.
@@ -102,8 +102,8 @@ root to scan. By default you get the **direct converter**, which:
 2. Tells you about marker-shaped requests sitting in file types it can't handle,
    and refuses a `.human` request whose output file already exists. Ignored
    directories and symlinks stay out of discovery entirely.
-3. Prints a receipt — the output languages this worklist actually selected, the
-   provider, the model, and every source-to-output path — then asks you to
+3. Prints a receipt  -  the output languages this worklist actually selected, the
+   provider, the model, and every source-to-output path  -  then asks you to
    confirm. Nothing gets written until you say yes, or pass `-y`/`--yes`. Found
    no requests? You get `NEEDS_INPUT`.
 4. Once you confirm, converts each item with one model completion per unit,
@@ -113,7 +113,7 @@ root to scan. By default you get the **direct converter**, which:
    check. HTML and CSS only get the non-empty and code-fence gates, because
    generic delimiter balancing reads valid markup and stylesheets as broken.
    For inline markers it diffs the candidate against the original file and
-   rejects only syntax errors that *your* replacement introduced — it won't
+   rejects only syntax errors that *your* replacement introduced  -  it won't
    blame you for errors that were already there.
 5. With `direct.reconcileIntegrations` on (the default), audits the groups of
    generated files that ProjectMemory found evidence for, across every
@@ -127,7 +127,7 @@ root to scan. By default you get the **direct converter**, which:
 6. Stages JavaScript/TypeScript output in an in-memory candidate overlay.
    TypeScript gets full combined semantic checking through the TypeScript
    Compiler API. JavaScript gets the same treatment only if the project turns on
-   `checkJs` in `jsconfig.json`/`tsconfig.json` or the file has `// @ts-check` —
+   `checkJs` in `jsconfig.json`/`tsconfig.json` or the file has `// @ts-check`  - 
    ordinary JavaScript never gets rejected or rewritten over TypeScript-only
    inference complaints. Diagnostics are compared against the untouched
    baseline, and a dependency group you've opted into gets at most one bounded
@@ -140,14 +140,14 @@ root to scan. By default you get the **direct converter**, which:
 
 Direct mode writes code straight into your working tree. Its static compiler
 validation for TypeScript (and JavaScript you've explicitly type-checked) is a
-real step up from syntax parsing — but it's still static analysis. It does
+real step up from syntax parsing  -  but it's still static analysis. It does
 **not** execute or import your code, run your builds or tests, prove runtime
 behavior or external-API grounding, run anything in a sandbox, create a
 `.strict.human.json` contract, produce a `VERIFIED` run, or do guided mode's
 repository-wide secret scan. Outbound FileMemory and the optional
 integration-reconciliation bundles do get credential-scanned, and ProjectMemory
-leaves credential-bearing contracts out — but those are narrow gates, not a
-repository-wide proof. For the full contract → grounding → sandbox lifecycle,
+leaves credential-bearing contracts out  -  but those are narrow gates, not a
+repository-wide proof. For the full contract -> grounding -> sandbox lifecycle,
 where `.strict.human.json` and the `VERIFIED`/`apply`/`rollback` machinery
 actually live, use `human-to-code guided` (see
 [The reviewed change contract](#the-reviewed-change-contract) and the
@@ -156,7 +156,7 @@ actually live, use `human-to-code guided` (see
 You don't need a configured provider just to scan and preview. A default run
 picks loopback-local Ollama with `qwen2.5-coder:7b`, so a fresh
 `npx human-to-code .` never sends your code anywhere. You do need that model
-already installed — the tool will never quietly pull it for you. Want a
+already installed  -  the tool will never quietly pull it for you. Want a
 different local model, or OpenAI, or Ollama Cloud? Make a config (the command
 won't overwrite one you already have):
 
@@ -202,8 +202,8 @@ You'll need Node.js 24 or newer.
 
 ## Generation engine
 
-The direct `npx human-to-code .` flow finds the work — whole `.human` files and
-inline `@human` markers — prints a receipt, and once you confirm, converts
+The direct `npx human-to-code .` flow finds the work  -  whole `.human` files and
+inline `@human` markers  -  prints a receipt, and once you confirm, converts
 everything with the deterministic direct engine.
 
 Inline discovery currently handles `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`,
@@ -227,7 +227,7 @@ and indentation alone.
 ### Fast deterministic engine
 
 The host stays in control; the model only writes code. For each unit the host
-sends **one plain model completion** — no tool calls — and applies the result by
+sends **one plain model completion**  -  no tool calls  -  and applies the result by
 exact marker range. When TypeScript (or JavaScript you've opted into) project
 validation turns up a repairable cross-file error, a whole-file unit can earn
 **one extra bounded repair completion** using the same provider and model.
@@ -235,15 +235,15 @@ That's it. This is why it's quick and why small models work: a 1.5B coder model
 converts a four-marker file in about 4 seconds. And since nothing here needs
 tool-calling, models that can only generate plain text do just fine.
 
-- **Per-marker isolation** — every `@human` marker is generated and applied on
+- **Per-marker isolation**  -  every `@human` marker is generated and applied on
   its own. If one marker's output is bad (say a small model redeclares a symbol
   that already exists), that marker gets retried, then skipped with a printed
   reason. The rest still convert. One failure never takes down the run.
-- **FileMemory** — declarations already in the file are handed to the model as
+- **FileMemory**  -  declarations already in the file are handed to the model as
   read-only context, so it reuses them instead of declaring them again. The
   static scanner knows about JavaScript regex literals, and the redeclaration
   guard covers type-led C, C++, C#, and Java forms.
-- **ProjectMemory** — every request gets a compact view of the codebase built
+- **ProjectMemory**  -  every request gets a compact view of the codebase built
   for that specific target. It keeps the current tree separate from the
   projected tree you'd have after all planned outputs succeed, holds the whole
   conversion plan while rendering only the bounded slice relevant to this
@@ -252,34 +252,34 @@ tool-calling, models that can only generate plain text do just fine.
   imports/includes, exports/declarations, modules/packages/namespaces,
   language-specific references and manifests, plus markup ids/classes/assets/
   inline handler calls, stylesheet selectors and custom properties, and DOM
-  selectors where they matter. Ecosystem rules live in extensible profiles —
+  selectors where they matter. Ecosystem rules live in extensible profiles  - 
   neither ProjectMemory nor the optional reconciliation pass assumes you're
   building a web app. It's rebuilt from scratch every run instead of being
   persisted, so it can never become a stale cache. As candidates are accepted they
   update the shared in-memory contracts before later files get generated.
-- **Candidate and write guards** — ambiguous fenced responses and malformed
+- **Candidate and write guards**  -  ambiguous fenced responses and malformed
   candidates get retried; existing sibling files, stale inline markers, and
   unsafe indentation changes get refused before anything is written. Whole
   `.human` outputs commit as a single rollback-protected batch, so one bad
   candidate or a late exclusive-create failure can't leave you with a partly
   generated codebase you didn't ask for.
-- **Combined project validation (JS/TS)** — every accepted JavaScript/TypeScript
+- **Combined project validation (JS/TS)**  -  every accepted JavaScript/TypeScript
   unit is staged into an in-memory overlay. TypeScript gets type-checked
   together before a single write; JavaScript semantic checking only runs if the
   project or file opted into `checkJs`/`@ts-check`. Newly introduced cross-file
   diagnostics reject the whole dependency-connected group, after at most one
   bounded repair attempt per whole-file unit. Baseline errors that were already
-  there are never pinned on generated code. This is static compilation — not
+  there are never pinned on generated code. This is static compilation  -  not
   sandbox execution, not runtime testing, not API grounding.
-- **Cross-language reconciliation** — `direct.reconcileIntegrations` defaults to
+- **Cross-language reconciliation**  -  `direct.reconcileIntegrations` defaults to
   `true`. The host builds bounded relationship groups from ProjectMemory, asks
   for one strict read-only audit, repairs only the generated targets it named,
   and verifies once. Files that have nothing to do with each other don't get
   coupled just because they showed up in the same run. The receipt tells you the
   conservative audit and target-repair ceilings up front, and setting it to
   `false` skips the whole stage.
-- **Clear, stable output** — one truncated status line per marker
-  (`✓ app.ts (inline @human, line 12)` or `⊘ skipped … : <reason>`), plus an
+- **Clear, stable output**  -  one truncated status line per marker
+  (`[yes] app.ts (inline @human, line 12)` or `[no] skipped ... : <reason>`), plus an
   in-place elapsed spinner while a request is running.
 
 This engine can't produce `VERIFIED` runs. For the reviewed, sandbox-validated
@@ -290,7 +290,7 @@ Here's what that looks like in practice. Say one run plans `index.html`,
 siblings with the exact references `styles.css` and `script.js`. Once the HTML
 is accepted, the CSS and JavaScript requests see its generated ids and classes
 as a compact contract. If the target is nested, ProjectMemory works out the
-right relative reference — `../styles.css` — instead of assuming everything
+right relative reference  -  `../styles.css`  -  instead of assuming everything
 lives at the root. The same machinery describes Python modules, Rust crate
 modules, Go packages, Java/C# namespaces and types, C/C++ headers, Ruby loaders,
 and same-language companions. Those conventions are just profile data; the
@@ -303,12 +303,12 @@ companions without importing every file it can see. JS/TS relationships still go
 through combined compiler validation. Cross-file relationships are never
 runtime-tested by the direct engine. The optional
 `direct.reconcileIntegrations` pass audits compact contracts across supported
-languages and verifies any target-scoped repair once — but it is not a compiler,
+languages and verifies any target-scoped repair once  -  but it is not a compiler,
 runtime, or sandbox proof for Python, Rust, web projects, or anything else. If
 integration genuinely has to be sandbox-verified, use guided mode.
 
 ```bash
-# Deterministic engine — works with small models:
+# Deterministic engine  -  works with small models:
 npx human-to-code . --yes --model qwen2.5-coder:1.5b
 ```
 
@@ -326,7 +326,7 @@ the current project-profile fingerprint. It also records:
 
 Generation stops if the source or project profile changed, if a material
 question is still unanswered, or if the contract doesn't explicitly authorize
-whatever the change needs — adding a dependency, touching a lockfile, running a
+whatever the change needs  -  adding a dependency, touching a lockfile, running a
 migration, breaking a public API, changing authentication or validation, writing
 unsafe Rust, or doing FFI work.
 
@@ -339,12 +339,12 @@ auditable later; the generated run artifacts stay in the private run store.
 
 | Command | Behavior |
 | --- | --- |
-| `human-to-code [root]` | The default direct flow: find `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker, plus at most one bounded cross-file repair completion per whole-file JS/TS unit — see above). `npx human-to-code .` is the normal way in. |
-| `human-to-code guided [root]` | The reviewed contract → grounding → sandbox-validation lifecycle. The only path that can ever reach `VERIFIED`. |
+| `human-to-code [root]` | The default direct flow: find `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker, plus at most one bounded cross-file repair completion per whole-file JS/TS unit  -  see above). `npx human-to-code .` is the normal way in. |
+| `human-to-code guided [root]` | The reviewed contract -> grounding -> sandbox-validation lifecycle. The only path that can ever reach `VERIFIED`. |
 | `human-to-code analyze [root] [--json]` | Produce a deterministic multi-workspace project profile plus diagnostics. `SUPPORTED` means statically recognized, not certified. |
 | `human-to-code plan <file.human> [--root <root>]` | Write a review-blocked `ChangeContractV1` draft. |
-| `human-to-code context <contract> --explain [--offline] [--json]` | Show the complete outbound context envelope a remote provider would receive — ranges, hashes, reasons, redactions, exclusions. `--explain` is required. |
-| `human-to-code generate <contract> --provider … --model …` | Create a run record and a reviewable structured patch. Touches nothing in the working tree and runs no validation. |
+| `human-to-code context <contract> --explain [--offline] [--json]` | Show the complete outbound context envelope a remote provider would receive  -  ranges, hashes, reasons, redactions, exclusions. `--explain` is required. |
+| `human-to-code generate <contract> --provider ... --model ...` | Create a run record and a reviewable structured patch. Touches nothing in the working tree and runs no validation. |
 | `human-to-code validate <run-id>` | Compare the unchanged baseline against the candidate using the preselected validation plan, inside a strong sandbox. This standalone command never makes provider repair calls. |
 | `human-to-code apply <run-id>` | Apply an unchanged, `VERIFIED`, Git-backed run after exact hash checks, using per-file atomic replacement and writing a rollback artifact. |
 | `human-to-code rollback <run-id>` | Restore a successfully applied run from its private rollback artifact, after exact post-apply hash checks. |
@@ -379,7 +379,7 @@ read as exit code `0`.
 ## Configuration
 
 Config is strict, schema-versioned JSON. Unknown keys and credential-looking
-values get rejected. Credentials live in the environment and nowhere else —
+values get rejected. Credentials live in the environment and nowhere else  - 
 `apiKeyEnv` holds the environment variable's **name**, never the key itself.
 
 `--init` writes the complete frozen loopback-Ollama default and refuses to
@@ -397,7 +397,7 @@ project/config state. Re-run it after changing project files, private
 documentation, workspace overrides, or context policy.
 
 **[docs/CONFIGURATION.md](docs/CONFIGURATION.md) is the full field-by-field
-reference** — every key, its type, default, valid range, and validation rule,
+reference**  -  every key, its type, default, valid range, and validation rule,
 plus the exact file `--init` writes. What follows here is just the decisions
 worth understanding before you start editing.
 
@@ -447,7 +447,7 @@ leading dot is optional, and the extension's language has to be in `languages`.
 This is what stops the wording of a prompt from changing your output: in the example
 above, `script.human` always becomes `script.js`, even if its instruction talks
 about stylesheets, CSS classes, colors, and themes on every line. When there's
-an explicit mapping, it replaces a recognized inner extension too — so mapping
+an explicit mapping, it replaces a recognized inner extension too  -  so mapping
 `page.html.human` to `js` gives you `page.js`.
 
 ### Multi-request planning
@@ -457,12 +457,12 @@ cover every requirement in the spec, and invent a naming vocabulary all at the
 same time. Worse, nothing makes two independently generated files agree on that
 vocabulary. `direct.planning` (on by default) splits the job up:
 
-1. **Shared contract** — one request before any file is generated, settling the
+1. **Shared contract**  -  one request before any file is generated, settling the
    file roster and the exact class names, ids, symbols, and routes every target
    has to use verbatim. Skipped when fewer than two files are planned.
-2. **Per-target todo list** — one request per `.human` file and, unless
+2. **Per-target todo list**  -  one request per `.human` file and, unless
    `markerTodo` is off, one per inline `@human` marker.
-3. **Coding** — one request per target, grounded in both of the above. A second
+3. **Coding**  -  one request per target, grounded in both of the above. A second
    pass only happens when a deterministic coverage check finds todo items the
    first pass missed, and it's only kept if it preserved everything the previous
    pass produced. That ratchet is what makes re-emitting a whole file safe: a
@@ -470,14 +470,14 @@ vocabulary. `direct.planning` (on by default) splits the job up:
 
 Set `direct.planning.enabled` to `false` to go back to exactly one model request
 per unit, or set `maxCodingPassesPerUnit` to `1` to keep planning but never
-refine. Every planning pass is best-effort — an unparseable blueprint or todo
+refine. Every planning pass is best-effort  -  an unparseable blueprint or todo
 list gets thrown away and the run continues on the single-pass path. The receipt
 and the `--json` plan both show you the exact request breakdown before the
 confirmation prompt.
 
 `direct.crossFileChecks` (on by default) then cross-references the generated
 HTML, CSS, and browser JavaScript against each other using the same static
-extractors ProjectMemory already relies on — **no model requests involved**. A
+extractors ProjectMemory already relies on  -  **no model requests involved**. A
 script that uses a class no markup defines, or markup linking an asset the
 project doesn't have, is reported as blocking. Naming drift between markup and
 stylesheet is reported as advisory. This is reference checking, not
@@ -519,8 +519,8 @@ add body
 
 That `index.human` writes `index.html`. Extension tokens like `js`, `.js`,
 `mjs`, `ts`, `tsx`, `py`, and `rs` all work as long as their language is
-enabled. Canonical configured names — `javascript`, `typescript`, `python`,
-`rust`, `ruby`, `csharp`, `cpp` — work too and map to their usual output
+enabled. Canonical configured names  -  `javascript`, `typescript`, `python`,
+`rust`, `ruby`, `csharp`, `cpp`  -  work too and map to their usual output
 extensions. A first line of `javascript` gives you `.js`, not `.javascript`. A
 config mapping beats a first-line declaration, but if the two genuinely
 conflict, you get told and the file is skipped rather than guessed at.
@@ -531,7 +531,7 @@ For a bare name, discovery checks an explicit language named in the request,
 then an unambiguous filename convention, then request vocabulary, and finally
 falls back to your first configured language. All of this is decided before the
 confirmation prompt, with no extra model call. The singular `language` key
-sticks around for alpha compatibility — supply it alongside `languages` and it
+sticks around for alpha compatibility  -  supply it alongside `languages` and it
 has to be a member, and gets normalized to the first/default entry.
 `filesToIgnore` takes exact file and directory names, not globs. With
 `sandbox.engine: "auto"`, validation probes Docker first and then Podman;
@@ -562,12 +562,12 @@ invoice. Set them at or above every applicable input/output rate for that exact
 model and endpoint, revisit them whenever pricing moves, and never use zero for
 a service that bills you. Both rates can be zero only alongside an explicit
 `"unmetered": true` assertion (or `--unmetered-provider` together with both
-zero-rate CLI flags) — and that assertion is accepted as your policy, not
+zero-rate CLI flags)  -  and that assertion is accepted as your policy, not
 independently verified. Provider-reported usage can be wrong too. Keep your
 provider-side account and project spend limits switched on; `maxCostUsd` is a
 local fail-closed guard, not billing reconciliation. If a conservative
 reservation exceeds your budget, lower the reviewed token allowance or raise
-`maxCostUsd` — don't set the pricing too low just to force a request through.
+`maxCostUsd`  -  don't set the pricing too low just to force a request through.
 
 ### Model identity and reproducibility
 
@@ -608,13 +608,13 @@ and can't come back asking for another file.
 }
 ```
 
-That fragment shows the relevant fields only — keep `schemaVersion` and the rest
+That fragment shows the relevant fields only  -  keep `schemaVersion` and the rest
 of your top-level policy from the full config. The numbers are deliberately
 conservative examples, not a current price quote; swap in reviewed upper bounds
 for your exact provider and model. And never put the key itself in JSON:
 
 ```bash
-export OPENAI_API_KEY='…'
+export OPENAI_API_KEY='...'
 ```
 
 ### Ollama local
@@ -672,14 +672,14 @@ spelling it out makes the credential binding reviewable.
 ```
 
 ```bash
-export OLLAMA_API_KEY='…'
+export OLLAMA_API_KEY='...'
 ```
 
 Replace the example pricing with reviewed upper bounds for whichever Cloud model
 you picked. Ollama Cloud doesn't currently expose Ollama's native
 structured-output mode, so the adapter sends the JSON schema as a host-enforced
 instruction, parses exactly one JSON value, and puts it through the same local
-schema gate. Malformed or out-of-schema output is terminal — it never gets
+schema gate. Malformed or out-of-schema output is terminal  -  it never gets
 accepted as a patch. And as a remote provider, Ollama Cloud gets no context tool
 definitions and can't expand the manifest you reviewed.
 
@@ -710,7 +710,7 @@ it has to name its own credential environment variable:
 }
 ```
 
-Credentials and reviewed pricing bounds are tied to the endpoint you selected —
+Credentials and reviewed pricing bounds are tied to the endpoint you selected  - 
 they're never inherited from another provider. Swap the example rates for
 conservative bounds for that specific service. URLs carrying userinfo, query
 strings, or fragments are blocked, as are unsafe redirects, private-network
@@ -757,7 +757,7 @@ SHA-256, the reason it was included, and any redactions or exclusion decisions.
 
 Built-in official-documentation discovery is deliberately narrow in this
 preview. Deterministic pre-provider grounding, and a local compiler-tool
-request, can fetch a Rust dependency's `docs.rs` page — but only when the
+request, can fetch a Rust dependency's `docs.rs` page  -  but only when the
 analyzer has an exact resolved version. You can add `documentation.officialSources`
 mappings for an exact ecosystem/dependency/version and an allowlisted HTTPS URL,
 which enables that one mapping after installed-version proof. It does not enable
@@ -770,7 +770,7 @@ There is no automatic React, NestJS, FastAPI, Python, or general documentation
 crawler.
 
 `documentation.mode: "local-first"` may contact an approved documentation host
-while building `context --explain` — that happens before any LLM provider
+while building `context --explain`  -  that happens before any LLM provider
 consent or request. The built-in `docs.rs` URL discloses the crate and its exact
 version, and a mapping you configure discloses its requested URL and can encode
 the same metadata. No source content goes out in the documentation request. Use
@@ -778,8 +778,8 @@ the same metadata. No source content goes out in the documentation request. Use
 require an exact cache hit.
 
 Generic model memory is never provenance. The host rejects recognized new
-JavaScript/TypeScript, Python, and Rust external imports and use paths — plus
-the symbols they statically name — when the selected evidence doesn't prove
+JavaScript/TypeScript, Python, and Rust external imports and use paths  -  plus
+the symbols they statically name  -  when the selected evidence doesn't prove
 them. This is a conservative syntax gate, not a complete language-service proof:
 dynamic imports, reflection, macros, aliases, and member/property APIs can all
 be opaque to it. Those cases still depend on the compiler, typechecker, and
@@ -804,7 +804,7 @@ ecosystem was detected:
 They aren't repository scripts and they can't grant authority. The model has no
 shell, no browser, no write access, no installer, no Git, no secrets, and no
 arbitrary filesystem tool. Context tools are only advertised to a verified
-loopback-local endpoint — currently just local Ollama — which can make at most
+loopback-local endpoint  -  currently just local Ollama  -  which can make at most
 eight host-validated requests of four kinds:
 
 - Literal symbol search over bounded files in one analyzed workspace.
@@ -816,7 +816,7 @@ Every local request stays root-confined, path-checked, size-limited,
 token-budgeted, and recorded in the final context manifest. A local
 dependency-documentation request can still make the allowlisted metadata-only
 web lookup described above, unless you're in offline mode. Remote OpenAI, Ollama
-Cloud, and custom cloud providers get **no** compiler tools at all — which is
+Cloud, and custom cloud providers get **no** compiler tools at all  -  which is
 exactly why `context --explain` is the complete provider-bound envelope and not
 just an opening sample that grows after you consent. If the preview doesn't hold
 enough evidence, remote generation stops instead of quietly adding more. Source
@@ -827,7 +827,7 @@ commands, scope, tests, or budgets.
 ## Validation and apply
 
 Before any context selection or provider call, a separate fail-closed scanner
-walks first-party regular files across the whole repository — including ignored
+walks first-party regular files across the whole repository  -  including ignored
 and untracked fixtures, logs, and configuration. It skips third-party dependency
 and build stores plus VCS and run-store internals, ignores symlinks, and reports
 only the path, line, and kind of finding. Never the matched value. Budget
@@ -877,7 +877,7 @@ strong sandbox. They can't run for security findings, infrastructure or
 toolchain failures, timeouts, flaky or truncated output, or unavailable
 services. And they can't change paths, operation kinds, provenance, requirement
 coverage, dependencies, lockfiles, test operations, or validation
-configuration — nor remove test obligations that were already proposed. Every
+configuration  -  nor remove test obligations that were already proposed. Every
 accepted repair is safety-checked and validated from fresh baseline and
 candidate copies.
 
@@ -894,7 +894,7 @@ Git-backed project, an intact private run store, a same-run lock, and per-file
 atomic replacement. Before it mutates anything it stores a private
 `rollback.json` holding the patch hash, prior content and modes, created paths,
 and expected post-apply hashes; a successful application then adds `apply.json`.
-Application is rollback-backed, not a filesystem-wide transaction — if an
+Application is rollback-backed, not a filesystem-wide transaction  -  if an
 operation fails, the implementation attempts in-process restoration. Git
 presence is a safety gate in this preview; the tool doesn't create a commit and
 doesn't use the Git index as its rollback mechanism.
@@ -925,14 +925,14 @@ rollback, put that directory on protected durable storage and keep it there.
   aren't enabled for normal generated runs yet. Certification is decided by a
   fail-closed WRITE gate: a run is certified only when host-owned, re-scored
   benchmark evidence exists for that exact provider/model profile and every
-  target ecosystem — at least 25 tasks per ecosystem, three runs each, and a
+  target ecosystem  -  at least 25 tasks per ecosystem, three runs each, and a
   ≥95% strong-sandbox pass rate. The evidence registry ships empty and is never
   sourced from the analyzed repository, so no self-attestation and no amount of
   model confidence can certify a run. Shipping a real, scored corpus is what
   unblocks `VERIFIED` and 1.0.
 - Built-in official web discovery only covers exact-version Rust `docs.rs`
   evidence, either selected deterministically before provider access or
-  requested by local Ollama. Other ecosystems have no automatic crawler — they
+  requested by local Ollama. Other ecosystems have no automatic crawler  -  they
   use local evidence, private documentation, or exact `officialSources`
   mappings you configured.
 - Remote providers deliberately can't request follow-up context. If the complete
@@ -956,15 +956,15 @@ rollback, put that directory on protected durable storage and keep it there.
 
 Every generated run ends with exactly one status:
 
-- `VERIFIED` — every required check passed in a strong sandbox, for a certified
+- `VERIFIED`  -  every required check passed in a strong sandbox, for a certified
   profile/provider/model combination.
-- `NEEDS_INPUT` — a material choice, consent, credential, or contract decision
+- `NEEDS_INPUT`  -  a material choice, consent, credential, or contract decision
   is missing.
-- `UNSUPPORTED` — the project capability sits outside the declared matrix.
-- `INCONCLUSIVE` — a patch or validation evidence exists, but certification
+- `UNSUPPORTED`  -  the project capability sits outside the declared matrix.
+- `INCONCLUSIVE`  -  a patch or validation evidence exists, but certification
   can't be completed.
-- `FAILED` — generation or validation failed.
-- `SECURITY_BLOCKED` — a secret, unsafe endpoint, path escape, or prohibited
+- `FAILED`  -  generation or validation failed.
+- `SECURITY_BLOCKED`  -  a secret, unsafe endpoint, path escape, or prohibited
   operation was detected.
 
 Only `VERIFIED` authorizes automatic application. See [SECURITY.md](SECURITY.md)
@@ -975,7 +975,7 @@ your changes have to preserve.
 
 Pick whichever one matches your question:
 
-| I want to understand… | Read |
+| I want to understand... | Read |
 | --- | --- |
 | What a project term means | [Architecture glossary](docs/GLOSSARY.md) |
 | How the product works, why each source folder and file exists, and where to start in VS Code | [Codebase tour](docs/CODEBASE_TOUR.md) |
@@ -1002,4 +1002,4 @@ imports the public entry point, and invokes the installed CLI.
 
 ## License
 
-[MIT](LICENSE) © the human-to-code authors
+[MIT](LICENSE) (c) the human-to-code authors
