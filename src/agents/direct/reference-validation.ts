@@ -33,7 +33,9 @@ export type ReferenceFindingCode =
   | "STATE_CLASS_DEFEATED"
   | "HIDDEN_ATTRIBUTE_OVERRIDDEN"
   | "HTML_CLASS_UNSTYLED"
-  | "CSS_SELECTOR_UNUSED";
+  | "CSS_SELECTOR_UNUSED"
+  | "CSS_COMPOUND_SELECTOR_UNMATCHED"
+  | "EMPTY_VISUAL_ZERO_SIZE";
 
 export interface ReferenceFinding {
   code: ReferenceFindingCode;
@@ -42,6 +44,8 @@ export interface ReferenceFinding {
   path: string;
   /** Bounded, single-line explanation safe to show and to send as a repair hint. */
   detail: string;
+  /** Exact generated selector involved, when one can be identified. */
+  selector?: string;
 }
 
 export interface ReferenceFile {
@@ -68,6 +72,24 @@ function hidesContent(property: string, value: string): boolean {
   if (property === "display") return normalized === "none";
   if (property === "visibility") return normalized === "hidden" || normalized === "collapse";
   return false;
+}
+
+function paintsVisualBox(declarations: ReadonlyMap<string, string>): boolean {
+  return ["background", "background-image", "box-shadow", "border", "border-image"]
+    .some((property) => declarations.has(property));
+}
+
+function givesEmptyElementSize(declarations: ReadonlyMap<string, string>): boolean {
+  if ([
+    "height", "min-height", "block-size", "min-block-size", "aspect-ratio",
+    "padding", "padding-block", "padding-top", "padding-bottom", "border", "flex", "flex-grow",
+    "grid-area", "grid-row",
+  ].some((property) => declarations.has(property))) return true;
+  const position = declarations.get("position")?.trim().toLowerCase();
+  if (position !== "absolute" && position !== "fixed") return false;
+  const inset = declarations.get("inset");
+  if (inset !== undefined && !/^auto(?:\s+auto){0,3}$/iu.test(inset.trim())) return true;
+  return declarations.has("top") && declarations.has("bottom");
 }
 
 interface CssRule {
@@ -203,6 +225,19 @@ function selectorIdTokens(selector: string): string[] {
   return (selector.match(/#[A-Za-z0-9_-]+/gu) ?? []).map((entry) => entry.slice(1));
 }
 
+function expandedNestedSelectors(content: string): string[] {
+  const text = content.replace(/\/\*[\s\S]*?\*\//gu, " ");
+  const selectors: string[] = [];
+  const pattern = /([^{};]+)\{[^{}]*?(&[^{}]+)\{/gu;
+  for (const match of text.matchAll(pattern)) {
+    const parent = (match[1] ?? "").trim();
+    const nested = (match[2] ?? "").trim();
+    if (parent.length === 0 || nested.length === 0) continue;
+    selectors.push(nested.replace(/&/gu, parent));
+  }
+  return selectors;
+}
+
 function isExternalReference(reference: string): boolean {
   return /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|data:)/iu.test(reference);
 }
@@ -261,9 +296,39 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
     }
   }
   const toggledClasses = new Set<string>();
-  for (const facts of scriptByFile.values()) {
+  const renderedClassSets: Array<Set<string>> = [];
+  const emptyRenderedClassSets: Array<Set<string>> = [];
+  for (const file of html) {
+    const facts = htmlByFile.get(file.path)!;
+    for (const values of facts.classSets) renderedClassSets.push(new Set(values));
+    if (file.generated) for (const values of facts.emptyClassSets) emptyRenderedClassSets.push(new Set(values));
+  }
+  for (const file of scripts) {
+    const facts = scriptByFile.get(file.path)!;
     for (const value of facts.toggledClasses) if (value.length > 0) toggledClasses.add(value);
     for (const value of facts.renderedClasses) if (value.length > 0) htmlClasses.add(value);
+    for (const values of facts.renderedClassSets) renderedClassSets.push(new Set(values));
+    if (file.generated) for (const values of facts.emptyRenderedClassSets) emptyRenderedClassSets.push(new Set(values));
+  }
+
+  // Blocking: every class exists, but no rendered element owns the complete
+  // generated compound selector. The rule cannot match in the candidate UI.
+  for (const file of css) {
+    if (!file.generated) continue;
+    const facts = cssByFile.get(file.path)!;
+    for (const selector of [...facts.selectors, ...expandedNestedSelectors(file.content)]) {
+      const classes = [...compoundClasses(subjectCompound(selector))];
+      if (classes.length < 2 || classes.some((value) => toggledClasses.has(value))) continue;
+      if (!classes.every((value) => htmlClasses.has(value))) continue;
+      if (renderedClassSets.some((values) => classes.every((value) => values.has(value)))) continue;
+      push(findings, counts, {
+        code: "CSS_COMPOUND_SELECTOR_UNMATCHED",
+        severity: "blocking",
+        path: file.path,
+        selector,
+        detail: `${file.path} defines "${selector}", but no rendered element has the required classes ${classes.map((value) => `"${value}"`).join(" and ")}.`,
+      });
+    }
   }
 
   // Blocking: a script queries a class or id that no markup in the project defines.
@@ -314,6 +379,33 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
   }
 
   const rulesByFile = new Map(css.map((file) => [file.path, scanCssRules(file.content)]));
+
+  // Blocking: an empty generated element has visual paint but no intrinsic or
+  // declared box size. Its background, shadow, or border cannot be seen.
+  for (const classSet of emptyRenderedClassSets) {
+    const declarations = new Map<string, string>();
+    let paintedBy: { path: string; selector: string } | undefined;
+    for (const [path, rules] of rulesByFile) {
+      for (const rule of rules) {
+        for (const selector of rule.selectors) {
+          const classes = [...compoundClasses(subjectCompound(selector))];
+          if (classes.length === 0 || !classes.some((value) => classSet.has(value))) continue;
+          for (const [property, value] of rule.declarations) declarations.set(property, value);
+          if (paintsVisualBox(rule.declarations) && css.find((file) => file.path === path)?.generated) {
+            paintedBy = { path, selector };
+          }
+        }
+      }
+    }
+    if (!paintedBy || givesEmptyElementSize(declarations)) continue;
+    push(findings, counts, {
+      code: "EMPTY_VISUAL_ZERO_SIZE",
+      severity: "blocking",
+      path: paintedBy.path,
+      selector: paintedBy.selector,
+      detail: `${paintedBy.path} paints "${paintedBy.selector}" on an empty generated element, but no matching rule gives that element a height, inset stretch, padding, aspect ratio, or other box size.`,
+    });
+  }
 
   // Blocking: a class the script toggles to reveal content is outranked by a
   // rule that hides the same element, so adding the class can never take effect.

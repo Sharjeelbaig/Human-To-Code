@@ -142,6 +142,12 @@ function validateCssReplacement(unit: ConversionUnit, code: string): void {
       );
     }
     const hasRelativeRule = /(?:^|[;}])\s*&[^{}]*\{/u.test(code);
+    const requestsNestedRule = /\b(?:hover|focus|active|visited|disabled|checked|state|pseudo|nested|responsive|media|container query)\b/iu.test(unit.prompt);
+    if (hasRelativeRule && !requestsNestedRule) {
+      throw new DirectCandidateValidationError(
+        `${unit.sourcePath}: the replacement introduced a nested CSS rule that the current marker did not request.`,
+      );
+    }
     if (!hasRelativeRule && !/(?:^|;)\s*--?[A-Za-z_][\w-]*\s*:/u.test(`;${code}`) && !/(?:^|;)\s*[A-Za-z-]+\s*:/u.test(`;${code}`)) {
       throw new DirectCandidateValidationError(
         `${unit.sourcePath}: this marker is inside a CSS rule but the replacement contains no CSS declaration.`,

@@ -106,6 +106,71 @@ test("default convert flow discovers HTML and CSS single-line and multiline inli
   }
 });
 
+test("unreachable cross-file CSS receives one bounded repair before atomic write", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-selector-repair-"));
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
+      const user = parsed.messages.find((message) => message.role === "user")?.content ?? "";
+      const content = system.includes("repairing previously generated code")
+        ? ".hero-gradient { position: absolute; inset: 0; background: linear-gradient(red, blue); }"
+        : system.includes("target: src/Hero.tsx")
+          ? '<div className="hero-gradient" aria-hidden="true" />'
+          : user.includes("Current @human instruction:\nadd container layout")
+            ? "position: relative; overflow: hidden;"
+            : ".hero-overlay.hero-gradient { background: linear-gradient(red, blue); }";
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["typescript", "css"],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+    }));
+    await put(root, "src/Hero.tsx", [
+      'import "./hero.css";',
+      'export function Hero() { return <section className="hero-container hero-overlay">',
+      "  {/* @human add gradient child */}",
+      "</section>; }",
+      "",
+    ].join("\n"));
+    await put(root, "src/hero.css", [
+      ".hero-container {",
+      "  /* @human add container layout */",
+      "}",
+      "/* @human add gradient class */",
+      "",
+    ].join("\n"));
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as { status: string; repairRequests: number; skipped: unknown[] };
+    assert.equal(done.status, "DONE");
+    assert.equal(done.repairRequests, 1);
+    assert.deepEqual(done.skipped, []);
+    assert.match(await readFile(join(root, "src/hero.css"), "utf8"), /\.hero-gradient \{ position: absolute; inset: 0;/u);
+    assert.doesNotMatch(await readFile(join(root, "src/hero.css"), "utf8"), /\.hero-overlay\.hero-gradient/u);
+    assert.match(await readFile(join(root, "src/Hero.tsx"), "utf8"), /className="hero-gradient"/u);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("multi-language receipt reports the inferred outputs instead of the configured default", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-multi-language-"));
   try {

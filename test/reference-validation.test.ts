@@ -215,6 +215,41 @@ test("static TSX className values count as generated markup for CSS references",
   assert.equal(findings.some((finding) => finding.code === "CSS_SELECTOR_UNUSED"), false);
 });
 
+test("a generated compound selector must match one rendered element", () => {
+  const findings = collectReferenceFindings([
+    { path: "index.html", content: '<div id="root"></div>', generated: false },
+    { path: "Hero.tsx", content: 'export function Hero() { return <div className="hero-container"><div className="hero-gradient" /></div>; }', generated: true },
+    { path: "hero.css", content: ".hero-container.hero-gradient { background: linear-gradient(red, blue); }", generated: true },
+  ]);
+  assert.ok(findings.some((finding) =>
+    finding.code === "CSS_COMPOUND_SELECTOR_UNMATCHED" && finding.severity === "blocking"));
+});
+
+test("nested ampersand compound selectors are checked against rendered elements", () => {
+  const findings = collectReferenceFindings([
+    { path: "index.html", content: '<div id="root"></div>', generated: false },
+    { path: "Hero.tsx", content: 'export function Hero() { return <div className="hero-container"><div className="hero-gradient" /></div>; }', generated: true },
+    { path: "hero.css", content: ".hero-container { &.hero-gradient { background: linear-gradient(red, blue); } }", generated: true },
+  ]);
+  assert.ok(findings.some((finding) => finding.code === "CSS_COMPOUND_SELECTOR_UNMATCHED"));
+});
+
+test("an empty generated visual element needs a real box size", () => {
+  const broken = collectReferenceFindings([
+    { path: "index.html", content: '<div id="root"></div>', generated: false },
+    { path: "Hero.tsx", content: 'export function Hero() { return <div className="hero-gradient" />; }', generated: true },
+    { path: "hero.css", content: ".hero-gradient { background: linear-gradient(red, blue); }", generated: true },
+  ]);
+  assert.ok(broken.some((finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE" && finding.severity === "blocking"));
+
+  const visible = collectReferenceFindings([
+    { path: "index.html", content: '<div id="root"></div>', generated: false },
+    { path: "Hero.tsx", content: 'export function Hero() { return <div className="hero-gradient" />; }', generated: true },
+    { path: "hero.css", content: ".hero-gradient { position: absolute; inset: 0; background: linear-gradient(red, blue); }", generated: true },
+  ]);
+  assert.equal(visible.some((finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE"), false);
+});
+
 test("findings are bounded and single-line", () => {
   const classes = Array.from({ length: 40 }, (_, index) => `<div class="drift-${index}"></div>`).join("");
   const findings = collectReferenceFindings([

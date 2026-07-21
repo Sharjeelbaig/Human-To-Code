@@ -51,6 +51,7 @@ import {
   type ConversionUnit,
   type ConversionProgress,
   type IntegrationProgress,
+  type GeneratedConversionUnit,
   type ProjectBlueprint,
   type ReferenceFile,
   type ReferenceFinding,
@@ -481,7 +482,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         return parseUnitTodoList(raw);
       }
     : undefined;
-  let generated;
+  let generated: GeneratedConversionUnit[];
   try {
     generated = await generateConversionUnits(
       units,
@@ -525,14 +526,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
 
   generated = withholdIncompleteRelatedTargets(generated, projectMemory);
 
-  // Optional and off by default. ProjectMemory supplies language-aware
-  // relationships; this orchestrator remains cross-language and performs a
-  // Deterministic cross-file reference checking. No model request: the same
-  // static extractors ProjectMemory uses are cross-referenced across the
-  // candidate web files. This is reference checking, not verification.
-  let referenceFindings: ReferenceFinding[] = [];
-  if (effective.direct.crossFileChecks) {
-    if (interactive) spinner.label("cross-checking generated references");
+  // Deterministic cross-file reference checking over complete candidate
+  // files. One bounded repair is allowed for findings that prove generated
+  // behavior is unreachable.
+  const crossCheckGeneratedReferences = async (): Promise<ReferenceFinding[]> => {
     const referenceFiles: ReferenceFile[] = [];
     const seenReferencePaths = new Set<string>();
     const completeCandidates = await candidateTextsForGenerated(generated);
@@ -541,7 +538,6 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       seenReferencePaths.add(target);
       referenceFiles.push({ path: target, content, generated: true });
     }
-    // Untouched project files provide the other half of every cross-reference.
     for (const path of discovery.scannedPaths) {
       if (seenReferencePaths.has(path) || !REFERENCE_EXTENSIONS.has(extname(path).toLowerCase())) continue;
       try {
@@ -552,10 +548,87 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         continue;
       }
     }
-    referenceFindings = collectReferenceFindings(referenceFiles);
+    return collectReferenceFindings(referenceFiles);
+  };
+
+  let referenceFindings: ReferenceFinding[] = [];
+  let referenceRepairRequests = 0;
+  if (effective.direct.crossFileChecks) {
+    if (interactive) spinner.label("cross-checking generated references");
+    referenceFindings = await crossCheckGeneratedReferences();
+    const blockingByPath = new Map<string, ReferenceFinding[]>();
+    for (const finding of referenceFindings.filter((item) => item.severity === "blocking")) {
+      blockingByPath.set(finding.path, [...(blockingByPath.get(finding.path) ?? []), finding]);
+    }
+
+    for (const [path, findings] of blockingByPath) {
+      const candidates = generated.filter((item) =>
+        (item.unit.kind === "file" ? item.unit.outputPath : item.unit.sourcePath) === path
+        && item.error === undefined
+        && item.code.trim().length > 0);
+      if (candidates.length === 0) continue;
+      const selector = findings.find((finding) => finding.selector)?.selector;
+      const item = selector === undefined
+        ? candidates[candidates.length - 1]!
+        : candidates.find((candidate) => candidate.code.includes(selector)) ?? candidates[candidates.length - 1]!;
+      const completeCandidates = await candidateTextsForGenerated(generated);
+      const relatedFiles = [...completeCandidates]
+        .filter(([relatedPath]) => relatedPath !== path)
+        .slice(0, 8)
+        .map(([relatedPath, content]) => ({ path: relatedPath, content }));
+      try {
+        if (interactive) spinner.label(`repairing unreachable generated behavior in ${path}`);
+        referenceRepairRequests += 1;
+        const repaired = await generateRepairCode({
+          targetPath: path,
+          inline: item.unit.kind === "inline",
+          instruction: item.unit.prompt,
+          currentCode: item.code,
+          diagnostics: findings.map((finding) => ({
+            path: finding.path,
+            code: 9001,
+            message: `${finding.code}: ${finding.detail}`,
+          })),
+          hints: [
+            "Make the generated selector or reference match the actual structure in the related candidate files.",
+            ...(findings.some((finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE")
+              ? ["An empty visual element needs a real box. Add dimensions or stretch it from a positioned containing block, for example with absolute positioning and inset."]
+              : []),
+            "Preserve the original instruction and change only this marker replacement.",
+          ],
+          relatedFiles,
+          projectMemory: projectMemory.renderFor(item.unit, Math.floor(contextCharBudget / 3)),
+        }, {
+          language: item.unit.language ?? language,
+          provider: providerName,
+          model,
+          targetPath: path,
+          ...(baseUrl ? { baseUrl } : {}),
+          ...(apiKey ? { apiKey } : {}),
+        });
+        item.code = normalizeGeneratedUnitCode(item.unit, repaired);
+        await validateGeneratedUnit(item.unit, item.code);
+        projectMemory.remember(item.unit, item.code);
+      } catch (error) {
+        if (error instanceof ContextSecurityError) throw error;
+      }
+    }
+
+    if (blockingByPath.size > 0) referenceFindings = await crossCheckGeneratedReferences();
+    const remainingBlocking = referenceFindings.filter((finding) => finding.severity === "blocking");
+    for (const finding of remainingBlocking) {
+      const reason = `cross-file behavior check failed: ${finding.detail}`;
+      for (const item of generated) {
+        const target = item.unit.kind === "file" ? item.unit.outputPath! : item.unit.sourcePath;
+        if (target !== finding.path || item.error !== undefined) continue;
+        item.error = reason;
+        item.code = "";
+      }
+    }
+    generated = withholdIncompleteRelatedTargets(generated, projectMemory);
     if (interactive) {
       for (const finding of referenceFindings) {
-        spinner.note(`  ${finding.severity === "blocking" ? "✖" : "!"} ${finding.code}: ${finding.detail}`);
+        spinner.note(`  ${finding.severity === "blocking" ? "no" : "!"} ${finding.code}: ${finding.detail}`);
       }
     }
   }
@@ -626,7 +699,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   // are type-checked against the unchanged baseline before any file is written.
   // Dependency-connected groups that introduce cross-file errors get one
   // bounded repair request per whole-file unit, then fail closed together.
-  let repairRequests = 0;
+  let repairRequests = referenceRepairRequests;
   try {
     const onStagedProgress = interactive
       ? (event: StagedValidationProgress): void => {
@@ -663,7 +736,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       ...(onStagedProgress ? { onProgress: onStagedProgress } : {}),
     });
     generated = staged.results;
-    repairRequests = staged.repairRequests;
+    repairRequests += staged.repairRequests;
   } catch (error) {
     spinner.stop();
     if (error instanceof ContextSecurityError) throw error;

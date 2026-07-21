@@ -67,6 +67,9 @@ export interface HtmlFacts {
   scripts: string[];
   ids: string[];
   classes: string[];
+  /** Static class tokens grouped by the element that owns them. */
+  classSets: string[][];
+  emptyClassSets: string[][];
   handlerCalls: string[];
   operationLabels: string[];
   numberLabels: string[];
@@ -88,6 +91,10 @@ export interface JavaScriptFacts {
   toggledClasses: string[];
   /** Static class and className tokens rendered by JSX or DOM-like templates. */
   renderedClasses: string[];
+  /** Static JSX className tokens grouped by the element that owns them. */
+  renderedClassSets: string[][];
+  /** Static class sets on self-closing or empty JSX elements. */
+  emptyRenderedClassSets: string[][];
   /** True when the source assigns `.hidden` or sets the `hidden` attribute. */
   togglesHiddenAttribute: boolean;
 }
@@ -95,6 +102,12 @@ export interface JavaScriptFacts {
 export function htmlFacts(content: string): HtmlFacts {
   const handlerExpressions = [...content.matchAll(/\bon[a-z][a-z0-9_-]*\s*=\s*(?:"([^"]*)"|'([^']*)')/giu)]
     .map((match) => match[1] ?? match[2] ?? "");
+  const classSets = [...content.matchAll(/<[^>]*\bclass\s*=\s*["']([^"']+)["'][^>]*>/giu)]
+    .map((match) => (match[1] ?? "").split(/\s+/u).filter(Boolean));
+  const emptyClassSets = [
+    ...content.matchAll(/<[^>]*\bclass\s*=\s*["']([^"']+)["'][^>]*\/\s*>/giu),
+    ...content.matchAll(/<([a-z][a-z0-9-]*)\b[^>]*\bclass\s*=\s*["']([^"']+)["'][^>]*>\s*<\/\1\s*>/giu),
+  ].map((match) => (match[2] ?? match[1] ?? "").split(/\s+/u).filter(Boolean));
   return {
     stylesheets: matches(
       content,
@@ -103,6 +116,8 @@ export function htmlFacts(content: string): HtmlFacts {
     scripts: matches(content, /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/giu),
     ids: matches(content, /\bid\s*=\s*["']([^"']+)["']/giu).flatMap((value) => value.split(/\s+/u)),
     classes: matches(content, /\bclass\s*=\s*["']([^"']+)["']/giu).flatMap((value) => value.split(/\s+/u)),
+    classSets,
+    emptyClassSets,
     handlerCalls: handlerExpressions
       .flatMap((handler) => matches(handler, /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/gu)),
     operationLabels: matches(
@@ -129,6 +144,12 @@ export function cssFacts(content: string): CssFacts {
 }
 
 export function javaScriptFacts(content: string): JavaScriptFacts {
+  const renderedClassSets = [...content.matchAll(/<[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*>/giu)]
+    .map((match) => (match[1] ?? "").split(/\s+/u).filter(Boolean));
+  const emptyRenderedClassSets = [
+    ...content.matchAll(/<[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*\/\s*>/giu),
+    ...content.matchAll(/<([A-Za-z][A-Za-z0-9.]*)\b[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*>\s*<\/\1\s*>/gu),
+  ].map((match) => (match[2] ?? match[1] ?? "").split(/\s+/u).filter(Boolean));
   return {
     modules: [
       ...matches(content, /\b(?:import|export)\b[\s\S]{0,240}?\bfrom\s*["']([^"']+)["']/gu),
@@ -145,6 +166,8 @@ export function javaScriptFacts(content: string): JavaScriptFacts {
     ).flatMap((value) => value.split(/\s+/u)),
     renderedClasses: matches(content, /\bclass(?:Name)?\s*=\s*["']([^"']+)["']/giu)
       .flatMap((value) => value.split(/\s+/u)),
+    renderedClassSets,
+    emptyRenderedClassSets,
     togglesHiddenAttribute: /\.hidden\s*=|\b(?:set|remove)Attribute\s*\(\s*["']hidden["']/u.test(content),
   };
 }
