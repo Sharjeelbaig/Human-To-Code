@@ -1237,12 +1237,22 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
 // This function checks if this file was executed directly by Node (e.g. `npx human-to-code .` or `node dist/cli.js`)
 // rather than being imported as a library by another script (e.g. `import { runHumanToCodeCli } from "human-to-code/cli"`).
 function isMainModule(): boolean {
-  const entry = process.argv[1]; // Get the path of the script Node is running
-  if (!entry) return false; // If no script is running, we were imported
+  // Step 1: Find out what file the user told Node to execute in the terminal.
+  // (Example: if you run `node dist/cli.js`, this variable holds the path to `dist/cli.js`)
+  const entry = process.argv[1]; 
+  
+  // Step 2: If there is no file, it means another script imported us, so we are not the main program.
+  // (Example: this runs when your custom agent does `import { runHumanToCodeCli } from "./cli"`)
+  if (!entry) return false; 
+  
   try {
-    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url)); // Follow symlinks and check if the running script is this exact file
+    // Step 3: Check if the file the user ran is THIS exact file.
+    // 'realpathSync' is used to trace through any file shortcuts to find the true file paths before comparing them.
+    // (Example: this returns true when you run `npx human-to-code .` because npx acts as a shortcut to this file)
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url)); 
   } catch {
-    return resolve(entry) === resolve(fileURLToPath(import.meta.url)); // If symlink check fails, fallback to comparing absolute paths
+    // Step 4: If tracing shortcuts fails, fallback to doing a basic text comparison of the two file paths.
+    return resolve(entry) === resolve(fileURLToPath(import.meta.url)); 
   }
 }
 
