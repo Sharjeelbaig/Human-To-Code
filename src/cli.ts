@@ -1178,6 +1178,7 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
     }
     return await buildCommand(cli, cli.positionals[0]);
   } catch (error) {
+    // these are error scenarios after successfully running the build command, for example, provider errors, discovery errors, etc.
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof ContextSecurityError) {
       output(
