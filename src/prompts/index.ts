@@ -4,6 +4,4 @@ export * from "./direct-conversion.ts";
 export * from "./direct-integration.ts";
 export * from "./direct-repair.ts";
 export * from "./direct-todos.ts";
-export * from "./guided-patch.ts";
-export * from "./guided-repair.ts";
 export * from "./provider-output.ts";

@@ -8,7 +8,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.swift` not scanned for markers.
 - Variants: `spm-package` (Package.swift) first. Xcode-project apps
   (`.xcodeproj`/`.xcworkspace`) are explicitly **out of scope** initially  - 
   pbxproj is too dynamic to analyze honestly; declare `UNSUPPORTED`.
-- Versions: Swift ≥ 5.9 (from `// swift-tools-version:` header).
+- Versions: Swift >= 5.9 (from `// swift-tools-version:` header).
 
 ## Detection signals (static only)
 - `Package.swift` tools-version comment line (parsed textually  -  the

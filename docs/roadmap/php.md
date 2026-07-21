@@ -8,7 +8,7 @@ Level 2 only: not in `LANGUAGE_PROFILES` (direct path would fall back to a
 - `Ecosystem`: `php`.
 - Variants: `composer-app`, `laravel` (artisan + `bootstrap/app.php`),
   `symfony` later.
-- Versions: PHP ≥ 8.2 (from `composer.json` `require.php`).
+- Versions: PHP >= 8.2 (from `composer.json` `require.php`).
 
 ## Detection signals (static only)
 - `composer.json` (`require`, `autoload.psr-4`), `composer.lock`,

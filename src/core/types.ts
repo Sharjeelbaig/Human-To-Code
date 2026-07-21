@@ -1,8 +1,8 @@
 /**
  * Shared types for human-to-code.
  *
- * The pipeline is: static analysis -> reviewed JSON contract -> grounded model
- * patch -> isolated validation -> explicit application.
+ * The pipeline is: request discovery -> model generation -> candidate
+ * validation -> guarded write.
  */
 
 export type TargetLanguage =

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-labelledby="title desc">
-  <title id="title">human-to-code — plain language to real code</title>
+  <title id="title">human-to-code - plain language to real code</title>
   <desc id="desc">Social sharing card for human-to-code.</desc>
   <defs>
     <linearGradient id="bg" x1="80" y1="40" x2="1200" y2="620" gradientUnits="userSpaceOnUse">

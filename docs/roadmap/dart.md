@@ -7,7 +7,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.dart` not scanned for markers.
 - `Ecosystem`: `dart`.
 - Variants: `package` (pure Dart), `flutter-app` (validation limited to
   `flutter test` unit/widget tests  -  no device/emulator).
-- Versions: Dart ≥ 3.0 (from `environment.sdk` in `pubspec.yaml`).
+- Versions: Dart >= 3.0 (from `environment.sdk` in `pubspec.yaml`).
 
 ## Detection signals (static only)
 - `pubspec.yaml` (`environment`, `dependencies`, `flutter:` section),

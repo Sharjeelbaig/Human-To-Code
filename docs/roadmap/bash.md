@@ -11,7 +11,7 @@ by the marker regex  -  but `.sh` files are not in `SCANNED_EXTENSIONS`).
   scripts. There is no manifest, so this profile is signal-based:
   shebang lines + extension inventory, and it should stay deliberately
   narrow. Anything ambiguous stays with the general fallback.
-- Versions: bash ≥ 4 assumed by image; POSIX-sh scripts flagged by shebang.
+- Versions: bash >= 4 assumed by image; POSIX-sh scripts flagged by shebang.
 
 ## Detection signals (static only)
 - Shebangs (`#!/usr/bin/env bash`, `#!/bin/sh`), `.shellcheckrc`,

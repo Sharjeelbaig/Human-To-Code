@@ -17,14 +17,14 @@ levels on purpose, one step at a time:
    sandbox, and no `VERIFIED` status.
    *Today: TypeScript, JavaScript, Python, Rust, Go, Java, Ruby, C#, C++, C.*
 2. **General fallback** (`src/analysis/adapters/general.ts`)  -  any declared
-   language can flow through the guided pipeline ungrounded, permanently
+   language can flow through the converter ungrounded, permanently
    `INCONCLUSIVE`. Every language already has this. It's the floor, not a goal.
 3. **Grounded profile**  -  a static `EcosystemAdapter` recognizes real projects,
    collects version evidence, and emits a validation plan, with the variant
    declared in the support matrix at `preview` tier. This is what every plan in
    this folder is describing.
 4. **Certified**  -  the profile passes the benchmark gate in
-   `src/providers/certification.ts` (≥25 tasks × 3 runs × ≥95% strong-sandbox
+   `src/providers/certification.ts` (>=25 tasks x 3 runs x >=95% strong-sandbox
    pass rate, per provider and model). Never self-declared.
 
 ## What every plan has to cover

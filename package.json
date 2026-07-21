@@ -1,7 +1,7 @@
 {
   "name": "human-to-code",
   "version": "0.1.30",
-  "description": "Safely turn reviewed natural-language change contracts into validated code patches.",
+  "description": "Turn plain-language .human files and @human markers into code.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

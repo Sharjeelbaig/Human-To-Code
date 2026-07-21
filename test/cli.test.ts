@@ -6,14 +6,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
-import {
-  hashCanonical,
-  sha256Text,
-  type ChangeContractV1,
-  type PatchSetV1,
-  type RunRecordV1,
-} from "../src/core/contracts.ts";
-import { RunStore } from "../src/pipeline/run-store.ts";
 
 const CLI = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 
@@ -46,29 +38,6 @@ test("--agent is no longer a supported CLI option", async () => {
   const result = await cli(["--agent"]);
   assert.equal(result.code, 1, result.stderr || result.stdout);
   assert.match(result.stderr, /Unknown option '--agent'/u);
-});
-
-test("guided subcommand creates a review draft and exits NEEDS_INPUT", async () => {
-  const root = await mkdtemp(join(tmpdir(), "h2c-cli-guided-"));
-  try {
-    await put(root, "package.json", JSON.stringify({
-      name: "cli-fixture",
-      dependencies: { react: "18.3.1", vite: "6.1.0" },
-      scripts: { typecheck: "tsc --noEmit", build: "vite build", test: "vitest run" },
-    }));
-    await put(root, "src/main.tsx", "export function App() { return null; }\n");
-    await put(root, "feature.human", "Add a status component.\n");
-
-    const result = await cli(["guided", root, "--json"]);
-    assert.equal(result.code, 3, result.stderr || result.stdout);
-    const value = JSON.parse(result.stdout) as { status: string; contract: string; draft: { unresolvedQuestions: unknown[] } };
-    assert.equal(value.status, "NEEDS_INPUT");
-    assert.equal(value.contract, join(root, "feature.strict.human.json"));
-    assert.equal(value.draft.unresolvedQuestions.length, 1);
-    await access(value.contract);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 test("default convert flow lists .human files and @human markers without contacting a provider", async () => {
@@ -490,111 +459,6 @@ test("remote direct conversion requires explicit consent before instructions or 
     assert.match(output.diagnostic, /send change instructions and possibly source context to a remote provider/u);
   } finally {
     await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("CLI preserves distinct partial-scan and unsupported exit codes", async () => {
-  const container = await mkdtemp(join(tmpdir(), "h2c-cli-exits-"));
-  try {
-    const partial = await cli(["analyze", join(container, "missing"), "--json"]);
-    assert.equal(partial.code, 6, partial.stderr || partial.stdout);
-    assert.equal((JSON.parse(partial.stdout) as { status: string }).status, "PARTIAL_SCAN");
-
-    const unsupportedRoot = join(container, "unsupported");
-    await mkdir(unsupportedRoot);
-    await put(unsupportedRoot, "package.json", JSON.stringify({
-      dependencies: { react: "17.0.2", vite: "6.1.0" },
-      scripts: { build: "vite build" },
-    }));
-    await put(unsupportedRoot, "src/main.tsx", "export function App() { return null; }\n");
-    const unsupported = await cli(["analyze", unsupportedRoot, "--json"]);
-    assert.equal(unsupported.code, 3, unsupported.stderr || unsupported.stdout);
-    assert.equal((JSON.parse(unsupported.stdout) as { status: string }).status, "UNSUPPORTED");
-  } finally {
-    await rm(container, { recursive: true, force: true });
-  }
-});
-
-test("CLI rollback restores an applied run from the configured private run store", async () => {
-  const container = await mkdtemp(join(tmpdir(), "h2c-cli-rollback-"));
-  const root = join(container, "project");
-  const cache = join(container, "cache");
-  try {
-    await mkdir(root);
-    const content = "export const status = 'applied';\n";
-    await put(root, "src/status.ts", content);
-    const runId = "cli-rollback";
-    const contract: ChangeContractV1 = {
-      schemaVersion: 1,
-      source: { path: "change.human", sha256: sha256Text("create status") },
-      projectFingerprint: sha256Text("profile"),
-      targetWorkspaces: ["react:."],
-      targetSymbols: ["status"],
-      requirements: [{ id: "REQ-1", description: "Create status." }],
-      acceptanceCriteria: { automated: ["Status compiles."], manual: [] },
-      scope: { allowedPaths: ["src/**"], allowedOperations: ["create"], prohibitedPaths: [] },
-      prohibitedChanges: [],
-      risks: [],
-      authorizedRisks: [],
-      unresolvedQuestions: [],
-    };
-    const patch: PatchSetV1 = {
-      schemaVersion: 1,
-      contractHash: hashCanonical(contract),
-      snapshotHash: sha256Text("snapshot"),
-      operations: [{ kind: "create", path: "src/status.ts", content }],
-      requirementIds: ["REQ-1"],
-      proposedTests: ["Compile status."],
-    };
-    const patchHash = hashCanonical(patch);
-    const timestamp = "2026-07-15T00:00:00.000Z";
-    const record: RunRecordV1 = {
-      runId,
-      schemaVersion: 1,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      root,
-      status: "VERIFIED",
-      contractHash: hashCanonical(contract),
-      contextManifestHash: sha256Text("context"),
-      patchHash,
-      validationReportHash: sha256Text("report"),
-      diagnostics: [],
-    };
-    const store = new RunStore(join(cache, "runs"));
-    await store.create(record);
-    await store.writeArtifact(runId, "contract.json", contract);
-    await store.writeArtifact(runId, "patch.json", patch);
-    await store.writeArtifact(runId, "apply.json", {
-      appliedAt: timestamp,
-      paths: ["src/status.ts"],
-      patchHash,
-    });
-    await store.writeArtifact(runId, "rollback.json", {
-      schemaVersion: 1,
-      patchHash,
-      createdAt: timestamp,
-      entries: [{
-        kind: "created",
-        path: "src/status.ts",
-        before: "",
-        afterHash: sha256Text(content),
-        mode: 0o644,
-      }],
-    });
-
-    const result = await cli(["rollback", runId, "--json"], {
-      HUMAN_TO_CODE_CACHE: cache,
-    });
-    assert.equal(result.code, 0, result.stderr || result.stdout);
-    const outcome = JSON.parse(result.stdout) as { runId: string; status: string; diagnostics: string[] };
-    assert.equal(outcome.runId, runId);
-    assert.equal(outcome.status, "VERIFIED");
-    assert.match(outcome.diagnostics.join("\n"), /Rollback restored 1 operation/u);
-    await assert.rejects(access(join(root, "src/status.ts")));
-    assert.ok(await store.readArtifact(runId, "rollback-result.json"));
-  } finally {
-    await rm(container, { recursive: true, force: true });
   }
 });
 

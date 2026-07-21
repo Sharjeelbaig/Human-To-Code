@@ -10,7 +10,7 @@ already work through the direct path. No grounded profile.
 - Variants: `module` (single `go.mod`), `workspace` (`go.work`), with
   HTTP-framework signals (net/http, chi, gin, echo) recorded as profile
   signals, not variants, until one earns its own entry.
-- Versions: Go ≥ 1.21 (from the `go` directive in `go.mod`).
+- Versions: Go >= 1.21 (from the `go` directive in `go.mod`).
 
 ## Detection signals (static only)
 - `go.mod`  -  module path, `go`/`toolchain` directives, `require` blocks.

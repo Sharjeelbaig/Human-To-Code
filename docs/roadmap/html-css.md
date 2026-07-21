@@ -20,7 +20,7 @@ ProjectMemory supplies. It's still narrower than the deterministic complete
 static-web link graph described below.
 
 Everything from here down is about a grounded, sandbox-validated `static-web`
-guided profile, which doesn't exist yet.
+framework profile, which doesn't exist yet.
 
 ## Target profile
 - `Ecosystem`: `static-web`.

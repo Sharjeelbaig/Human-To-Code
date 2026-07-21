@@ -78,8 +78,8 @@ request goes out. They're a local policy input, not a live price feed.
 
 | Key | Type | Rules |
 | --- | --- | --- |
-| `inputUsdPerMillionTokens` | number | `0`–`1000000`, fractional values allowed. |
-| `outputUsdPerMillionTokens` | number | `0`–`1000000`, fractional values allowed. |
+| `inputUsdPerMillionTokens` | number | `0`-`1000000`, fractional values allowed. |
+| `outputUsdPerMillionTokens` | number | `0`-`1000000`, fractional values allowed. |
 | `unmetered` | `true` | Required **exactly when** both rates are zero, and rejected otherwise. It's accepted as your policy and is not independently verified. |
 
 Loopback-local Ollama has no remote API cost and needs no `pricing` at all.
@@ -109,8 +109,8 @@ Loopback-local Ollama has no remote API cost and needs no `pricing` at all.
 | `remoteProviderConsent` | boolean | `false` | Remote providers stay switched off until this is explicitly `true`. Direct conversion refuses to send anything to a non-loopback provider without it. |
 | `telemetry` | boolean | `false` | Opt-in, and also forced off by the `DO_NOT_TRACK` environment variable. Nothing is currently emitted either way. |
 | `excludedPaths` | string[] | `[]` | Portable repository-relative files or directories that must never enter outbound context. No duplicates. |
-| `maxFileBytes` | integer | `512000` | `1024`–`100000000`. Files bigger than this aren't read for context or contracts. |
-| `maxContextTokens` | integer | `64000` | `1000`–`2000000`. The direct engine multiplies this by four to get the combined FileMemory + ProjectMemory character budget for one request. |
+| `maxFileBytes` | integer | `512000` | `1024`-`100000000`. Files bigger than this aren't read for context or contracts. |
+| `maxContextTokens` | integer | `64000` | `1000`-`2000000`. The direct engine multiplies this by four to get the combined FileMemory + ProjectMemory character budget for one request. |
 
 ## `sandbox`
 
@@ -128,12 +128,12 @@ failed remote attempt keeps its conservative charge.
 
 | Key | Type | Default | Range |
 | --- | --- | --- | --- |
-| `maxCostUsd` | number | `10` | `0`–`100000`, fractional allowed. |
-| `maxInputTokens` | integer | `2000000` | `1000`–`10000000`. |
-| `maxOutputTokens` | integer | `120000` | `1`–`1000000`. |
-| `maxRequests` | integer | `60` | `1`–`100`. Raised from 12 because multi-pass planning issues a shared-contract request plus a todo and a coding request per target. **Enforced in the guided pipeline and the provider ledger  -  the direct engine discloses its request count rather than gating on this value.** |
-| `maxRepairs` | integer | `2` | `0`–`2`. |
-| `timeoutMs` | integer | `900000` | `1000`–`86400000`. |
+| `maxCostUsd` | number | `10` | `0`-`100000`, fractional allowed. |
+| `maxInputTokens` | integer | `2000000` | `1000`-`10000000`. |
+| `maxOutputTokens` | integer | `120000` | `1`-`1000000`. |
+| `maxRequests` | integer | `60` | `1`-`100`. Raised from 12 because multi-pass planning issues a shared-contract request plus a todo and a coding request per target. The converter discloses its request count rather than gating on this value. |
+| `maxRepairs` | integer | `2` | `0`-`2`. |
+| `timeoutMs` | integer | `900000` | `1000`-`86400000`. |
 
 ## `direct`
 
@@ -157,7 +157,7 @@ once  -  and nothing makes two independently generated files agree on any of it.
 | `projectBlueprint` | boolean | `true` | One shared request before any file is generated, settling the file roster and the vocabulary  -  class names, ids, exported symbols, routes  -  that every target has to use verbatim. Skipped automatically when fewer than two files are planned. |
 | `fileTodo` | boolean | `true` | One todo-list request per whole-file `.human` target. |
 | `markerTodo` | boolean | `true` | One todo-list request per inline `@human` marker. |
-| `maxCodingPassesPerUnit` | integer | `2` | `1`–`3`. A second pass happens **only** when the deterministic coverage check finds todo items the first pass didn't address, and it's kept only if it preserved everything the previous pass produced. Set it to `1` to code every target in a single request. |
+| `maxCodingPassesPerUnit` | integer | `2` | `1`-`3`. A second pass happens **only** when the deterministic coverage check finds todo items the first pass didn't address, and it's kept only if it preserved everything the previous pass produced. Set it to `1` to code every target in a single request. |
 
 **Request arithmetic.** For `N` units, `F` of which are whole files, the defaults
 plan 1 blueprint request (when `F >= 2`), `N` todo requests, and `N` coding

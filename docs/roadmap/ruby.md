@@ -9,7 +9,7 @@ work through the direct path. No grounded profile exists yet.
 - `Ecosystem`: `ruby`.
 - Variants: `gem` (gemspec), `rails` (config/application.rb + bin/rails),
   `rack` (config.ru without Rails).
-- Versions: Ruby ≥ 3.1 (from `.ruby-version` / Gemfile `ruby` directive).
+- Versions: Ruby >= 3.1 (from `.ruby-version` / Gemfile `ruby` directive).
 
 ## Detection signals (static only)
 - `Gemfile` + `Gemfile.lock`; `*.gemspec`; `config/application.rb`,

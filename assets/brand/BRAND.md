@@ -2,7 +2,7 @@
 
 ## Brand idea
 
-The opposing chevrons represent human intent and executable code. Their shared center is a coral prompt cursor: the controlled transformation point where reviewed intent becomes a validated patch.
+The opposing chevrons represent human intent and executable code. Their shared center is a coral prompt cursor: the controlled transformation point where plain-language intent becomes real code.
 
 ## Core assets
 
@@ -11,7 +11,7 @@ The opposing chevrons represent human intent and executable code. Their shared c
 - `wordmark.svg`  -  horizontal lockup for light surfaces
 - `wordmark-dark.svg`  -  horizontal lockup for dark surfaces
 - `favicon.svg`  -  self-contained app/browser icon
-- `social-card.svg`  -  1280 × 640 social and repository preview
+- `social-card.svg`  -  1280 x 640 social and repository preview
 - `logo-concept.png`  -  generated visual-origin concept with transparency
 
 ## Palette

@@ -1,38 +1,27 @@
 #!/usr/bin/env node
 /**
- * The CLI shell. Exposes the direct and guided flows as commands and prints the
- * results; the actual conversion policy lives in agents/ and pipeline/.
+ * The CLI shell. Exposes the conversion flow and prints the results. The
+ * actual conversion policy lives in the direct agent.
  */
 
-import { constants as fsConstants, realpathSync } from "node:fs";
-import { copyFile, lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import { realpathSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { analyzeProject, type ProjectProfileV1 } from "./analysis/analyzer.ts";
 import {
   CONFIG_FILENAME,
   ConfigError,
   defaultConfigJson,
   defaultModelFor,
   loadConfig,
-  migrateLegacyConfig,
   validateConfig,
   type ConfigV1,
 } from "./config/config.ts";
 import { ContextSecurityError } from "./context/context.ts";
-import { DocumentationError } from "./context/documentation.ts";
-import { discoverHumanInstructionSources, DiscoveryError, secretsTrackedError } from "./config/discovery.ts";
-import {
-  PlanningError,
-  contractPathForSource,
-  createDraftContract,
-  loadReviewedContract,
-  writeDraftContract,
-} from "./pipeline/planner.ts";
+import { DiscoveryError } from "./config/discovery.ts";
 import { ProviderError, type ProviderAdapter } from "./providers/provider.ts";
 import { createOllamaProvider, createOpenAIProvider } from "./providers/providers.ts";
-import { RunStore } from "./pipeline/run-store.ts";
 import {
   applyWholeFileBatch,
   applyUnit,
@@ -65,32 +54,12 @@ import {
   type StagedValidationProgress,
   type UnitPlanningOutcome,
 } from "./agents/direct/index.ts";
-import type { ProviderName, SourceFile } from "./core/types.ts";
-import {
-  applyVerifiedCodeChangeRun,
-  buildGuidedContextPreview,
-  generateGuidedCodeChangeRun,
-  resolveWorkspaceConfig,
-  rollbackAppliedCodeChangeRun,
-  validateGuidedCodeChangeRun,
-  type WorkflowOutcome,
-} from "./agents/guided/index.ts";
+import type { ProviderName } from "./core/types.ts";
 
-const HELP = `human-to-code — reviewed, grounded, isolated human-to-code compiler agent
+const HELP = `human-to-code - turn plain-language requests into code
 
 Usage:
-  human-to-code [root] [-y]                    Convert .human files and @human markers to code (default; fast deterministic engine)
-  human-to-code build [root] [-y]              Alias of the default convert flow
-  human-to-code guided [root]                  Reviewed/grounded/validated compiler pipeline
-  human-to-code analyze [root] [--json]
-  human-to-code plan <file.human> [--root <root>]
-  human-to-code context <contract> --explain [--offline] [--json]
-  human-to-code generate <contract> [--provider <name>] [--model <id>]
-  human-to-code validate <run-id> [--sandbox-image <image>] [--manual-passed]
-  human-to-code apply <run-id>
-  human-to-code rollback <run-id>                Restore a successfully applied run
-  human-to-code check [root]
-  human-to-code migrate-config [root]
+  human-to-code [root] [-y]                    Convert .human files and @human markers to code
   human-to-code --init [root]
 
 Provider options:
@@ -105,29 +74,20 @@ Provider options:
 
 Other options:
   --root <root>                  Explicit project root
-  --file <file.human>            Select one source in guided mode
-  --offline                      Use cached/local documentation only
-  --explain                      Show outbound context provenance and exact selected content
   --json                         Machine-readable output
   -y, --yes                      Skip the confirmation prompt and write files
-  --simple                       Deprecated no-op; the deterministic engine is now the default
   --dry-run                      Analyze and preview only; perform no generation
-  --manual-passed                Explicitly attest all reviewed manual acceptance checks
-  --sandbox-image <image>        Trusted image reference that must already exist locally
-  --docker-binary <path>         Docker-compatible runtime override (for example Podman)
   -h, --help                     Show this help
 
 Exit codes:
-  0 verified/successful non-generation command
+  0 successful command
   1 usage or configuration error
-  2 stale contract or failed validation
-  3 needs input, unsupported, or inconclusive
+  3 needs input or unsupported
   4 security blocked
-  5 provider or documentation dependency failure
+  5 provider dependency failure
   6 internal error or partial scan
 `;
 
-const COMMANDS = new Set(["build", "convert", "guided", "analyze", "plan", "context", "generate", "validate", "apply", "rollback", "check", "migrate-config"]);
 const PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama", "grok", "gemini"];
 
 interface CliOptions {
@@ -219,56 +179,8 @@ function output(value: unknown, json: boolean): void {
   else console.log(JSON.stringify(value, null, 2));
 }
 
-function profileText(profile: ProjectProfileV1): string {
-  const lines = [
-    `Analysis: ${profile.status}`,
-    `Root: ${profile.root}`,
-    `Fingerprint: ${profile.fingerprint}`,
-    `Workspaces: ${profile.workspaces.length}`,
-  ];
-  for (const workspace of profile.workspaces) {
-    lines.push(`  ${workspace.id} — ${workspace.variant} — ${workspace.support.tier}`);
-    lines.push(`    framework ${workspace.framework.name} ${workspace.framework.resolvedVersion ?? workspace.framework.declaredVersion ?? "version unresolved"}`);
-    lines.push(`    validation ${workspace.validationPlan.map((command) => command.category).join(", ") || "none"}`);
-  }
-  for (const diagnostic of profile.diagnostics) lines.push(`  [${diagnostic.code}] ${diagnostic.message}`);
-  return lines.join("\n");
-}
-
-function analysisExit(profile: ProjectProfileV1): number {
-  if (profile.status === "PARTIAL_SCAN") return 6;
-  if (profile.status === "NEEDS_INPUT" || profile.status === "UNSUPPORTED") return 3;
-  return 0;
-}
-
-function outcomeExit(outcome: WorkflowOutcome): number {
-  if (outcome.exitCode !== undefined) return outcome.exitCode;
-  if (outcome.status === "VERIFIED") return 0;
-  if (outcome.status === "SECURITY_BLOCKED") return 4;
-  if (outcome.status === "NEEDS_INPUT" || outcome.status === "UNSUPPORTED" || outcome.status === "INCONCLUSIVE") return 3;
-  return 2;
-}
-
-function outcomeText(outcome: WorkflowOutcome): string {
-  const lines = [`Run ${outcome.runId}: ${outcome.status}`];
-  if (outcome.usage !== undefined) {
-    const repairs = outcome.usage.repairs ?? 0;
-    lines.push(`  Provider API requests: ${outcome.usage.requests}${repairs > 0 ? ` (${repairs} repair${repairs === 1 ? "" : "s"})` : ""}`);
-  }
-  for (const diagnostic of outcome.diagnostics) lines.push(`  ${diagnostic}`);
-  if (outcome.diff) lines.push("", outcome.diff);
-  return lines.join("\n");
-}
-
 function projectRoot(cli: CliOptions, fallback = "."): string {
   return resolve(cli.root ?? fallback);
-}
-
-function relativeInside(root: string, path: string): string {
-  const absolute = resolve(root, path);
-  const rel = relative(root, absolute);
-  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`)) throw new PlanningError("PATH_ESCAPE", "File must be inside the project root.");
-  return rel.split(sep).join("/");
 }
 
 async function initConfig(root: string): Promise<number> {
@@ -334,165 +246,6 @@ function providerFor(config: ConfigV1): ProviderAdapter {
   throw new ConfigError(`Provider '${config.provider.name}' has no certified HTTP adapter in this release. Use openai or ollama.`);
 }
 
-async function loadConfigAndAnalyzeProject(
-  root: string,
-): Promise<{ profile: ProjectProfileV1; config: ConfigV1; fromFile: boolean }> {
-  // Load config first so its declared language can seed the ungrounded `general`
-  // fallback when no framework is recognized. Standalone `analyze` deliberately
-  // stays pure recognition and does not pass this hint.
-  const { config, fromFile } = await loadConfig(root);
-  const profile = await analyzeProject(root, { generalLanguage: config.language });
-  return { profile, config, fromFile };
-}
-
-async function discoverInstructionSourcesAndRejectTrackedSecrets(
-  root: string,
-  config: ConfigV1,
-): Promise<Awaited<ReturnType<typeof discoverHumanInstructionSources>>> {
-  const sources = await discoverHumanInstructionSources(root, config.filesToIgnore);
-  const tracked = secretsTrackedError(sources.secretsFiles);
-  if (tracked) throw new ContextSecurityError("SECRET_DETECTED", tracked);
-  return sources;
-}
-
-async function planCommand(cli: CliOptions, sourceInput: string): Promise<number> {
-  const root = projectRoot(cli);
-  const { profile } = await loadConfigAndAnalyzeProject(root);
-  const exit = analysisExit(profile);
-  if (exit !== 0) {
-    output(cli.json ? profile : profileText(profile), cli.json);
-    return exit;
-  }
-  const relPath = relativeInside(root, sourceInput);
-  const source: SourceFile = { absPath: resolve(root, sourceInput), relPath, kind: "human", strictSibling: `${relPath.slice(0, -6)}.strict.human` };
-  const draft = await createDraftContract(root, source, profile);
-  await writeDraftContract(draft);
-  const result = {
-    status: "NEEDS_INPUT",
-    contract: draft.contractPath,
-    message: "Draft created. Review targetWorkspaces, targetSymbols, scope, acceptance criteria, risks, then remove the material REVIEW-1 question. Generation rejects unreviewed contracts.",
-  };
-  output(cli.json ? { ...result, draft: draft.contract } : `${result.message}\n${result.contract}`, cli.json);
-  return 3;
-}
-
-async function loadContractFor(root: string, contractInput: string): Promise<{ profile: ProjectProfileV1; config: ConfigV1; contract: Awaited<ReturnType<typeof loadReviewedContract>> }> {
-  const { profile, config } = await loadConfigAndAnalyzeProject(root);
-  const exit = analysisExit(profile);
-  if (exit !== 0) throw new PlanningError("ANALYSIS_NOT_SUPPORTED", `Static analysis status is ${profile.status}.`);
-  const contractPath = relativeInside(root, contractInput);
-  const contract = await loadReviewedContract(root, contractPath, profile);
-  return { profile, config, contract };
-}
-
-async function contextCommand(cli: CliOptions, contractInput: string): Promise<number> {
-  if (!cli.explain) throw new ConfigError("context requires --explain because the exact outbound material must be reviewable.");
-  const root = projectRoot(cli);
-  const loaded = await loadContractFor(root, contractInput);
-  const config = resolveWorkspaceConfig(overrideConfig(loaded.config, cli), loaded.profile, loaded.contract.contract);
-  const manifest = await buildGuidedContextPreview(root, loaded.profile, loaded.contract.contract, config, cli.offline);
-  if (cli.json) output(manifest, true);
-  else {
-    const lines = [
-      `Context fingerprint: ${manifest.projectFingerprint}`,
-      `Selected: ${manifest.evidence.length} items, ${manifest.budget.usedEstimatedTokens} estimated tokens, ${manifest.redactionCount} redactions`,
-    ];
-    for (const item of manifest.evidence) {
-      const location = item.origin === "official_documentation" ? item.url : item.path;
-      lines.push("", `--- ${location}:${item.startLine}-${item.endLine} [${item.sha256}] ---`, item.content);
-    }
-    for (const exclusion of manifest.exclusions) lines.push(`Excluded ${exclusion.location}: ${exclusion.code} — ${exclusion.reason}`);
-    output(lines.join("\n"), false);
-  }
-  return 0;
-}
-
-async function generateCommand(cli: CliOptions, contractInput: string): Promise<{ code: number; outcome: WorkflowOutcome }> {
-  const root = projectRoot(cli);
-  const loaded = await loadContractFor(root, contractInput);
-  const config = resolveWorkspaceConfig(overrideConfig(loaded.config, cli), loaded.profile, loaded.contract.contract);
-  const provider = providerFor(config);
-  const outcome = await generateGuidedCodeChangeRun({
-    root,
-    profile: loaded.profile,
-    contract: loaded.contract.contract,
-    config,
-    provider,
-    offline: cli.offline,
-  });
-  output(cli.json ? outcome : outcomeText(outcome), cli.json);
-  return { code: outcomeExit(outcome), outcome };
-}
-
-async function validateCommand(cli: CliOptions, runId: string): Promise<number> {
-  const outcome = await validateGuidedCodeChangeRun({
-    runId,
-    sandboxImage: cli.sandboxImage,
-    dockerBinary: cli.dockerBinary,
-    manualChecksPassed: cli.manualPassed,
-  });
-  output(cli.json ? outcome : outcomeText(outcome), cli.json);
-  return outcomeExit(outcome);
-}
-
-async function applyCommand(cli: CliOptions, runId: string): Promise<number> {
-  const outcome = await applyVerifiedCodeChangeRun(runId);
-  output(cli.json ? outcome : outcomeText(outcome), cli.json);
-  return outcomeExit(outcome);
-}
-
-async function rollbackCommand(cli: CliOptions, runId: string): Promise<number> {
-  const outcome = await rollbackAppliedCodeChangeRun(runId);
-  output(cli.json ? outcome : outcomeText(outcome), cli.json);
-  return outcomeExit(outcome);
-}
-
-async function checkCommand(cli: CliOptions, rootInput?: string): Promise<number> {
-  const root = resolve(cli.root ?? rootInput ?? ".");
-  const { profile, config } = await loadConfigAndAnalyzeProject(root);
-  const profileExit = analysisExit(profile);
-  if (profileExit !== 0) {
-    output(cli.json ? profile : profileText(profile), cli.json);
-    return profileExit;
-  }
-  const sources = await discoverInstructionSourcesAndRejectTrackedSecrets(root, config);
-  const failures: string[] = [];
-  for (const source of sources.human) {
-    const contractPath = contractPathForSource(root, source);
-    try {
-      await loadReviewedContract(root, relative(root, contractPath), profile);
-    } catch (error) {
-      failures.push(`${source.relPath}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  if (failures.length > 0) {
-    output(cli.json ? { status: "STALE", failures } : `Check failed:\n${failures.map((item) => `  ${item}`).join("\n")}`, cli.json);
-    return 2;
-  }
-  output(cli.json ? { status: "VERIFIED", humanSources: sources.human.length, profileFingerprint: profile.fingerprint } : `Check passed: ${sources.human.length} .human source(s) have reviewed, current contracts.`, cli.json);
-  return 0;
-}
-
-async function migrateConfigCommand(cli: CliOptions, rootInput?: string): Promise<number> {
-  const root = resolve(cli.root ?? rootInput ?? ".");
-  const path = resolve(root, CONFIG_FILENAME);
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > 1024 * 1024) throw new ConfigError(`${CONFIG_FILENAME} must be a bounded regular file.`);
-  const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
-  const migrated = migrateLegacyConfig(raw);
-  const backup = `${path}.alpha.bak`;
-  const temporary = `${path}.migrating`;
-  await copyFile(path, backup, fsConstants.COPYFILE_EXCL);
-  try {
-    await writeFile(temporary, `${JSON.stringify(migrated, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-  output(`Migrated ${path}. Original preserved at ${backup}.`, cli.json);
-  return 0;
-}
-
 async function confirmYes(promptText: string): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
   const { createInterface } = await import("node:readline/promises");
@@ -552,7 +305,7 @@ function createSpinner(active: boolean): Spinner {
 /**
  * Simple `.human`/`@human` -> code flow: discover units, show a receipt, and on
  * confirmation write real code files. This is the default `human-to-code .`
- * behavior; the reviewed/validated pipeline is available under `guided`.
+ * behavior.
  */
 async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number> {
   const root = resolve(cli.root ?? rootInput ?? ".");
@@ -1029,68 +782,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   return written.length === 0 && skipped.length > 0 ? 5 : 0;
 }
 
-async function guided(cli: CliOptions, rootInput?: string): Promise<number> {
-  const root = resolve(cli.root ?? rootInput ?? ".");
-  const { profile, config: loadedConfig } = await loadConfigAndAnalyzeProject(root);
-  const profileExit = analysisExit(profile);
-  if (profileExit !== 0) {
-    output(cli.json ? profile : profileText(profile), cli.json);
-    return profileExit;
-  }
-  if (cli.dryRun) {
-    output(cli.json ? profile : profileText(profile), cli.json);
-    return 0;
-  }
-  const config = overrideConfig(loadedConfig, cli);
-  const sources = await discoverInstructionSourcesAndRejectTrackedSecrets(root, config);
-  let selected = sources.human;
-  if (cli.file) {
-    const wanted = relativeInside(root, cli.file);
-    selected = selected.filter((source) => source.relPath === wanted);
-  }
-  if (selected.length === 0) {
-    output(cli.json ? { status: "NEEDS_INPUT", message: "No matching .human change request was found.", profile } : `${profileText(profile)}\n\nNEEDS_INPUT: add a .human change request or select one with --file.`, cli.json);
-    return 3;
-  }
-  if (selected.length > 1) {
-    output(cli.json ? { status: "NEEDS_INPUT", sources: selected.map((source) => source.relPath) } : `NEEDS_INPUT: multiple .human sources exist; select one with --file:\n${selected.map((source) => `  ${source.relPath}`).join("\n")}`, cli.json);
-    return 3;
-  }
-  const source = selected[0]!;
-  const contractPath = contractPathForSource(root, source);
-  let reviewed;
-  try {
-    reviewed = await loadReviewedContract(root, relative(root, contractPath), profile);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof PlanningError && error.code === "UNREADABLE" && /ENOENT/u.test(error.message)) {
-      const draft = await createDraftContract(root, source, profile);
-      await writeDraftContract(draft);
-      output(cli.json ? { status: "NEEDS_INPUT", contract: draft.contractPath, draft: draft.contract } : `Created review draft ${draft.contractPath}. Review and resolve REVIEW-1, then rerun the same npx command.`, cli.json);
-      return 3;
-    }
-    output(cli.json ? { status: "NEEDS_INPUT", contract: contractPath, diagnostic: error instanceof Error ? error.message : String(error) } : `NEEDS_INPUT: ${error instanceof Error ? error.message : String(error)}\nReview ${contractPath}; generation will not bypass the contract gate.`, cli.json);
-    return 3;
-  }
-  const effectiveConfig = resolveWorkspaceConfig(config, profile, reviewed.contract);
-  const provider = providerFor(effectiveConfig);
-  const generated = await generateGuidedCodeChangeRun({ root, profile, contract: reviewed.contract, config: effectiveConfig, provider, offline: cli.offline });
-  if (generated.diff === undefined) {
-    output(cli.json ? generated : outcomeText(generated), cli.json);
-    return outcomeExit(generated);
-  }
-  const validated = await validateGuidedCodeChangeRun({
-    runId: generated.runId,
-    sandboxImage: cli.sandboxImage,
-    dockerBinary: cli.dockerBinary,
-    manualChecksPassed: cli.manualPassed,
-    provider,
-    config: effectiveConfig,
-  });
-  output(cli.json ? validated : outcomeText(validated), cli.json);
-  return outcomeExit(validated);
-}
-
-/** Maps a CLI command onto the direct or guided conversion workflow behind it. */
+/** Runs the direct conversion workflow. */
 export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   let cli: CliOptions;
   try {
@@ -1106,43 +798,7 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   }
   try {
     if (cli.init) return initConfig(projectRoot(cli, cli.positionals[0] ?? "."));
-    const first = cli.positionals[0];
-    const command = first && COMMANDS.has(first) ? first : undefined;
-    const args = command ? cli.positionals.slice(1) : cli.positionals;
-    if (command === "analyze") {
-      const profile = await analyzeProject(resolve(cli.root ?? args[0] ?? "."));
-      output(cli.json ? profile : profileText(profile), cli.json);
-      return analysisExit(profile);
-    }
-    if (command === "plan") {
-      if (!args[0]) throw new ConfigError("plan requires a .human file.");
-      return planCommand(cli, args[0]);
-    }
-    if (command === "context") {
-      if (!args[0]) throw new ConfigError("context requires a reviewed contract path.");
-      return contextCommand(cli, args[0]);
-    }
-    if (command === "generate") {
-      if (!args[0]) throw new ConfigError("generate requires a reviewed contract path.");
-      return (await generateCommand(cli, args[0])).code;
-    }
-    if (command === "validate") {
-      if (!args[0]) throw new ConfigError("validate requires a run id.");
-      return validateCommand(cli, args[0]);
-    }
-    if (command === "apply") {
-      if (!args[0]) throw new ConfigError("apply requires a run id.");
-      return applyCommand(cli, args[0]);
-    }
-    if (command === "rollback") {
-      if (!args[0]) throw new ConfigError("rollback requires a run id.");
-      return rollbackCommand(cli, args[0]);
-    }
-    if (command === "check") return checkCommand(cli, args[0]);
-    if (command === "migrate-config") return migrateConfigCommand(cli, args[0]);
-    if (command === "guided") return guided(cli, args[0]);
-    if (command === "build" || command === "convert") return await buildCommand(cli, args[0]);
-    return await buildCommand(cli, args[0]);
+    return await buildCommand(cli, cli.positionals[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof ContextSecurityError) {
@@ -1153,19 +809,11 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
       output(cli.json ? { status: "FAILED", dependency: "provider", code: error.code, diagnostic: message } : `Provider ${error.code}: ${message}`, cli.json);
       return 5;
     }
-    if (error instanceof DocumentationError) {
-      output(cli.json ? { status: "INCONCLUSIVE", dependency: "documentation", code: error.code, diagnostic: message } : `Documentation ${error.code}: ${message}`, cli.json);
-      return 5;
-    }
     if (error instanceof DiscoveryError && error.code === "PARTIAL_SCAN") {
       output(cli.json ? { status: "FAILED", code: error.code, diagnostic: message } : `Partial scan: ${message}`, cli.json);
       return 6;
     }
-    if (error instanceof PlanningError && ["STALE_PROFILE", "STALE_SOURCE", "INVALID_CONTRACT"].includes(error.code)) {
-      output(cli.json ? { status: "STALE", code: error.code, diagnostic: message } : `Stale or invalid contract: ${message}`, cli.json);
-      return 2;
-    }
-    if (error instanceof ConfigError || error instanceof PlanningError || error instanceof DiscoveryError) {
+    if (error instanceof ConfigError || error instanceof DiscoveryError) {
       output(cli.json ? { status: "ERROR", diagnostic: message } : `Error: ${message}`, cli.json);
       return 1;
     }

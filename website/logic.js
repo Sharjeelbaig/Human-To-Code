@@ -106,7 +106,7 @@
   if (heroLead && heroAccent && heroTarget && heroSourceLine && heroTargetLine && !reducedMotion.matches) {
     const heroPhrases = [
       { lead: "Human", accent: "Language", target: "Code" },
-      { lead: "Reviewed", accent: "Intent", target: "Safe Patches" },
+      { lead: "Plain", accent: "Language", target: "Real Code" },
       { lead: "Plain", accent: "Requests", target: "Safe Changes" },
       { lead: "Change", accent: "Contracts", target: "Grounded Code" },
     ];

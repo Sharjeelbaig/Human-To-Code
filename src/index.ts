@@ -1,5 +1,5 @@
 /**
- * Stable public API for embedding the Human-to-Code pipeline.
+ * Stable public API for embedding Human-to-Code.
  *
  * Exports are grouped by layer; see docs/ARCHITECTURE.md for how the layers
  * relate. The CLI (`src/cli.ts`) is a thin shell over this same surface.
@@ -76,7 +76,6 @@ export * from "./providers/schemas.ts";
 
 // Agents: model-facing orchestration with prompts and transport kept separate.
 export * from "./agents/direct/index.ts";
-export * from "./agents/guided/index.ts";
 export * from "./prompts/index.ts";
 
 // Pipeline: plan -> generate -> validate -> apply orchestration and storage.

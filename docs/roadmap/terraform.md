@@ -36,7 +36,7 @@ rename awareness (`moved` blocks).
 ## Risks & gates
 Everything that changes resource addresses (renames without `moved`),
 `destroy`-provoking changes, provider version bumps, and backend changes
-are elevated-risk. The tool must be explicit that `validate`-clean ≠
+are elevated-risk. The tool must be explicit that `validate`-clean !=
 apply-safe  -  plan/apply stay human-owned.
 
 ## Checklist

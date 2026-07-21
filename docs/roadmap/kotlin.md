@@ -8,7 +8,7 @@ Level 2 only: not in `LANGUAGE_PROFILES`; `.kt` not scanned for markers.
   because of SDK/emulator validation constraints).
 - Variants: `gradle-jvm`, then `android` (deferred until a headless
   validation story exists  -  unit tests only, no instrumented tests).
-- Versions: Kotlin ≥ 1.9 (from the Kotlin Gradle plugin version in the
+- Versions: Kotlin >= 1.9 (from the Kotlin Gradle plugin version in the
   version catalog or build script literals).
 
 ## Detection signals (static only)
