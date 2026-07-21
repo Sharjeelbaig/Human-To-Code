@@ -1179,6 +1179,22 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
     return await buildCommand(cli, cli.positionals[0]);
   } catch (error) {
     // these are error scenarios after successfully running the build command, for example, provider errors, discovery errors, etc.
+    /*
+    To reproduce these errors:
+
+    1. ContextSecurityError: Run the CLI without adding `"remoteProviderConsent": true` to your config, while explicitly asking for a remote provider:
+       npx human-to-code . --provider openai
+
+    2. ProviderError: Pass an invalid API key via the environment variable and force remote generation:
+       OPENAI_API_KEY=sk-fakekey npx human-to-code . --provider openai -y
+
+    3. DiscoveryError (PARTIAL_SCAN): Create a directory you don't have read access to in the project root:
+       mkdir unreadable_dir && chmod 000 unreadable_dir && npx human-to-code .
+       (Cleanup: chmod 755 unreadable_dir && rm -r unreadable_dir)
+
+    4. ConfigError: Provide an invalid provider option to the CLI:
+       npx human-to-code . --provider not-a-real-provider
+    */
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof ContextSecurityError) {
       output(
