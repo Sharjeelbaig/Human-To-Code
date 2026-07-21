@@ -1172,8 +1172,10 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
     return 0;
   }
   try {
-    if (cli.init)
+    if (cli.init) {
+      // This codeblock runs when the user passes the init flag for example `npx human-to-code . --init`
       return initConfig(projectRoot(cli, cli.positionals[0] ?? "."));
+    }
     return await buildCommand(cli, cli.positionals[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
