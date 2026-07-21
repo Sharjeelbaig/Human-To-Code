@@ -46,7 +46,7 @@ test("inline prompts state the exact insertion grammar", () => {
     surroundingSource: ".hero { <CURRENT_MARKER> }",
   });
   assert.match(prompt.system, /declarations only/u);
-  assert.match(prompt.system, /Do not repeat the current selector/u);
+  assert.match(prompt.system, /Do not output a selector, nested rule, braces/u);
   assert.match(prompt.user, /<INSERTION_CONTEXT>/u);
 });
 

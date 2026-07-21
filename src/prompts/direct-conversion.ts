@@ -39,7 +39,7 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
   const inlineScope = input.insertionContext === "jsx-child"
     ? "Output one valid JSX expression. The existing JSX braces around <CURRENT_MARKER> stay in the file, so do not add another outer pair of braces. Do not output CSS, a function body, or a complete component."
     : input.insertionContext === "css-declarations"
-      ? `Output CSS declarations only for the current rule body${input.insertionOwner ? ` (${input.insertionOwner})` : ""}, such as position: relative;. A nested rule is allowed only when its selector begins with &. Do not repeat the current selector or wrap the declarations in another copy of the rule.`
+      ? `Output CSS declarations only for the current rule body${input.insertionOwner ? ` (${input.insertionOwner})` : ""}, such as position: relative;. Do not output a selector, nested rule, braces, or another copy of the current rule unless the Current @human instruction explicitly requests a nested selector or state.`
       : input.insertionContext === "css-rule-list"
         ? "Output one or more complete CSS rules, including selectors and braces."
         : input.insertionContext === "html-content"
