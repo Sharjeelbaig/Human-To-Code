@@ -35,7 +35,7 @@ test("validateConfig fills v1 defaults", () => {
     enabled: true,
     projectBlueprint: true,
     fileTodo: true,
-    markerTodo: true,
+    markerTodo: false,
     maxCodingPassesPerUnit: 2,
   });
 });

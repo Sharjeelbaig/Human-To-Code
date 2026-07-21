@@ -72,17 +72,28 @@ async function requestChatCompletion(prompt: PromptMessages, options: GenerateOp
 /** Send one direct-conversion request to OpenAI-compatible chat or Ollama. */
 export async function generateCode(instruction: string, options: GenerateOptions): Promise<string> {
   const profile = languageProfile(options.language);
+  const extension = options.targetPath?.match(/\.[^.]+$/u)?.[0]?.toLowerCase();
+  const languageLabel = extension === ".tsx"
+    ? "TypeScript with JSX (TSX)"
+    : extension === ".jsx"
+      ? "JavaScript with JSX"
+      : profile.label;
   const prompt = buildDirectConversionPrompt({
-    languageLabel: profile.label,
+    languageLabel,
     ...(options.targetPath ? { targetPath: options.targetPath } : {}),
     instruction,
     inline: options.inline ?? false,
+    ...(options.insertionContext ? { insertionContext: options.insertionContext } : {}),
+    ...(options.insertionOwner ? { insertionOwner: options.insertionOwner } : {}),
+    ...(options.surroundingSource ? { surroundingSource: options.surroundingSource } : {}),
     ...(options.fileMemory ? { fileMemory: options.fileMemory } : {}),
     ...(options.projectMemory ? { projectMemory: options.projectMemory } : {}),
     ...(options.blueprint ? { blueprint: options.blueprint } : {}),
     ...(options.todos ? { todos: options.todos } : {}),
     ...(options.currentDraft ? { currentDraft: options.currentDraft } : {}),
     ...(options.unaddressedTodos ? { unaddressedTodos: options.unaddressedTodos } : {}),
+    ...(options.rejectedDraft ? { rejectedDraft: options.rejectedDraft } : {}),
+    ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
   });
   return requestChatCompletion(prompt, options);
 }

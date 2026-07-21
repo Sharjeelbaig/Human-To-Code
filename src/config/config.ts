@@ -247,7 +247,7 @@ const DEFAULT_CONFIG_VALUE: ConfigV1 = {
       enabled: true,
       projectBlueprint: true,
       fileTodo: true,
-      markerTodo: true,
+      markerTodo: false,
       maxCodingPassesPerUnit: 2,
     },
   },

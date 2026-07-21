@@ -270,7 +270,7 @@ test("a failed whole-file candidate withholds the complete conversion batch", as
     // rejected first and names the sibling that failed; with it off the batch
     // is withheld later. Either way no file is written and both units skip.
     assert.ok(done.skipped.some(({ reason }) =>
-      /whole-file conversion batch was withheld|cross-file integration group is incomplete/u.test(reason)));
+      /whole-file conversion batch was withheld|cross-file integration group is incomplete|related conversion group was withheld/u.test(reason)));
     await assert.rejects(access(join(root, "index.html")));
     await assert.rejects(access(join(root, "script.js")));
   } finally {

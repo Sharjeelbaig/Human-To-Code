@@ -181,6 +181,10 @@ export async function generateConversionUnits(
     let codingRequests = 0;
     let refinementRejected: string | undefined;
     let coverage: TodoCoverage = { addressed: [], unaddressed: [], unverifiable: [] };
+    let plannedTodos: UnitTodoList | undefined;
+    let planningAttempted = false;
+    let rejectedDraft: string | undefined;
+    let validationFailure: string | undefined;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       options.onProgress?.({ kind: "start", unit, attempt });
       try {
@@ -201,21 +205,24 @@ export async function generateConversionUnits(
         };
 
         // Planning enriches context; it is never allowed to fail the unit.
-        let todos: UnitTodoList | undefined;
-        if (options.plan) {
+        if (options.plan && options.shouldPlan?.(unit) !== false && !planningAttempted) {
+          planningAttempted = true;
           options.onProgress?.({ kind: "plan", unit });
           try {
-            todos = await options.plan(unit, baseContext);
+            plannedTodos = await options.plan(unit, baseContext);
             todoRequests += 1;
           } catch {
-            todos = undefined;
+            plannedTodos = undefined;
           }
         }
+        const todos = plannedTodos;
         const todoBlock = todos === undefined ? undefined : renderTodoList(todos.todos);
 
         const rawCode = await generator(unit, {
           ...baseContext,
           ...(todoBlock ? { todos: todoBlock } : {}),
+          ...(rejectedDraft ? { rejectedDraft } : {}),
+          ...(validationFailure ? { validationFailure } : {}),
         });
         codingRequests += 1;
         code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
@@ -262,6 +269,8 @@ export async function generateConversionUnits(
       } catch (error) {
         if (error instanceof ContextSecurityError) throw error;
         failure = error instanceof Error ? error.message : String(error);
+        if (code !== undefined && code.trim().length > 0) rejectedDraft = code;
+        validationFailure = failure;
         code = undefined;
       }
     }

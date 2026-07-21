@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import ts from "typescript";
 import { replaceInlineMarker } from "./replacement.ts";
-import type { ConversionUnit } from "./types.ts";
+import type { ConversionUnit, GeneratedConversionUnit } from "./types.ts";
 
 export class DirectCandidateValidationError extends Error {
   constructor(message: string) {
@@ -134,6 +134,47 @@ function typeScriptSyntaxDiagnostics(text: string, sourcePath: string): Candidat
     });
 }
 
+function validateCssReplacement(unit: ConversionUnit, code: string): void {
+  if (unit.insertionContext === "css-declarations") {
+    if (/[{}]/u.test(code) && !/(?:^|[;}])\s*&[^{}]*\{/u.test(code)) {
+      throw new DirectCandidateValidationError(
+        `${unit.sourcePath}: this marker is inside a CSS rule; the replacement repeated or introduced a non-relative selector instead of adding declarations.`,
+      );
+    }
+    const hasRelativeRule = /(?:^|[;}])\s*&[^{}]*\{/u.test(code);
+    if (!hasRelativeRule && !/(?:^|;)\s*--?[A-Za-z_][\w-]*\s*:/u.test(`;${code}`) && !/(?:^|;)\s*[A-Za-z-]+\s*:/u.test(`;${code}`)) {
+      throw new DirectCandidateValidationError(
+        `${unit.sourcePath}: this marker is inside a CSS rule but the replacement contains no CSS declaration.`,
+      );
+    }
+  }
+  if (unit.insertionContext === "css-rule-list") {
+    let depth = 0;
+    for (const char of code.replace(/\/\*[\s\S]*?\*\//gu, "")) {
+      if (char === "{") depth += 1;
+      if (char === "}") depth -= 1;
+      if (depth < 0) break;
+    }
+    if (depth !== 0 || !code.includes("{")) {
+      throw new DirectCandidateValidationError(
+        `${unit.sourcePath}: this marker is between CSS rules and requires complete balanced rules.`,
+      );
+    }
+  }
+}
+
+function normalizedCssHeader(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
+}
+
+/** Unwrap the common exact-current-rule repetition without guessing at other output. */
+export function normalizeGeneratedUnitCode(unit: ConversionUnit, code: string): string {
+  if (unit.insertionContext !== "css-declarations" || !unit.insertionOwner) return code;
+  const match = code.trim().match(/^([^{}]+)\{([\s\S]*)\}\s*$/u);
+  if (!match || normalizedCssHeader(match[1]!) !== normalizedCssHeader(unit.insertionOwner)) return code;
+  return match[2]!.trim();
+}
+
 async function sourceAndCandidateForUnit(
   unit: ConversionUnit,
   code: string,
@@ -152,6 +193,31 @@ export async function candidateTextForUnit(unit: ConversionUnit, code: string): 
   return (await sourceAndCandidateForUnit(unit, code)).candidate;
 }
 
+/** Build complete candidate text per target, combining every marker in a file. */
+export async function candidateTextsForGenerated(
+  generated: readonly GeneratedConversionUnit[],
+): Promise<Map<string, string>> {
+  const byPath = new Map<string, GeneratedConversionUnit[]>();
+  for (const item of generated) {
+    const path = item.unit.kind === "file" ? item.unit.outputPath! : item.unit.sourcePath;
+    byPath.set(path, [...(byPath.get(path) ?? []), item]);
+  }
+  const candidates = new Map<string, string>();
+  for (const [path, items] of byPath) {
+    if (items.some((item) => item.error !== undefined || item.code.trim().length === 0)) continue;
+    if (items[0]!.unit.kind === "file") {
+      candidates.set(path, items[0]!.code);
+      continue;
+    }
+    let content = await readFile(items[0]!.unit.absoluteSource, "utf8");
+    for (const item of [...items].sort((left, right) => right.unit.range!.start - left.unit.range!.start)) {
+      content = replaceInlineMarker(content, item.unit.range!, item.unit.expectedMarker, item.code);
+    }
+    candidates.set(path, content);
+  }
+  return candidates;
+}
+
 /** Validate the complete candidate file before any direct-agent write occurs. */
 export async function validateGeneratedUnit(unit: ConversionUnit, code: string): Promise<void> {
   if (code.trim().length === 0) throw new DirectCandidateValidationError(`${unit.sourcePath}: model returned no code.`);
@@ -159,6 +225,7 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
     throw new DirectCandidateValidationError(`${unit.sourcePath}: model formatting remained in generated source.`);
   }
   const sourcePath = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+  if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);
   if (UNBALANCED_TEXT_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;
   const { baseline, candidate } = await sourceAndCandidateForUnit(unit, code);
   const typescript = TYPESCRIPT_EXTENSIONS.has(extname(sourcePath).toLowerCase());

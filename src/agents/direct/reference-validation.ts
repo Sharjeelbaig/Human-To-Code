@@ -12,7 +12,7 @@ import { dirname, extname, resolve as resolvePath, sep } from "node:path";
 import { cssFacts, htmlFacts, javaScriptFacts } from "./project-contracts.ts";
 
 /** Files whose cross-references this module understands. */
-export const REFERENCE_EXTENSIONS = new Set([".html", ".htm", ".css", ".js", ".jsx", ".mjs"]);
+export const REFERENCE_EXTENSIONS = new Set([".html", ".htm", ".css", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 
 /**
  * `blocking` marks a broken reference — a name used that exists nowhere, or a
@@ -236,7 +236,7 @@ function push(
 export function collectReferenceFindings(files: readonly ReferenceFile[]): ReferenceFinding[] {
   const html = files.filter((file) => [".html", ".htm"].includes(extname(file.path).toLowerCase()));
   const css = files.filter((file) => extname(file.path).toLowerCase() === ".css");
-  const scripts = files.filter((file) => [".js", ".jsx", ".mjs"].includes(extname(file.path).toLowerCase()));
+  const scripts = files.filter((file) => [".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(extname(file.path).toLowerCase()));
   const findings: ReferenceFinding[] = [];
   const counts = new Map<ReferenceFindingCode, number>();
   if (html.length === 0 && css.length === 0 && scripts.length === 0) return findings;
@@ -263,6 +263,7 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
   const toggledClasses = new Set<string>();
   for (const facts of scriptByFile.values()) {
     for (const value of facts.toggledClasses) if (value.length > 0) toggledClasses.add(value);
+    for (const value of facts.renderedClasses) if (value.length > 0) htmlClasses.add(value);
   }
 
   // Blocking: a script queries a class or id that no markup in the project defines.

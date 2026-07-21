@@ -156,7 +156,7 @@ once  -  and nothing makes two independently generated files agree on any of it.
 | `enabled` | boolean | `true` | The one off switch. `false` restores exactly one model request per unit and skips every planning pass, whatever the siblings below say. |
 | `projectBlueprint` | boolean | `true` | One shared request before any file is generated, settling the file roster and the vocabulary  -  class names, ids, exported symbols, routes  -  that every target has to use verbatim. Skipped automatically when fewer than two files are planned. |
 | `fileTodo` | boolean | `true` | One todo-list request per whole-file `.human` target. |
-| `markerTodo` | boolean | `true` | One todo-list request per inline `@human` marker. |
+| `markerTodo` | boolean | `false` | One todo-list request per inline `@human` marker. Keep this off for small marker replacements. |
 | `maxCodingPassesPerUnit` | integer | `2` | `1`-`3`. A second pass happens **only** when the deterministic coverage check finds todo items the first pass didn't address, and it's kept only if it preserved everything the previous pass produced. Set it to `1` to code every target in a single request. |
 
 **Request arithmetic.** For `N` units, `F` of which are whole files, the defaults
@@ -244,7 +244,7 @@ This is exactly what `human-to-code --init` writes.
       "enabled": true,
       "projectBlueprint": true,
       "fileTodo": true,
-      "markerTodo": true,
+      "markerTodo": false,
       "maxCodingPassesPerUnit": 2
     }
   }

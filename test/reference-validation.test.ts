@@ -206,6 +206,15 @@ test("a generated stylesheet is checked against untouched existing markup", () =
   assert.match(unused[0]!.detail, /ghost/u);
 });
 
+test("static TSX className values count as generated markup for CSS references", () => {
+  const findings = collectReferenceFindings([
+    { path: "index.html", content: '<div id="root"></div>', generated: false },
+    { path: "Hero.tsx", content: 'export function Hero() { return <div className="hero hero-gradient" />; }', generated: true },
+    { path: "hero.css", content: ".hero { position: relative; } .hero-gradient { background: linear-gradient(red, blue); }", generated: true },
+  ]);
+  assert.equal(findings.some((finding) => finding.code === "CSS_SELECTOR_UNUSED"), false);
+});
+
 test("findings are bounded and single-line", () => {
   const classes = Array.from({ length: 40 }, (_, index) => `<div class="drift-${index}"></div>`).join("");
   const findings = collectReferenceFindings([

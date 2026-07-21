@@ -19,6 +19,11 @@ export interface WholeFileApplication {
   code: string;
 }
 
+export interface InlineFileApplication {
+  unit: ConversionUnit;
+  code: string;
+}
+
 function wholeFileTarget(absoluteRoot: string, unit: ConversionUnit): string {
   if (unit.kind !== "file") throw new DirectApplicationError("Whole-file batch contains an inline unit.");
   const target = resolve(absoluteRoot, unit.outputPath!);
@@ -110,6 +115,29 @@ export async function applyUnit(root: string, unit: ConversionUnit, code: string
   }
   await writeFile(unit.absoluteSource, replaced);
   return unit.sourcePath;
+}
+
+/** Apply every accepted marker in one existing file with one stale check and write. */
+export async function applyInlineFileBatch(applications: readonly InlineFileApplication[]): Promise<string> {
+  if (applications.length === 0) throw new DirectApplicationError("Inline batch is empty.");
+  const first = applications[0]!.unit;
+  if (first.kind !== "inline") throw new DirectApplicationError("Inline batch contains a whole-file unit.");
+  if (applications.some(({ unit }) => unit.kind !== "inline" || unit.absoluteSource !== first.absoluteSource)) {
+    throw new DirectApplicationError("Inline batch spans more than one source file.");
+  }
+  let content = await readFile(first.absoluteSource, "utf8");
+  const ordered = [...applications].sort((left, right) => right.unit.range!.start - left.unit.range!.start);
+  try {
+    for (const { unit, code } of ordered) {
+      content = replaceInlineMarker(content, unit.range!, unit.expectedMarker, code);
+    }
+  } catch (error) {
+    throw new DirectApplicationError(
+      `${first.sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  await writeFile(first.absoluteSource, content);
+  return first.sourcePath;
 }
 
 export async function pathExists(target: string): Promise<boolean> {

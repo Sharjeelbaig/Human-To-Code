@@ -30,6 +30,12 @@ export interface ConversionUnit {
   expectedMarker?: string;
   /** 1-based source line of the marker, for progress display. */
   line?: number;
+  /** Grammar position receiving an inline replacement. */
+  insertionContext?: "statement" | "jsx-child" | "css-declarations" | "css-rule-list" | "html-content";
+  /** Existing CSS rule header when the marker sits inside a declaration body. */
+  insertionOwner?: string;
+  /** Bounded source around the marker, with the marker replaced by a placeholder. */
+  surroundingSource?: string;
   /** Short human-readable description for the receipt. */
   describe: string;
 }
@@ -50,6 +56,10 @@ export interface UnitGenerationContext {
   currentDraft?: string;
   /** Todo items the deterministic coverage check did not find in the draft. */
   unaddressedTodos?: readonly string[];
+  /** Candidate rejected by the deterministic gate on a previous attempt. */
+  rejectedDraft?: string;
+  /** Exact deterministic reason the previous candidate was rejected. */
+  validationFailure?: string;
 }
 
 export interface ProjectRelationship {
@@ -109,6 +119,8 @@ export interface GenerateUnitsOptions {
    * the single-pass path: planning enriches context and must never fail a unit.
    */
   plan?: (unit: ConversionUnit, context: UnitGenerationContext) => Promise<UnitTodoList | undefined>;
+  /** Fast deterministic check that avoids calling the planner for disabled unit kinds. */
+  shouldPlan?: (unit: ConversionUnit) => boolean;
   /** Coding requests allowed per unit. 1 disables refinement entirely. */
   maxCodingPasses?: number;
   /** Collected per-unit planning outcomes, for run disclosure. */
@@ -142,6 +154,11 @@ export interface GenerateOptions {
   apiKey?: string;
   /** Whether this request replaces one inline @human marker. */
   inline?: boolean;
+  /** Grammar position receiving an inline replacement. */
+  insertionContext?: ConversionUnit["insertionContext"];
+  insertionOwner?: string;
+  /** Bounded source around the marker. */
+  surroundingSource?: string;
   /** Deterministic earlier replacements from the same file. */
   fileMemory?: string;
   /** Compact current/projected repository evidence for this exact target. */
@@ -154,6 +171,10 @@ export interface GenerateOptions {
   currentDraft?: string;
   /** Todo items not found in the draft. */
   unaddressedTodos?: readonly string[];
+  /** Candidate rejected by the deterministic gate on a previous attempt. */
+  rejectedDraft?: string;
+  /** Exact deterministic reason the previous candidate was rejected. */
+  validationFailure?: string;
   signal?: AbortSignal;
 }
 

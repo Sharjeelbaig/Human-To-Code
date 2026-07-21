@@ -25,6 +25,51 @@ const DEFAULT_IGNORES = new Set([
   "coverage", ".human-to-code",
 ]);
 
+function cssInsertionDetails(source: string, markerStart: number): {
+  context: "css-declarations" | "css-rule-list";
+  owner?: string;
+} {
+  const prefix = source.slice(0, markerStart).replace(/\/\*[\s\S]*?\*\//gu, " ");
+  const stack: string[] = [];
+  let prelude = "";
+  for (const char of prefix) {
+    if (char === "{") {
+      stack.push(prelude.trim());
+      prelude = "";
+    } else if (char === "}") {
+      stack.pop();
+      prelude = "";
+    } else if (char === ";") {
+      prelude = "";
+    } else {
+      prelude += char;
+      if (prelude.length > 300) prelude = prelude.slice(-300);
+    }
+  }
+  const owner = stack[stack.length - 1] ?? "";
+  return owner.length > 0 && !/^@(media|supports|layer|container|document|scope)\b/iu.test(owner)
+    ? { context: "css-declarations", owner }
+    : { context: "css-rule-list" };
+}
+
+function insertionContextFor(path: string, source: string, start: number, marker: string): ConversionUnit["insertionContext"] {
+  const extension = extname(path).toLowerCase();
+  if (extension === ".css") return cssInsertionDetails(source, start).context;
+  if (
+    [".tsx", ".jsx"].includes(extension)
+    && source.slice(Math.max(0, start - 1), start) === "{"
+    && source.slice(start + marker.length, start + marker.length + 1) === "}"
+  ) return "jsx-child";
+  if ([".html", ".htm"].includes(extension)) return "html-content";
+  return "statement";
+}
+
+function surroundingSource(source: string, start: number, end: number): string {
+  const before = source.slice(Math.max(0, start - 700), start);
+  const after = source.slice(end, Math.min(source.length, end + 700));
+  return `${before}<CURRENT_MARKER>${after}`;
+}
+
 async function walk(root: string, ignores: ReadonlySet<string>): Promise<string[]> {
   const results: string[] = [];
   const visit = async (dir: string, depth: number): Promise<void> => {
@@ -207,6 +252,10 @@ export async function discoverDirectUnits(
     if (!content.includes("@human")) continue;
     for (const marker of extractInlineMarkers(content, rel)) {
       const line = content.slice(0, marker.start).split("\n").length;
+      const expectedMarker = content.slice(marker.start, marker.end);
+      const cssDetails = extname(rel).toLowerCase() === ".css"
+        ? cssInsertionDetails(content, marker.start)
+        : undefined;
       units.push({
         kind: "inline",
         sourcePath: rel,
@@ -214,7 +263,10 @@ export async function discoverDirectUnits(
         prompt: marker.prompt,
         language: languageForExtension(extname(absolute)) ?? primary,
         range: { start: marker.start, end: marker.end },
-        expectedMarker: content.slice(marker.start, marker.end),
+        expectedMarker,
+        insertionContext: insertionContextFor(rel, content, marker.start, expectedMarker),
+        ...(cssDetails?.owner ? { insertionOwner: cssDetails.owner } : {}),
+        surroundingSource: surroundingSource(content, marker.start, marker.end),
         line,
         describe: `${rel}  (inline @human, line ${line})  ->  ${rel}`,
       });

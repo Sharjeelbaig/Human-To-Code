@@ -7,6 +7,9 @@ export interface DirectConversionPromptInput {
   targetPath?: string;
   instruction: string;
   inline: boolean;
+  insertionContext?: "statement" | "jsx-child" | "css-declarations" | "css-rule-list" | "html-content";
+  insertionOwner?: string;
+  surroundingSource?: string;
   fileMemory?: string;
   projectMemory?: string;
   /** Rendered shared-contract block agreed for this run, when planning is on. */
@@ -17,6 +20,8 @@ export interface DirectConversionPromptInput {
   currentDraft?: string;
   /** Todo items the deterministic coverage check could not find in the draft. */
   unaddressedTodos?: readonly string[];
+  rejectedDraft?: string;
+  validationFailure?: string;
 }
 
 export interface PromptMessages {
@@ -31,8 +36,17 @@ function promptPath(path: string): string {
 /** Model-facing instructions for the direct conversion agent. */
 export function buildDirectConversionPrompt(input: DirectConversionPromptInput): PromptMessages {
   const target = input.targetPath === undefined ? "the requested target" : promptPath(input.targetPath);
+  const inlineScope = input.insertionContext === "jsx-child"
+    ? "Output one valid JSX expression. The existing JSX braces around <CURRENT_MARKER> stay in the file, so do not add another outer pair of braces. Do not output CSS, a function body, or a complete component."
+    : input.insertionContext === "css-declarations"
+      ? `Output CSS declarations only for the current rule body${input.insertionOwner ? ` (${input.insertionOwner})` : ""}, such as position: relative;. A nested rule is allowed only when its selector begins with &. Do not repeat the current selector or wrap the declarations in another copy of the rule.`
+      : input.insertionContext === "css-rule-list"
+        ? "Output one or more complete CSS rules, including selectors and braces."
+        : input.insertionContext === "html-content"
+          ? "Output only HTML content valid at this exact location."
+          : "Output only the code replacing this one inline @human marker, usually one or a few statements.";
   const scope = input.inline
-    ? "Output only the code replacing this one inline @human marker, usually one or a few statements."
+    ? inlineScope
     : `Output the complete contents of ${target}, and only that file.`;
   return {
     system: [
@@ -60,6 +74,9 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
       ...(input.currentDraft ? [
         `${(input.blueprint ? 1 : 0) + (input.todos ? 1 : 0) + 10}. CURRENT_DRAFT is your previous complete output for this target. Return the complete file including everything already working in the draft, plus the unaddressed items. Removing or shortening existing correct content is an error.`,
       ] : []),
+      ...(input.rejectedDraft ? [
+        `${(input.blueprint ? 1 : 0) + (input.todos ? 1 : 0) + (input.currentDraft ? 1 : 0) + 10}. REJECTED_DRAFT failed a deterministic gate. Correct the exact VALIDATION_FAILURE and return a replacement for the same target and marker. Do not repeat the rejected draft.`,
+      ] : []),
       "",
       "Before answering, silently verify: correct target scope; required companion links/imports; exact relative paths; contract-compatible names; valid syntax; code-only output.",
     ].join("\n"),
@@ -72,6 +89,9 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
         : []),
       ...(input.fileMemory
         ? ["<FILE_MEMORY>", "Ephemeral static declarations and earlier replacements in this target:", input.fileMemory, "</FILE_MEMORY>", ""]
+        : []),
+      ...(input.surroundingSource
+        ? ["<INSERTION_CONTEXT>", "The literal <CURRENT_MARKER> is the only replacement point:", input.surroundingSource, "</INSERTION_CONTEXT>", ""]
         : []),
       ...(input.todos
         ? ["<TODO_LIST>", input.todos, "</TODO_LIST>", ""]
@@ -88,6 +108,17 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
             ...(input.unaddressedTodos && input.unaddressedTodos.length > 0
               ? ["These todo items were not found in the draft:", ...input.unaddressedTodos.map((item) => `- ${item}`), ""]
               : []),
+          ]
+        : []),
+      ...(input.rejectedDraft
+        ? [
+            "<REJECTED_DRAFT>",
+            input.rejectedDraft,
+            "</REJECTED_DRAFT>",
+            "<VALIDATION_FAILURE>",
+            input.validationFailure ?? "The candidate was rejected.",
+            "</VALIDATION_FAILURE>",
+            "",
           ]
         : []),
       input.inline

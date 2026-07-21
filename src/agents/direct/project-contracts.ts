@@ -86,6 +86,8 @@ export interface JavaScriptFacts {
   selectors: string[];
   /** Class names passed to classList add/remove/toggle/contains. */
   toggledClasses: string[];
+  /** Static class and className tokens rendered by JSX or DOM-like templates. */
+  renderedClasses: string[];
   /** True when the source assigns `.hidden` or sets the `hidden` attribute. */
   togglesHiddenAttribute: boolean;
 }
@@ -141,6 +143,8 @@ export function javaScriptFacts(content: string): JavaScriptFacts {
       content,
       /\bclassList\s*\.\s*(?:add|remove|toggle|contains)\s*\(\s*["']([^"']+)["']/gu,
     ).flatMap((value) => value.split(/\s+/u)),
+    renderedClasses: matches(content, /\bclass(?:Name)?\s*=\s*["']([^"']+)["']/giu)
+      .flatMap((value) => value.split(/\s+/u)),
     togglesHiddenAttribute: /\.hidden\s*=|\b(?:set|remove)Attribute\s*\(\s*["']hidden["']/u.test(content),
   };
 }

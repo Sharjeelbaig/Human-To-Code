@@ -24,9 +24,11 @@ import { ProviderError, type ProviderAdapter } from "./providers/provider.ts";
 import { createOllamaProvider, createOpenAIProvider } from "./providers/providers.ts";
 import {
   applyWholeFileBatch,
-  applyUnit,
+  applyInlineFileBatch,
   buildProjectMemory,
   collectReferenceFindings,
+  candidateTextsForGenerated,
+  normalizeGeneratedUnitCode,
   conditionalRequestAllowance,
   plannedRequestCounts,
   discoverDirectUnits,
@@ -45,6 +47,7 @@ import {
   renderReceipt,
   validateCandidateProject,
   validateGeneratedUnit,
+  withholdIncompleteRelatedTargets,
   type ConversionUnit,
   type ConversionProgress,
   type IntegrationProgress,
@@ -433,7 +436,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   let blueprint: ProjectBlueprint | undefined;
   let blueprintRequests = 0;
   let blueprintNotice: string | undefined;
-  if (planning.enabled && planning.projectBlueprint && plannedTargets.length >= 2) {
+  const wholeFileTargets = new Set(units.filter((unit) => unit.kind === "file").map((unit) => unit.outputPath));
+  if (planning.enabled && planning.projectBlueprint && wholeFileTargets.size >= 2) {
     if (interactive) spinner.label(`agreeing a shared contract across ${plannedTargets.length} file(s)`);
     blueprintRequests = 1;
     try {
@@ -493,8 +497,11 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
           language: unit.language ?? language,
           ...requestOptions,
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
+          ...(unit.insertionContext ? { insertionContext: unit.insertionContext } : {}),
+          ...(unit.insertionOwner ? { insertionOwner: unit.insertionOwner } : {}),
+          ...(unit.surroundingSource ? { surroundingSource: unit.surroundingSource } : {}),
           ...context,
-        });
+        }).then((code) => normalizeGeneratedUnitCode(unit, code));
       },
       {
         retries: 1,
@@ -503,6 +510,7 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         contextCharBudget,
         maxCodingPasses: planning.enabled ? planning.maxCodingPassesPerUnit : 1,
         ...(planningEnabledFor !== undefined ? { plan: planningEnabledFor } : {}),
+        ...(planningEnabledFor !== undefined ? { shouldPlan: todoEnabled } : {}),
         onPlanningOutcome: (outcome) => planningOutcomes.push(outcome),
         ...(onProgress ? { onProgress } : {}),
       },
@@ -515,6 +523,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     return 5;
   }
 
+  generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+
   // Optional and off by default. ProjectMemory supplies language-aware
   // relationships; this orchestrator remains cross-language and performs a
   // Deterministic cross-file reference checking. No model request: the same
@@ -525,12 +535,11 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     if (interactive) spinner.label("cross-checking generated references");
     const referenceFiles: ReferenceFile[] = [];
     const seenReferencePaths = new Set<string>();
-    for (const item of generated) {
-      if (item.error !== undefined || item.code.trim().length === 0) continue;
-      const target = item.unit.kind === "file" ? item.unit.outputPath! : item.unit.sourcePath;
+    const completeCandidates = await candidateTextsForGenerated(generated);
+    for (const [target, content] of completeCandidates) {
       if (!REFERENCE_EXTENSIONS.has(extname(target).toLowerCase()) || seenReferencePaths.has(target)) continue;
       seenReferencePaths.add(target);
-      referenceFiles.push({ path: target, content: item.code, generated: true });
+      referenceFiles.push({ path: target, content, generated: true });
     }
     // Untouched project files provide the other half of every cross-reference.
     for (const path of discovery.scannedPaths) {
@@ -664,6 +673,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   }
   spinner.stop();
 
+  generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+
   // Apply bottom-to-top so replacing a later marker cannot invalidate an
   // earlier marker's range.
   const ordered = [...generated].sort((left, right) => {
@@ -709,24 +720,26 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     else if (item.code.trim().length === 0) skipped.push({ source: item.unit.sourcePath, reason: "empty model output" });
   }
 
-  for (const { unit, code, error } of ordered.filter((item) => item.unit.kind === "inline")) {
-    if (error !== undefined) {
-      skipped.push({ source: unit.sourcePath, reason: error });
-      continue; // already reported live via onProgress
-    }
-    if (code.trim().length === 0) {
-      skipped.push({ source: unit.sourcePath, reason: "empty model output" });
-      if (!cli.json) output(`  ⊘ skipped ${describeUnit(unit)}: empty model output`, false);
-      continue;
-    }
+  const inline = ordered.filter((item) => item.unit.kind === "inline");
+  for (const item of inline) {
+    if (item.error !== undefined) skipped.push({ source: item.unit.sourcePath, reason: item.error });
+    else if (item.code.trim().length === 0) skipped.push({ source: item.unit.sourcePath, reason: "empty model output" });
+  }
+  const applicableInlineByPath = new Map<string, typeof inline>();
+  for (const item of inline.filter((entry) => entry.error === undefined && entry.code.trim().length > 0)) {
+    applicableInlineByPath.set(item.unit.sourcePath, [...(applicableInlineByPath.get(item.unit.sourcePath) ?? []), item]);
+  }
+  for (const applications of applicableInlineByPath.values()) {
     try {
-      const path = await applyUnit(root, unit, code);
+      const path = await applyInlineFileBatch(applications);
       written.push(path);
-      if (!cli.json) output(`  ✓ ${describeUnit(unit)}`, false);
+      if (!cli.json) for (const item of applications) output(`  yes ${describeUnit(item.unit)}`, false);
     } catch (applyError) {
       const reason = applyError instanceof Error ? applyError.message : String(applyError);
-      skipped.push({ source: unit.sourcePath, reason });
-      if (!cli.json) output(`  ⊘ skipped ${describeUnit(unit)}: ${reason}`, false);
+      for (const item of applications) {
+        skipped.push({ source: item.unit.sourcePath, reason });
+        if (!cli.json) output(`  no skipped ${describeUnit(item.unit)}: ${reason}`, false);
+      }
     }
   }
   const seconds = Math.round((Date.now() - started) / 1000);
