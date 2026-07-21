@@ -21,7 +21,10 @@ import {
 import { ContextSecurityError } from "./context/context.ts";
 import { DiscoveryError } from "./config/discovery.ts";
 import { ProviderError, type ProviderAdapter } from "./providers/provider.ts";
-import { createOllamaProvider, createOpenAIProvider } from "./providers/providers.ts";
+import {
+  createOllamaProvider,
+  createOpenAIProvider,
+} from "./providers/providers.ts";
 import {
   applyWholeFileBatch,
   applyInlineFileBatch,
@@ -92,7 +95,13 @@ Exit codes:
   6 internal error or partial scan
 `;
 
-const PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama", "grok", "gemini"];
+const PROVIDERS: readonly ProviderName[] = [
+  "openai",
+  "anthropic",
+  "ollama",
+  "grok",
+  "gemini",
+];
 
 interface CliOptions {
   positionals: string[];
@@ -162,15 +171,29 @@ function parse(argv: string[]): CliOptions {
     help: values.help === true,
     ...(typeof values.root === "string" ? { root: values.root } : {}),
     ...(typeof values.file === "string" ? { file: values.file } : {}),
-    ...(typeof values.provider === "string" ? { provider: values.provider } : {}),
+    ...(typeof values.provider === "string"
+      ? { provider: values.provider }
+      : {}),
     ...(typeof values.model === "string" ? { model: values.model } : {}),
-    ...(typeof values["base-url"] === "string" ? { baseUrl: values["base-url"] } : {}),
-    ...(typeof values["api-key-env"] === "string" ? { apiKeyEnv: values["api-key-env"] } : {}),
-    ...(typeof values["input-cost-per-million"] === "string" ? { inputCostPerMillion: values["input-cost-per-million"] } : {}),
-    ...(typeof values["output-cost-per-million"] === "string" ? { outputCostPerMillion: values["output-cost-per-million"] } : {}),
+    ...(typeof values["base-url"] === "string"
+      ? { baseUrl: values["base-url"] }
+      : {}),
+    ...(typeof values["api-key-env"] === "string"
+      ? { apiKeyEnv: values["api-key-env"] }
+      : {}),
+    ...(typeof values["input-cost-per-million"] === "string"
+      ? { inputCostPerMillion: values["input-cost-per-million"] }
+      : {}),
+    ...(typeof values["output-cost-per-million"] === "string"
+      ? { outputCostPerMillion: values["output-cost-per-million"] }
+      : {}),
     unmeteredProvider: values["unmetered-provider"] === true,
-    ...(typeof values["sandbox-image"] === "string" ? { sandboxImage: values["sandbox-image"] } : {}),
-    ...(typeof values["docker-binary"] === "string" ? { dockerBinary: values["docker-binary"] } : {}),
+    ...(typeof values["sandbox-image"] === "string"
+      ? { sandboxImage: values["sandbox-image"] }
+      : {}),
+    ...(typeof values["docker-binary"] === "string"
+      ? { dockerBinary: values["docker-binary"] }
+      : {}),
   };
 }
 
@@ -190,19 +213,31 @@ function projectRoot(cli: CliOptions, fallback = "."): string {
 async function initConfig(root: string): Promise<number> {
   const target = resolve(root, CONFIG_FILENAME);
   try {
-    await writeFile(target, defaultConfigJson(), { encoding: "utf8", mode: 0o600, flag: "wx" });
+    await writeFile(target, defaultConfigJson(), {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new ConfigError(`${CONFIG_FILENAME} already exists; it was not overwritten.`);
+    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+      throw new ConfigError(
+        `${CONFIG_FILENAME} already exists; it was not overwritten.`,
+      );
     throw error;
   }
-  console.log(`Wrote ${target}. Review provider, model, privacy consent, sandbox, and budgets before remote generation.`);
+  console.log(
+    `Wrote ${target}. Review provider, model, privacy consent, sandbox, and budgets before remote generation.`,
+  );
   return 0;
 }
 
 function overrideConfig(config: ConfigV1, cli: CliOptions): ConfigV1 {
   const raw = structuredClone(config) as ConfigV1;
   if (cli.provider !== undefined) {
-    if (!PROVIDERS.includes(cli.provider as ProviderName)) throw new ConfigError(`Unknown provider ${JSON.stringify(cli.provider)}.`);
+    if (!PROVIDERS.includes(cli.provider as ProviderName))
+      throw new ConfigError(
+        `Unknown provider ${JSON.stringify(cli.provider)}.`,
+      );
     const name = cli.provider as ProviderName;
     if (raw.provider.name !== name) {
       raw.provider = { name, model: cli.model ?? defaultModelFor(name) };
@@ -211,15 +246,23 @@ function overrideConfig(config: ConfigV1, cli: CliOptions): ConfigV1 {
   if (cli.model !== undefined) raw.provider.model = cli.model;
   if (cli.baseUrl !== undefined) raw.provider.baseUrl = cli.baseUrl;
   if (cli.apiKeyEnv !== undefined) raw.provider.apiKeyEnv = cli.apiKeyEnv;
-  if (cli.inputCostPerMillion !== undefined || cli.outputCostPerMillion !== undefined || cli.unmeteredProvider) {
-    const input = cli.inputCostPerMillion === undefined
-      ? raw.provider.pricing?.inputUsdPerMillionTokens
-      : Number(cli.inputCostPerMillion);
-    const output = cli.outputCostPerMillion === undefined
-      ? raw.provider.pricing?.outputUsdPerMillionTokens
-      : Number(cli.outputCostPerMillion);
+  if (
+    cli.inputCostPerMillion !== undefined ||
+    cli.outputCostPerMillion !== undefined ||
+    cli.unmeteredProvider
+  ) {
+    const input =
+      cli.inputCostPerMillion === undefined
+        ? raw.provider.pricing?.inputUsdPerMillionTokens
+        : Number(cli.inputCostPerMillion);
+    const output =
+      cli.outputCostPerMillion === undefined
+        ? raw.provider.pricing?.outputUsdPerMillionTokens
+        : Number(cli.outputCostPerMillion);
     if (input === undefined || output === undefined) {
-      throw new ConfigError("Both remote input and output cost upper bounds are required.");
+      throw new ConfigError(
+        "Both remote input and output cost upper bounds are required.",
+      );
     }
     raw.provider.pricing = {
       inputUsdPerMillionTokens: input,
@@ -232,22 +275,35 @@ function overrideConfig(config: ConfigV1, cli: CliOptions): ConfigV1 {
 }
 
 function isLoopbackProviderHost(hostname: string): boolean {
-  const host = hostname.replace(/^\[|\]$/gu, "").replace(/\.$/u, "").toLowerCase();
-  return host === "localhost" || host === "::1" || /^127(?:\.\d{1,3}){3}$/u.test(host);
+  const host = hostname
+    .replace(/^\[|\]$/gu, "")
+    .replace(/\.$/u, "")
+    .toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "::1" ||
+    /^127(?:\.\d{1,3}){3}$/u.test(host)
+  );
 }
 
 function providerFor(config: ConfigV1): ProviderAdapter {
-  const remote = config.provider.name === "openai"
-    || config.provider.name === "ollama" && config.provider.baseUrl !== undefined
-      && !isLoopbackProviderHost(new URL(config.provider.baseUrl).hostname);
+  const remote =
+    config.provider.name === "openai" ||
+    (config.provider.name === "ollama" &&
+      config.provider.baseUrl !== undefined &&
+      !isLoopbackProviderHost(new URL(config.provider.baseUrl).hostname));
   if (remote && config.provider.pricing === undefined) {
     throw new ConfigError(
       "Remote generation requires provider.pricing input/output USD-per-million upper bounds so maxCostUsd cannot fail open.",
     );
   }
-  if (config.provider.name === "openai") return createOpenAIProvider(config.provider);
-  if (config.provider.name === "ollama") return createOllamaProvider(config.provider);
-  throw new ConfigError(`Provider '${config.provider.name}' has no certified HTTP adapter in this release. Use openai or ollama.`);
+  if (config.provider.name === "openai")
+    return createOpenAIProvider(config.provider);
+  if (config.provider.name === "ollama")
+    return createOllamaProvider(config.provider);
+  throw new ConfigError(
+    `Provider '${config.provider.name}' has no certified HTTP adapter in this release. Use openai or ollama.`,
+  );
 }
 
 async function confirmYes(promptText: string): Promise<boolean> {
@@ -278,14 +334,23 @@ interface Spinner {
  */
 function createSpinner(active: boolean): Spinner {
   if (!active || !process.stderr.isTTY) {
-    return { note: (line) => console.log(line), label: () => undefined, stop: () => undefined };
+    return {
+      note: (line) => console.log(line),
+      label: () => undefined,
+      stop: () => undefined,
+    };
   }
   const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   const started = Date.now();
   let index = 0;
   let text = "working";
-  const columns = (): number => (typeof process.stderr.columns === "number" && process.stderr.columns > 12 ? process.stderr.columns : 80);
-  const clear = (): void => { process.stderr.write("\r[K"); };
+  const columns = (): number =>
+    typeof process.stderr.columns === "number" && process.stderr.columns > 12
+      ? process.stderr.columns
+      : 80;
+  const clear = (): void => {
+    process.stderr.write("\r[K");
+  };
   const tick = (): void => {
     index = (index + 1) % frames.length;
     const seconds = Math.round((Date.now() - started) / 1000);
@@ -300,9 +365,17 @@ function createSpinner(active: boolean): Spinner {
   const timer = setInterval(tick, 120);
   if (typeof timer.unref === "function") timer.unref();
   return {
-    note: (line) => { clear(); console.log(line); },
-    label: (value) => { text = value; },
-    stop: () => { clearInterval(timer); clear(); },
+    note: (line) => {
+      clear();
+      console.log(line);
+    },
+    label: (value) => {
+      text = value;
+    },
+    stop: () => {
+      clearInterval(timer);
+      clear();
+    },
   };
 }
 
@@ -311,7 +384,10 @@ function createSpinner(active: boolean): Spinner {
  * confirmation write real code files. This is the default `human-to-code .`
  * behavior.
  */
-async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number> {
+async function buildCommand(
+  cli: CliOptions,
+  rootInput?: string,
+): Promise<number> {
   const root = resolve(cli.root ?? rootInput ?? ".");
   const { config } = await loadConfig(root);
   const effective = overrideConfig(config, cli);
@@ -319,7 +395,11 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const languages = effective.languages;
   const providerName = effective.provider.name;
   const model = effective.provider.model;
-  const discovery = await discoverDirectUnits(root, languages, effective.humanFileExtensions);
+  const discovery = await discoverDirectUnits(
+    root,
+    languages,
+    effective.humanFileExtensions,
+  );
   const units = discovery.units;
   const conditionalRequests = effective.direct.reconcileIntegrations
     ? conditionalRequestAllowance(units, languages)
@@ -327,7 +407,12 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
 
   if (cli.json) {
     const plan = {
-      status: units.length === 0 ? "NEEDS_INPUT" : cli.yes ? "GENERATING" : "NEEDS_CONFIRMATION",
+      status:
+        units.length === 0
+          ? "NEEDS_INPUT"
+          : cli.yes
+            ? "GENERATING"
+            : "NEEDS_CONFIRMATION",
       language,
       languages,
       provider: providerName,
@@ -337,14 +422,16 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       // existing consumer is not silently redefined. The breakdown is additive.
       requests: units.length,
       plannedRequests: plannedRequestCounts(units, effective.direct.planning),
-      ...(conditionalRequests !== undefined ? {
-        additionalRequests: {
-          conditional: true,
-          integrationAuditUpTo: conditionalRequests.integrationAuditUpTo,
-          integrationRepairUpTo: conditionalRequests.integrationRepairUpTo,
-          compilerRepairUpTo: conditionalRequests.compilerRepairUpTo,
-        },
-      } : {}),
+      ...(conditionalRequests !== undefined
+        ? {
+            additionalRequests: {
+              conditional: true,
+              integrationAuditUpTo: conditionalRequests.integrationAuditUpTo,
+              integrationRepairUpTo: conditionalRequests.integrationRepairUpTo,
+              compilerRepairUpTo: conditionalRequests.compilerRepairUpTo,
+            },
+          }
+        : {}),
       units: units.map((unit) => ({
         kind: unit.kind,
         source: unit.sourcePath,
@@ -358,29 +445,40 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       return units.length === 0 ? 3 : cli.yes ? 0 : 3;
     }
   } else {
-    output(renderReceipt(units, providerName, model, languages, {
-      reconcileIntegrations: effective.direct.reconcileIntegrations,
-      planning: effective.direct.planning,
-    }), false);
-    for (const notice of discovery.notices) output(`  ! ${notice.message}`, false);
+    output(
+      renderReceipt(units, providerName, model, languages, {
+        reconcileIntegrations: effective.direct.reconcileIntegrations,
+        planning: effective.direct.planning,
+      }),
+      false,
+    );
+    for (const notice of discovery.notices)
+      output(`  ! ${notice.message}`, false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
     if (!cli.json) output("\nDry run: no code was generated.", false);
     return 0;
   }
-  const proceed = cli.yes || await confirmYes("\nGenerate and write these files? [y/N] ");
+  const proceed =
+    cli.yes || (await confirmYes("\nGenerate and write these files? [y/N] "));
   if (!proceed) {
-    output(cli.json ? { status: "ABORTED" } : "Aborted. No files were written.", cli.json);
+    output(
+      cli.json ? { status: "ABORTED" } : "Aborted. No files were written.",
+      cli.json,
+    );
     return 3;
   }
 
   const baseUrl = effective.provider.baseUrl;
-  const apiKey = providerName === "openai"
-    ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
-    : undefined;
-  const localProvider = providerName === "ollama"
-    && (baseUrl === undefined || isLoopbackProviderHost(new URL(baseUrl).hostname));
+  const apiKey =
+    providerName === "openai"
+      ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
+      : undefined;
+  const localProvider =
+    providerName === "ollama" &&
+    (baseUrl === undefined ||
+      isLoopbackProviderHost(new URL(baseUrl).hostname));
   if (!localProvider && !effective.privacy.remoteProviderConsent) {
     throw new ContextSecurityError(
       "INVALID_CANDIDATE",
@@ -408,19 +506,25 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const onProgress = interactive
     ? (event: ConversionProgress): void => {
         if (event.kind === "start") {
-          const retry = event.attempt > 1 ? ` (retry ${event.attempt - 1})` : "";
+          const retry =
+            event.attempt > 1 ? ` (retry ${event.attempt - 1})` : "";
           spinner.label(`generating ${describeUnit(event.unit)}${retry}`);
         } else if (event.kind === "plan") {
           spinner.label(`planning ${describeUnit(event.unit)}`);
         } else if (event.kind === "refine") {
-          spinner.label(`completing ${describeUnit(event.unit)} (${event.unaddressed} unaddressed item(s))`);
+          spinner.label(
+            `completing ${describeUnit(event.unit)} (${event.unaddressed} unaddressed item(s))`,
+          );
         } else if (event.kind === "skip") {
-          spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
+          spinner.note(
+            `  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`,
+          );
         }
       }
     : undefined;
 
-  if (interactive) output(`\nConverting ${units.length} item(s) with ${model}…`, false);
+  if (interactive)
+    output(`\nConverting ${units.length} item(s) with ${model}…`, false);
 
   const planning = effective.direct.planning;
   const requestOptions = {
@@ -437,24 +541,40 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   let blueprint: ProjectBlueprint | undefined;
   let blueprintRequests = 0;
   let blueprintNotice: string | undefined;
-  const wholeFileTargets = new Set(units.filter((unit) => unit.kind === "file").map((unit) => unit.outputPath));
-  if (planning.enabled && planning.projectBlueprint && wholeFileTargets.size >= 2) {
-    if (interactive) spinner.label(`agreeing a shared contract across ${plannedTargets.length} file(s)`);
+  const wholeFileTargets = new Set(
+    units.filter((unit) => unit.kind === "file").map((unit) => unit.outputPath),
+  );
+  if (
+    planning.enabled &&
+    planning.projectBlueprint &&
+    wholeFileTargets.size >= 2
+  ) {
+    if (interactive)
+      spinner.label(
+        `agreeing a shared contract across ${plannedTargets.length} file(s)`,
+      );
     blueprintRequests = 1;
     try {
-      const raw = await generateBlueprint({
-        targets: plannedTargets.map((target) => ({
-          path: target.path,
-          language: target.language,
-          instruction: target.purposes.join(" | "),
-        })),
-        currentTree: discovery.scannedPaths.slice(0, 72),
-      }, { ...requestOptions, language });
-      blueprint = parseProjectBlueprint(raw, new Set(plannedTargets.map((target) => target.path)));
+      const raw = await generateBlueprint(
+        {
+          targets: plannedTargets.map((target) => ({
+            path: target.path,
+            language: target.language,
+            instruction: target.purposes.join(" | "),
+          })),
+          currentTree: discovery.scannedPaths.slice(0, 72),
+        },
+        { ...requestOptions, language },
+      );
+      blueprint = parseProjectBlueprint(
+        raw,
+        new Set(plannedTargets.map((target) => target.path)),
+      );
       projectMemory.adoptBlueprint(blueprint);
     } catch (error) {
-      blueprintNotice = `shared contract unavailable (${error instanceof Error ? error.message : String(error)});`
-        + " files were generated without it";
+      blueprintNotice =
+        `shared contract unavailable (${error instanceof Error ? error.message : String(error)});` +
+        " files were generated without it";
       if (interactive) spinner.note(`  ! ${blueprintNotice}`);
     }
   }
@@ -462,32 +582,50 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   // leaves that unit on the single-pass path.
   const planningOutcomes: UnitPlanningOutcome[] = [];
   const todoEnabled = (unit: ConversionUnit): boolean =>
-    planning.enabled && (unit.kind === "file" ? planning.fileTodo : planning.markerTodo);
-  const planningEnabledFor = planning.enabled && (planning.fileTodo || planning.markerTodo)
-    ? async (unit: ConversionUnit, context: { projectMemory?: string }) => {
-        if (!todoEnabled(unit)) return undefined;
-        const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
-        const raw = await generateUnitTodos({
-          targetPath: target,
-          instruction: unit.prompt,
-          inline: unit.kind === "inline",
-          ...(blueprint ? { blueprint: renderBlueprintFor(blueprint, target) } : {}),
-          ...(context.projectMemory ? { projectMemory: context.projectMemory } : {}),
-        }, { ...requestOptions, language: unit.language ?? language, targetPath: target });
-        // Deliberately unconstrained by the shared vocabulary: a todo may also
-        // expect target-local artifacts the blueprint has no reason to name
-        // (a @media block, a local helper). Injection safety comes from the
-        // name charset in the parser, and cross-file drift is caught
-        // deterministically by reference checking, not by dropping coverage.
-        return parseUnitTodoList(raw);
-      }
-    : undefined;
+    planning.enabled &&
+    (unit.kind === "file" ? planning.fileTodo : planning.markerTodo);
+  const planningEnabledFor =
+    planning.enabled && (planning.fileTodo || planning.markerTodo)
+      ? async (unit: ConversionUnit, context: { projectMemory?: string }) => {
+          if (!todoEnabled(unit)) return undefined;
+          const target =
+            unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+          const raw = await generateUnitTodos(
+            {
+              targetPath: target,
+              instruction: unit.prompt,
+              inline: unit.kind === "inline",
+              ...(blueprint
+                ? { blueprint: renderBlueprintFor(blueprint, target) }
+                : {}),
+              ...(context.projectMemory
+                ? { projectMemory: context.projectMemory }
+                : {}),
+            },
+            {
+              ...requestOptions,
+              language: unit.language ?? language,
+              targetPath: target,
+            },
+          );
+          // Deliberately unconstrained by the shared vocabulary: a todo may also
+          // expect target-local artifacts the blueprint has no reason to name
+          // (a @media block, a local helper). Injection safety comes from the
+          // name charset in the parser, and cross-file drift is caught
+          // deterministically by reference checking, not by dropping coverage.
+          return parseUnitTodoList(raw);
+        }
+      : undefined;
   let generated: GeneratedConversionUnit[];
   try {
     generated = await generateConversionUnits(
       units,
       (unit, context) => {
-        if ((context.fileMemory?.length ?? 0) + (context.projectMemory?.length ?? 0) > contextCharBudget) {
+        if (
+          (context.fileMemory?.length ?? 0) +
+            (context.projectMemory?.length ?? 0) >
+          contextCharBudget
+        ) {
           throw new ContextSecurityError(
             "BUDGET_EXCEEDED",
             `Combined FileMemory and ProjectMemory for ${unit.sourcePath} exceed the configured context budget.`,
@@ -498,9 +636,15 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
           language: unit.language ?? language,
           ...requestOptions,
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
-          ...(unit.insertionContext ? { insertionContext: unit.insertionContext } : {}),
-          ...(unit.insertionOwner ? { insertionOwner: unit.insertionOwner } : {}),
-          ...(unit.surroundingSource ? { surroundingSource: unit.surroundingSource } : {}),
+          ...(unit.insertionContext
+            ? { insertionContext: unit.insertionContext }
+            : {}),
+          ...(unit.insertionOwner
+            ? { insertionOwner: unit.insertionOwner }
+            : {}),
+          ...(unit.surroundingSource
+            ? { surroundingSource: unit.surroundingSource }
+            : {}),
           ...context,
         }).then((code) => normalizeGeneratedUnitCode(unit, code));
       },
@@ -510,8 +654,12 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         projectMemory,
         contextCharBudget,
         maxCodingPasses: planning.enabled ? planning.maxCodingPassesPerUnit : 1,
-        ...(planningEnabledFor !== undefined ? { plan: planningEnabledFor } : {}),
-        ...(planningEnabledFor !== undefined ? { shouldPlan: todoEnabled } : {}),
+        ...(planningEnabledFor !== undefined
+          ? { plan: planningEnabledFor }
+          : {}),
+        ...(planningEnabledFor !== undefined
+          ? { shouldPlan: todoEnabled }
+          : {}),
         onPlanningOutcome: (outcome) => planningOutcomes.push(outcome),
         ...(onProgress ? { onProgress } : {}),
       },
@@ -520,7 +668,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     spinner.stop();
     if (error instanceof ContextSecurityError) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
+    output(
+      cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`,
+      cli.json,
+    );
     return 5;
   }
 
@@ -529,17 +680,27 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   // Deterministic cross-file reference checking over complete candidate
   // files. One bounded repair is allowed for findings that prove generated
   // behavior is unreachable.
-  const crossCheckGeneratedReferences = async (): Promise<ReferenceFinding[]> => {
+  const crossCheckGeneratedReferences = async (): Promise<
+    ReferenceFinding[]
+  > => {
     const referenceFiles: ReferenceFile[] = [];
     const seenReferencePaths = new Set<string>();
     const completeCandidates = await candidateTextsForGenerated(generated);
     for (const [target, content] of completeCandidates) {
-      if (!REFERENCE_EXTENSIONS.has(extname(target).toLowerCase()) || seenReferencePaths.has(target)) continue;
+      if (
+        !REFERENCE_EXTENSIONS.has(extname(target).toLowerCase()) ||
+        seenReferencePaths.has(target)
+      )
+        continue;
       seenReferencePaths.add(target);
       referenceFiles.push({ path: target, content, generated: true });
     }
     for (const path of discovery.scannedPaths) {
-      if (seenReferencePaths.has(path) || !REFERENCE_EXTENSIONS.has(extname(path).toLowerCase())) continue;
+      if (
+        seenReferencePaths.has(path) ||
+        !REFERENCE_EXTENSIONS.has(extname(path).toLowerCase())
+      )
+        continue;
       try {
         const content = await readFile(resolve(root, path), "utf8");
         seenReferencePaths.add(path);
@@ -557,55 +718,78 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     if (interactive) spinner.label("cross-checking generated references");
     referenceFindings = await crossCheckGeneratedReferences();
     const blockingByPath = new Map<string, ReferenceFinding[]>();
-    for (const finding of referenceFindings.filter((item) => item.severity === "blocking")) {
-      blockingByPath.set(finding.path, [...(blockingByPath.get(finding.path) ?? []), finding]);
+    for (const finding of referenceFindings.filter(
+      (item) => item.severity === "blocking",
+    )) {
+      blockingByPath.set(finding.path, [
+        ...(blockingByPath.get(finding.path) ?? []),
+        finding,
+      ]);
     }
 
     for (const [path, findings] of blockingByPath) {
-      const candidates = generated.filter((item) =>
-        (item.unit.kind === "file" ? item.unit.outputPath : item.unit.sourcePath) === path
-        && item.error === undefined
-        && item.code.trim().length > 0);
+      const candidates = generated.filter(
+        (item) =>
+          (item.unit.kind === "file"
+            ? item.unit.outputPath
+            : item.unit.sourcePath) === path &&
+          item.error === undefined &&
+          item.code.trim().length > 0,
+      );
       if (candidates.length === 0) continue;
       const selector = findings.find((finding) => finding.selector)?.selector;
-      const item = selector === undefined
-        ? candidates[candidates.length - 1]!
-        : candidates.find((candidate) => candidate.code.includes(selector)) ?? candidates[candidates.length - 1]!;
+      const item =
+        selector === undefined
+          ? candidates[candidates.length - 1]!
+          : (candidates.find((candidate) =>
+              candidate.code.includes(selector),
+            ) ?? candidates[candidates.length - 1]!);
       const completeCandidates = await candidateTextsForGenerated(generated);
       const relatedFiles = [...completeCandidates]
         .filter(([relatedPath]) => relatedPath !== path)
         .slice(0, 8)
         .map(([relatedPath, content]) => ({ path: relatedPath, content }));
       try {
-        if (interactive) spinner.label(`repairing unreachable generated behavior in ${path}`);
+        if (interactive)
+          spinner.label(`repairing unreachable generated behavior in ${path}`);
         referenceRepairRequests += 1;
-        const repaired = await generateRepairCode({
-          targetPath: path,
-          inline: item.unit.kind === "inline",
-          instruction: item.unit.prompt,
-          currentCode: item.code,
-          diagnostics: findings.map((finding) => ({
-            path: finding.path,
-            code: 9001,
-            message: `${finding.code}: ${finding.detail}`,
-          })),
-          hints: [
-            "Make the generated selector or reference match the actual structure in the related candidate files.",
-            ...(findings.some((finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE")
-              ? ["An empty visual element needs a real box. Add dimensions or stretch it from a positioned containing block, for example with absolute positioning and inset."]
-              : []),
-            "Preserve the original instruction and change only this marker replacement.",
-          ],
-          relatedFiles,
-          projectMemory: projectMemory.renderFor(item.unit, Math.floor(contextCharBudget / 3)),
-        }, {
-          language: item.unit.language ?? language,
-          provider: providerName,
-          model,
-          targetPath: path,
-          ...(baseUrl ? { baseUrl } : {}),
-          ...(apiKey ? { apiKey } : {}),
-        });
+        const repaired = await generateRepairCode(
+          {
+            targetPath: path,
+            inline: item.unit.kind === "inline",
+            instruction: item.unit.prompt,
+            currentCode: item.code,
+            diagnostics: findings.map((finding) => ({
+              path: finding.path,
+              code: 9001,
+              message: `${finding.code}: ${finding.detail}`,
+            })),
+            hints: [
+              "Make the generated selector or reference match the actual structure in the related candidate files.",
+              ...(findings.some(
+                (finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE",
+              )
+                ? [
+                    "An empty visual element needs a real box. Add dimensions or stretch it from a positioned containing block, for example with absolute positioning and inset.",
+                  ]
+                : []),
+              "Preserve the original instruction and change only this marker replacement.",
+            ],
+            relatedFiles,
+            projectMemory: projectMemory.renderFor(
+              item.unit,
+              Math.floor(contextCharBudget / 3),
+            ),
+          },
+          {
+            language: item.unit.language ?? language,
+            provider: providerName,
+            model,
+            targetPath: path,
+            ...(baseUrl ? { baseUrl } : {}),
+            ...(apiKey ? { apiKey } : {}),
+          },
+        );
         item.code = normalizeGeneratedUnitCode(item.unit, repaired);
         await validateGeneratedUnit(item.unit, item.code);
         projectMemory.remember(item.unit, item.code);
@@ -614,12 +798,18 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       }
     }
 
-    if (blockingByPath.size > 0) referenceFindings = await crossCheckGeneratedReferences();
-    const remainingBlocking = referenceFindings.filter((finding) => finding.severity === "blocking");
+    if (blockingByPath.size > 0)
+      referenceFindings = await crossCheckGeneratedReferences();
+    const remainingBlocking = referenceFindings.filter(
+      (finding) => finding.severity === "blocking",
+    );
     for (const finding of remainingBlocking) {
       const reason = `cross-file behavior check failed: ${finding.detail}`;
       for (const item of generated) {
-        const target = item.unit.kind === "file" ? item.unit.outputPath! : item.unit.sourcePath;
+        const target =
+          item.unit.kind === "file"
+            ? item.unit.outputPath!
+            : item.unit.sourcePath;
         if (target !== finding.path || item.error !== undefined) continue;
         item.error = reason;
         item.code = "";
@@ -628,7 +818,9 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     generated = withholdIncompleteRelatedTargets(generated, projectMemory);
     if (interactive) {
       for (const finding of referenceFindings) {
-        spinner.note(`  ${finding.severity === "blocking" ? "no" : "!"} ${finding.code}: ${finding.detail}`);
+        spinner.note(
+          `  ${finding.severity === "blocking" ? "no" : "!"} ${finding.code}: ${finding.detail}`,
+        );
       }
     }
   }
@@ -641,11 +833,17 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       const onIntegrationProgress = interactive
         ? (event: IntegrationProgress): void => {
             if (event.kind === "integration-audit") {
-              spinner.label(`auditing ${event.files} related generated file(s) (pass ${event.pass})`);
+              spinner.label(
+                `auditing ${event.files} related generated file(s) (pass ${event.pass})`,
+              );
             } else if (event.kind === "integration-repair") {
-              spinner.label(`reconciling ${describeUnit(event.unit)} (${event.issues} issue(s))`);
+              spinner.label(
+                `reconciling ${describeUnit(event.unit)} (${event.issues} issue(s))`,
+              );
             } else if (event.kind === "reject") {
-              spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
+              spinner.note(
+                `  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`,
+              );
             }
           }
         : undefined;
@@ -653,32 +851,44 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
         maxAuditPassesPerGroup: 2,
         maxRepairAttemptsPerUnit: 1,
         contextCharBudget,
-        audit: (request) => generateIntegrationAudit({
-          files: request.files,
-          relationships: request.relationships,
-          ...(request.projectMemory ? { projectMemory: request.projectMemory } : {}),
-        }, {
-          language: request.unit.language ?? language,
-          provider: providerName,
-          model,
-          ...(baseUrl ? { baseUrl } : {}),
-          ...(apiKey ? { apiKey } : {}),
-        }),
-        repair: (request) => generateIntegrationRepairCode({
-          targetPath: request.targetPath,
-          instruction: request.instruction,
-          currentCode: request.currentCode,
-          issues: request.issues,
-          relatedFiles: request.relatedFiles,
-          ...(request.projectMemory ? { projectMemory: request.projectMemory } : {}),
-        }, {
-          language: request.unit.language ?? language,
-          provider: providerName,
-          model,
-          targetPath: request.targetPath,
-          ...(baseUrl ? { baseUrl } : {}),
-          ...(apiKey ? { apiKey } : {}),
-        }),
+        audit: (request) =>
+          generateIntegrationAudit(
+            {
+              files: request.files,
+              relationships: request.relationships,
+              ...(request.projectMemory
+                ? { projectMemory: request.projectMemory }
+                : {}),
+            },
+            {
+              language: request.unit.language ?? language,
+              provider: providerName,
+              model,
+              ...(baseUrl ? { baseUrl } : {}),
+              ...(apiKey ? { apiKey } : {}),
+            },
+          ),
+        repair: (request) =>
+          generateIntegrationRepairCode(
+            {
+              targetPath: request.targetPath,
+              instruction: request.instruction,
+              currentCode: request.currentCode,
+              issues: request.issues,
+              relatedFiles: request.relatedFiles,
+              ...(request.projectMemory
+                ? { projectMemory: request.projectMemory }
+                : {}),
+            },
+            {
+              language: request.unit.language ?? language,
+              provider: providerName,
+              model,
+              targetPath: request.targetPath,
+              ...(baseUrl ? { baseUrl } : {}),
+              ...(apiKey ? { apiKey } : {}),
+            },
+          ),
         projectMemory,
         ...(onIntegrationProgress ? { onProgress: onIntegrationProgress } : {}),
       });
@@ -689,7 +899,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       spinner.stop();
       if (error instanceof ContextSecurityError) throw error;
       const message = error instanceof Error ? error.message : String(error);
-      output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
+      output(
+        cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`,
+        cli.json,
+      );
       return 5;
     }
   }
@@ -704,34 +917,46 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     const onStagedProgress = interactive
       ? (event: StagedValidationProgress): void => {
           if (event.kind === "project-validate") {
-            spinner.label(`validating combined candidate project (${event.files} file(s), pass ${event.pass})`);
+            spinner.label(
+              `validating combined candidate project (${event.files} file(s), pass ${event.pass})`,
+            );
           } else if (event.kind === "repair") {
-            spinner.label(`repairing ${describeUnit(event.unit)} (bounded repair ${event.attempt})`);
+            spinner.label(
+              `repairing ${describeUnit(event.unit)} (bounded repair ${event.attempt})`,
+            );
           } else if (event.kind === "reject") {
-            spinner.note(`  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`);
+            spinner.note(
+              `  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`,
+            );
           }
         }
       : undefined;
     const staged = await validateCandidateProject(root, generated, {
       maxRepairAttemptsPerUnit: 1,
       contextCharBudget: effective.privacy.maxContextTokens * 4,
-      repair: (request) => generateRepairCode({
-        targetPath: request.targetPath,
-        inline: request.unit.kind === "inline",
-        instruction: request.unit.prompt,
-        currentCode: request.currentCode,
-        diagnostics: request.diagnostics,
-        hints: request.hints,
-        relatedFiles: request.relatedFiles,
-        ...(request.projectMemory ? { projectMemory: request.projectMemory } : {}),
-      }, {
-        language: request.unit.language ?? language,
-        provider: providerName,
-        model,
-        targetPath: request.targetPath,
-        ...(baseUrl ? { baseUrl } : {}),
-        ...(apiKey ? { apiKey } : {}),
-      }),
+      repair: (request) =>
+        generateRepairCode(
+          {
+            targetPath: request.targetPath,
+            inline: request.unit.kind === "inline",
+            instruction: request.unit.prompt,
+            currentCode: request.currentCode,
+            diagnostics: request.diagnostics,
+            hints: request.hints,
+            relatedFiles: request.relatedFiles,
+            ...(request.projectMemory
+              ? { projectMemory: request.projectMemory }
+              : {}),
+          },
+          {
+            language: request.unit.language ?? language,
+            provider: providerName,
+            model,
+            targetPath: request.targetPath,
+            ...(baseUrl ? { baseUrl } : {}),
+            ...(apiKey ? { apiKey } : {}),
+          },
+        ),
       projectMemory,
       ...(onStagedProgress ? { onProgress: onStagedProgress } : {}),
     });
@@ -741,7 +966,10 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
     spinner.stop();
     if (error instanceof ContextSecurityError) throw error;
     const message = error instanceof Error ? error.message : String(error);
-    output(cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`, cli.json);
+    output(
+      cli.json ? { status: "FAILED", error: message } : `\nError: ${message}`,
+      cli.json,
+    );
     return 5;
   }
   spinner.stop();
@@ -751,7 +979,8 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   // Apply bottom-to-top so replacing a later marker cannot invalidate an
   // earlier marker's range.
   const ordered = [...generated].sort((left, right) => {
-    if (left.unit.kind !== right.unit.kind) return left.unit.kind === "file" ? -1 : 1;
+    if (left.unit.kind !== right.unit.kind)
+      return left.unit.kind === "file" ? -1 : 1;
     const byPath = left.unit.sourcePath.localeCompare(right.unit.sourcePath);
     if (byPath !== 0) return byPath;
     return (right.unit.range?.start ?? 0) - (left.unit.range?.start ?? 0);
@@ -759,7 +988,9 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
   const written: string[] = [];
   const skipped: Array<{ source: string; reason: string }> = [];
   const wholeFiles = ordered.filter((item) => item.unit.kind === "file");
-  const incompleteWholeFiles = wholeFiles.filter((item) => item.error !== undefined || item.code.trim().length === 0);
+  const incompleteWholeFiles = wholeFiles.filter(
+    (item) => item.error !== undefined || item.code.trim().length === 0,
+  );
   if (incompleteWholeFiles.length > 0) {
     const blocker = incompleteWholeFiles[0]!;
     const blockerReason = blocker.error ?? "empty model output";
@@ -768,100 +999,156 @@ async function buildCommand(cli: CliOptions, rootInput?: string): Promise<number
       if (item.error !== undefined || item.code.trim().length === 0) continue;
       item.error = batchReason;
       item.code = "";
-      if (!cli.json) output(`  ⊘ skipped ${describeUnit(item.unit)}: ${batchReason}`, false);
+      if (!cli.json)
+        output(`  ⊘ skipped ${describeUnit(item.unit)}: ${batchReason}`, false);
     }
   }
 
-  const applicableWholeFiles = wholeFiles.filter((item) => item.error === undefined && item.code.trim().length > 0);
+  const applicableWholeFiles = wholeFiles.filter(
+    (item) => item.error === undefined && item.code.trim().length > 0,
+  );
   if (applicableWholeFiles.length > 0) {
     try {
       const paths = await applyWholeFileBatch(root, applicableWholeFiles);
       written.push(...paths);
       if (!cli.json) {
-        for (const item of applicableWholeFiles) output(`  ✓ ${describeUnit(item.unit)}`, false);
+        for (const item of applicableWholeFiles)
+          output(`  ✓ ${describeUnit(item.unit)}`, false);
       }
     } catch (applyError) {
-      const reason = applyError instanceof Error ? applyError.message : String(applyError);
+      const reason =
+        applyError instanceof Error ? applyError.message : String(applyError);
       for (const item of applicableWholeFiles) {
         skipped.push({ source: item.unit.sourcePath, reason });
-        if (!cli.json) output(`  ⊘ skipped ${describeUnit(item.unit)}: ${reason}`, false);
+        if (!cli.json)
+          output(`  ⊘ skipped ${describeUnit(item.unit)}: ${reason}`, false);
       }
     }
   }
   for (const item of wholeFiles) {
-    if (item.error !== undefined) skipped.push({ source: item.unit.sourcePath, reason: item.error });
-    else if (item.code.trim().length === 0) skipped.push({ source: item.unit.sourcePath, reason: "empty model output" });
+    if (item.error !== undefined)
+      skipped.push({ source: item.unit.sourcePath, reason: item.error });
+    else if (item.code.trim().length === 0)
+      skipped.push({
+        source: item.unit.sourcePath,
+        reason: "empty model output",
+      });
   }
 
   const inline = ordered.filter((item) => item.unit.kind === "inline");
   for (const item of inline) {
-    if (item.error !== undefined) skipped.push({ source: item.unit.sourcePath, reason: item.error });
-    else if (item.code.trim().length === 0) skipped.push({ source: item.unit.sourcePath, reason: "empty model output" });
+    if (item.error !== undefined)
+      skipped.push({ source: item.unit.sourcePath, reason: item.error });
+    else if (item.code.trim().length === 0)
+      skipped.push({
+        source: item.unit.sourcePath,
+        reason: "empty model output",
+      });
   }
   const applicableInlineByPath = new Map<string, typeof inline>();
-  for (const item of inline.filter((entry) => entry.error === undefined && entry.code.trim().length > 0)) {
-    applicableInlineByPath.set(item.unit.sourcePath, [...(applicableInlineByPath.get(item.unit.sourcePath) ?? []), item]);
+  for (const item of inline.filter(
+    (entry) => entry.error === undefined && entry.code.trim().length > 0,
+  )) {
+    applicableInlineByPath.set(item.unit.sourcePath, [
+      ...(applicableInlineByPath.get(item.unit.sourcePath) ?? []),
+      item,
+    ]);
   }
   for (const applications of applicableInlineByPath.values()) {
     try {
       const path = await applyInlineFileBatch(applications);
       written.push(path);
-      if (!cli.json) for (const item of applications) output(`  yes ${describeUnit(item.unit)}`, false);
+      if (!cli.json)
+        for (const item of applications)
+          output(`  yes ${describeUnit(item.unit)}`, false);
     } catch (applyError) {
-      const reason = applyError instanceof Error ? applyError.message : String(applyError);
+      const reason =
+        applyError instanceof Error ? applyError.message : String(applyError);
       for (const item of applications) {
         skipped.push({ source: item.unit.sourcePath, reason });
-        if (!cli.json) output(`  no skipped ${describeUnit(item.unit)}: ${reason}`, false);
+        if (!cli.json)
+          output(`  no skipped ${describeUnit(item.unit)}: ${reason}`, false);
       }
     }
   }
   const seconds = Math.round((Date.now() - started) / 1000);
-  const todoRequests = planningOutcomes.reduce((total, outcome) => total + outcome.todoRequests, 0);
-  const codingRequests = planningOutcomes.reduce((total, outcome) => total + outcome.codingRequests, 0);
-  const refinementsRejected = planningOutcomes.filter((outcome) => outcome.refinementRejected !== undefined);
+  const todoRequests = planningOutcomes.reduce(
+    (total, outcome) => total + outcome.todoRequests,
+    0,
+  );
+  const codingRequests = planningOutcomes.reduce(
+    (total, outcome) => total + outcome.codingRequests,
+    0,
+  );
+  const refinementsRejected = planningOutcomes.filter(
+    (outcome) => outcome.refinementRejected !== undefined,
+  );
   if (cli.json) {
-    output({
-      status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE",
-      engine: "simple",
-      written,
-      skipped,
-      blueprintRequests,
-      ...(blueprintNotice !== undefined ? { blueprintNotice } : {}),
-      todoRequests,
-      codingRequests,
-      ...(refinementsRejected.length > 0 ? {
-        refinementsRejected: refinementsRejected.map((outcome) => ({
-          target: outcome.unit.kind === "file" ? outcome.unit.outputPath! : outcome.unit.sourcePath,
-          reason: outcome.refinementRejected!,
-        })),
-      } : {}),
-      ...(effective.direct.crossFileChecks ? {
-        referenceFindings: referenceFindings.map((finding) => ({
-          code: finding.code,
-          severity: finding.severity,
-          path: finding.path,
-          detail: finding.detail,
-        })),
-      } : {}),
-      ...(effective.direct.reconcileIntegrations ? {
-        integrationAuditRequests,
-        integrationRepairRequests,
-        integrationRequests: integrationAuditRequests + integrationRepairRequests,
-      } : {}),
-      repairRequests,
-    }, true);
+    output(
+      {
+        status: written.length === 0 && skipped.length > 0 ? "FAILED" : "DONE",
+        engine: "simple",
+        written,
+        skipped,
+        blueprintRequests,
+        ...(blueprintNotice !== undefined ? { blueprintNotice } : {}),
+        todoRequests,
+        codingRequests,
+        ...(refinementsRejected.length > 0
+          ? {
+              refinementsRejected: refinementsRejected.map((outcome) => ({
+                target:
+                  outcome.unit.kind === "file"
+                    ? outcome.unit.outputPath!
+                    : outcome.unit.sourcePath,
+                reason: outcome.refinementRejected!,
+              })),
+            }
+          : {}),
+        ...(effective.direct.crossFileChecks
+          ? {
+              referenceFindings: referenceFindings.map((finding) => ({
+                code: finding.code,
+                severity: finding.severity,
+                path: finding.path,
+                detail: finding.detail,
+              })),
+            }
+          : {}),
+        ...(effective.direct.reconcileIntegrations
+          ? {
+              integrationAuditRequests,
+              integrationRepairRequests,
+              integrationRequests:
+                integrationAuditRequests + integrationRepairRequests,
+            }
+          : {}),
+        repairRequests,
+      },
+      true,
+    );
   } else {
-    const integrationRequests = integrationAuditRequests + integrationRepairRequests;
-    const integrations = integrationRequests > 0
-      ? `, ${integrationAuditRequests} integration audit request(s), ${integrationRepairRequests} integration repair request(s)`
-      : "";
-    const repairs = repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
-    const planned = blueprintRequests + todoRequests > 0
-      ? `, ${blueprintRequests} blueprint and ${todoRequests} todo request(s)`
-      : "";
-    output(`\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${planned}${integrations}${repairs}.`, false);
+    const integrationRequests =
+      integrationAuditRequests + integrationRepairRequests;
+    const integrations =
+      integrationRequests > 0
+        ? `, ${integrationAuditRequests} integration audit request(s), ${integrationRepairRequests} integration repair request(s)`
+        : "";
+    const repairs =
+      repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
+    const planned =
+      blueprintRequests + todoRequests > 0
+        ? `, ${blueprintRequests} blueprint and ${todoRequests} todo request(s)`
+        : "";
+    output(
+      `\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${planned}${integrations}${repairs}.`,
+      false,
+    );
     for (const outcome of refinementsRejected) {
-      const target = outcome.unit.kind === "file" ? outcome.unit.outputPath! : outcome.unit.sourcePath;
+      const target =
+        outcome.unit.kind === "file"
+          ? outcome.unit.outputPath!
+          : outcome.unit.sourcePath;
       output(`  ! ${target}: ${outcome.refinementRejected}`, false);
     }
   }
@@ -874,36 +1161,64 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   try {
     cli = parse(argv);
   } catch (error) {
+    // this block runs when the user provides invalid arguments like `npx human-to-code . --xyzblahblah`
     console.error(error instanceof Error ? error.message : String(error));
     console.error(HELP);
     return 1;
   }
   if (cli.help) {
+    // this block runs when the user types `npx human-to-code --help` or `npx human-to-code -h`
     console.log(HELP);
     return 0;
   }
   try {
-    if (cli.init) return initConfig(projectRoot(cli, cli.positionals[0] ?? "."));
+    if (cli.init)
+      return initConfig(projectRoot(cli, cli.positionals[0] ?? "."));
     return await buildCommand(cli, cli.positionals[0]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof ContextSecurityError) {
-      output(cli.json ? { status: "SECURITY_BLOCKED", diagnostic: message } : `SECURITY_BLOCKED: ${message}`, cli.json);
+      output(
+        cli.json
+          ? { status: "SECURITY_BLOCKED", diagnostic: message }
+          : `SECURITY_BLOCKED: ${message}`,
+        cli.json,
+      );
       return 4;
     }
     if (error instanceof ProviderError) {
-      output(cli.json ? { status: "FAILED", dependency: "provider", code: error.code, diagnostic: message } : `Provider ${error.code}: ${message}`, cli.json);
+      output(
+        cli.json
+          ? {
+              status: "FAILED",
+              dependency: "provider",
+              code: error.code,
+              diagnostic: message,
+            }
+          : `Provider ${error.code}: ${message}`,
+        cli.json,
+      );
       return 5;
     }
     if (error instanceof DiscoveryError && error.code === "PARTIAL_SCAN") {
-      output(cli.json ? { status: "FAILED", code: error.code, diagnostic: message } : `Partial scan: ${message}`, cli.json);
+      output(
+        cli.json
+          ? { status: "FAILED", code: error.code, diagnostic: message }
+          : `Partial scan: ${message}`,
+        cli.json,
+      );
       return 6;
     }
     if (error instanceof ConfigError || error instanceof DiscoveryError) {
-      output(cli.json ? { status: "ERROR", diagnostic: message } : `Error: ${message}`, cli.json);
+      output(
+        cli.json
+          ? { status: "ERROR", diagnostic: message }
+          : `Error: ${message}`,
+        cli.json,
+      );
       return 1;
     }
-    console.error(error instanceof Error ? error.stack ?? message : message);
+    console.error(error instanceof Error ? (error.stack ?? message) : message);
     return 6;
   }
 }
@@ -920,9 +1235,13 @@ function isMainModule(): boolean {
 
 if (isMainModule()) {
   runHumanToCodeCli(process.argv.slice(2))
-    .then((code) => { process.exitCode = code; })
+    .then((code) => {
+      process.exitCode = code;
+    })
     .catch((error: unknown) => {
-      console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+      console.error(
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+      );
       process.exitCode = 6;
     });
 }
