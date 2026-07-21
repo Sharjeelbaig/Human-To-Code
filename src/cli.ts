@@ -1234,13 +1234,15 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   }
 }
 
+// This function checks if this file was executed directly by Node (e.g. `npx human-to-code .` or `node dist/cli.js`)
+// rather than being imported as a library by another script (e.g. `import { runHumanToCodeCli } from "human-to-code/cli"`).
 function isMainModule(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
+  const entry = process.argv[1]; // Get the path of the script Node is running
+  if (!entry) return false; // If no script is running, we were imported
   try {
-    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url)); // Follow symlinks and check if the running script is this exact file
   } catch {
-    return resolve(entry) === resolve(fileURLToPath(import.meta.url));
+    return resolve(entry) === resolve(fileURLToPath(import.meta.url)); // If symlink check fails, fallback to comparing absolute paths
   }
 }
 
