@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSS Visual Design"
+  short_description: "Create polished light-first professional web interfaces"
+  default_prompt: "Create a clean, structured, professional light-first visual system unless the user explicitly requests another palette."

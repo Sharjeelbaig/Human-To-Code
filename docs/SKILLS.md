@@ -2,7 +2,9 @@
 
 `src/skills` contains package-owned markdown guidance for the direct generation engine. Each direct child directory is one skill. Its lowercase hyphenated folder name is both the stable id and the default trigger vocabulary.
 
-The loader applies progressive disclosure: it selects skills immediately before blueprint, todo, coding, audit, and repair requests. CSS work always receives the foundations skill; companion CSS/markup work receives selector-contract guidance; other folders must match meaningful words in the language, target path, task, or bounded project evidence. Non-web work receives no CSS skill context.
+The loader applies progressive disclosure: it selects skills immediately before blueprint, todo, coding, audit, and repair requests. CSS work always receives the foundations and visual-design skills; companion CSS/markup work receives selector-contract guidance; other folders must match meaningful words in the language, target path, task, or bounded project evidence. Non-web work receives no CSS skill context.
+
+The default visual direction is professional and light-first: coherent page structure, near-white surfaces, readable dark text, restrained borders, and one purposeful accent family. An explicit user palette, dark-theme request, or established project design always takes precedence.
 
 ## Run the normal path
 
@@ -62,4 +64,3 @@ npm run package:check
 ```
 
 That verification block compiles source, copies skills to `dist/skills`, checks types, exercises folder routing and prompt attachment, and installs the packed tarball to prove the published `npx` path can discover the markdown.
-

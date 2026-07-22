@@ -215,6 +215,15 @@ test("static TSX className values count as generated markup for CSS references",
   assert.equal(findings.some((finding) => finding.code === "CSS_SELECTOR_UNUSED"), false);
 });
 
+test("generated CSS drift is reported against TSX without requiring an HTML file", () => {
+  const findings = collectReferenceFindings([
+    generated("Projects.tsx", 'export function Projects() { return <section className="project-grid" />; }'),
+    generated("portfolio.css", ".projects-grid { display: grid; }"),
+  ]);
+  assert.ok(findings.some((finding) =>
+    finding.code === "CSS_SELECTOR_UNUSED" && /projects-grid/u.test(finding.detail)));
+});
+
 test("a generated compound selector must match one rendered element", () => {
   const findings = collectReferenceFindings([
     { path: "index.html", content: '<div id="root"></div>', generated: false },

@@ -725,17 +725,19 @@ async function buildCommand(
   if (effective.direct.crossFileChecks) {
     if (interactive) spinner.label("cross-checking generated references");
     referenceFindings = await crossCheckGeneratedReferences();
-    const blockingByPath = new Map<string, ReferenceFinding[]>();
+    const repairableByPath = new Map<string, ReferenceFinding[]>();
     for (const finding of referenceFindings.filter(
-      (item) => item.severity === "blocking",
+      (item) =>
+        item.severity === "blocking" ||
+        item.code === "CSS_SELECTOR_UNUSED",
     )) {
-      blockingByPath.set(finding.path, [
-        ...(blockingByPath.get(finding.path) ?? []),
+      repairableByPath.set(finding.path, [
+        ...(repairableByPath.get(finding.path) ?? []),
         finding,
       ]);
     }
 
-    for (const [path, findings] of blockingByPath) {
+    for (const [path, findings] of repairableByPath) {
       const candidates = generated.filter(
         (item) =>
           (item.unit.kind === "file"
@@ -759,7 +761,7 @@ async function buildCommand(
         .map(([relatedPath, content]) => ({ path: relatedPath, content }));
       try {
         if (interactive)
-          spinner.label(`repairing unreachable generated behavior in ${path}`);
+          spinner.label(`repairing generated cross-file references in ${path}`);
         referenceRepairRequests += 1;
         const repaired = await generateRepairCode(
           {
@@ -774,6 +776,13 @@ async function buildCommand(
             })),
             hints: [
               "Make the generated selector or reference match the actual structure in the related candidate files.",
+              ...(findings.some(
+                (finding) => finding.code === "CSS_SELECTOR_UNUSED",
+              )
+                ? [
+                    "Reconcile the stylesheet against every related markup file: reuse exact className/class spellings, style intended component classes, and remove selectors that cannot match generated markup.",
+                  ]
+                : []),
               ...(findings.some(
                 (finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE",
               )
@@ -806,7 +815,7 @@ async function buildCommand(
       }
     }
 
-    if (blockingByPath.size > 0)
+    if (repairableByPath.size > 0)
       referenceFindings = await crossCheckGeneratedReferences();
     const remainingBlocking = referenceFindings.filter(
       (finding) => finding.severity === "blocking",

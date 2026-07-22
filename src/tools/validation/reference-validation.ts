@@ -508,7 +508,7 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
   }
 
   // Advisory: stylesheet rule that no markup or script can ever match.
-  if (html.length > 0) {
+  if (html.length > 0 || scripts.length > 0) {
     for (const file of css) {
       if (!file.generated) continue;
       const facts = cssByFile.get(file.path)!;

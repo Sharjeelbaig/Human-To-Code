@@ -24,13 +24,17 @@ test("folder names route only relevant web and CSS skills", async () => {
 
   assert.deepEqual(portfolio, [
     "css-selector-contracts",
-    "react-css-integration",
     "css-foundations",
+    "css-visual-design",
     "css-accessibility",
     "css-layout",
     "css-motion",
     "css-responsive",
   ]);
+  assert.match(
+    skills.find((skill) => skill.id === "css-visual-design")?.guidance ?? "",
+    /Use a light theme unless the user explicitly requests/u,
+  );
 
   const python = selectModelSkills(skills, {
     phase: "coding",

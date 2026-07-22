@@ -7,6 +7,8 @@ description: Create complete, maintainable CSS foundations. Use for CSS files, r
 
 Produce a coherent stylesheet, not isolated declarations.
 
+Unless the user explicitly requests colors, a dark theme, or an existing design must be preserved, use a light-first theme: a near-white canvas, light surfaces, dark readable text, restrained borders, and one purposeful accent family. Do not assume a dark navy portfolio aesthetic.
+
 - Inventory the target's required selectors and states before writing rules.
 - Start with low-specificity defaults: `box-sizing`, document/body defaults, inherited typography, responsive media, and control font inheritance when the task calls for global CSS.
 - Prefer custom properties for repeated colors, spacing, radii, shadows, and type values; keep fallbacks concrete.

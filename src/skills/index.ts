@@ -123,7 +123,10 @@ export function selectModelSkills(
   ].join(" "));
   const allText = `${languageText}${targetText}${taskText}`;
   const cssSurface = containsWord(languageText, "css") || containsWord(targetText, "css");
-  const reactSurface = ["react", "tsx", "jsx"].some((term) => containsWord(allText, term));
+  const reactTargetSurface = ["react", "tsx", "jsx"].some((term) =>
+    containsWord(`${languageText}${targetText}`, term));
+  const reactSurface = reactTargetSurface || ["react", "tsx", "jsx"]
+    .some((term) => containsWord(taskText, term));
   const markupSurface = reactSurface || ["html", "markup", "class", "classname", "dom"]
     .some((term) => containsWord(allText, term));
 
@@ -136,8 +139,10 @@ export function selectModelSkills(
       // These are the only baseline skills. Domain skills still require a
       // meaningful folder-name word to match the current request or evidence.
       if (skill.id === "css-foundations" && cssSurface) score += 3;
+      if (skill.id === "css-visual-design" && cssSurface) score += 3;
       if (skill.id === "css-selector-contracts" && cssSurface && markupSurface) score += 3;
-      if (skill.id === "react-css-integration" && reactSurface && containsWord(allText, "css")) score += 3;
+      if (skill.id === "react-css-integration" && reactTargetSurface && containsWord(allText, "css")) score += 3;
+      if (skill.id === "react-css-integration" && !reactTargetSurface) score = 0;
       if (
         skill.id.startsWith("css-") &&
         !cssSurface &&

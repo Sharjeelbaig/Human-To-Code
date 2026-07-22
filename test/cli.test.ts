@@ -190,6 +190,57 @@ test("unreachable cross-file CSS receives one bounded repair before atomic write
   }
 });
 
+test("unused generated CSS selector drift receives one bounded reconciliation pass", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-css-drift-repair-"));
+  let repairs = 0;
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
+      const content = system.includes("repairing previously generated code")
+        ? (repairs += 1, ".project-grid { display: grid; }")
+        : system.includes("target: src/Projects.tsx")
+          ? 'export default function Projects() { return <section className="project-grid" />; }'
+          : ".projects-grid { display: grid; }";
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      languages: ["typescript", "css"],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+    }));
+    await put(root, "src/Projects.tsx", "/* @human render the project grid */\n");
+    await put(root, "src/portfolio.css", "/* @human style the project grid */\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as { repairRequests: number; skipped: unknown[] };
+    const writtenCss = await readFile(join(root, "src/portfolio.css"), "utf8");
+    assert.equal(done.repairRequests, 1, result.stdout);
+    assert.equal(repairs, 1);
+    assert.deepEqual(done.skipped, []);
+    assert.match(writtenCss, /\.project-grid/u);
+    assert.doesNotMatch(writtenCss, /\.projects-grid/u);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("multi-language receipt reports the inferred outputs instead of the configured default", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-multi-language-"));
   try {

@@ -169,11 +169,13 @@ tool-calling, models that can only generate plain text do just fine.
   update the shared in-memory contracts before later files get generated.
 - **Selected model skills**  -  package-owned markdown under `src/skills` is
   attached only when its folder name matches the current language, target,
-  task, or bounded project evidence. CSS foundations and selector contracts
-  prevent independently generated React markup and stylesheets from drifting;
-  responsive, layout, accessibility, and motion guidance stays out of unrelated
-  requests. See [the skill-folder guide](docs/SKILLS.md) to add a skill without
-  editing a registry.
+  task, or bounded project evidence. CSS foundations, professional light-first
+  visual design, and selector contracts prevent independently generated React
+  markup and stylesheets from drifting or looking like disconnected snippets;
+  an explicit palette or established theme takes precedence. Responsive,
+  layout, accessibility, and motion guidance stays out of unrelated requests.
+  See [the skill-folder guide](docs/SKILLS.md) to add a skill without editing a
+  registry.
 - **Candidate and write guards**  -  ambiguous fenced responses and malformed
   candidates get retried; existing sibling files, stale inline markers, and
   unsafe indentation changes get refused before anything is written. Whole
