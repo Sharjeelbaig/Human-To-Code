@@ -9,14 +9,14 @@ a plan moves out of this folder once its profile actually ships.
 Support here is layered. "Supporting a language" means moving it up these
 levels on purpose, one step at a time:
 
-1. **Direct path** (`src/agents/direct/`)  -  the language has an entry in
+1. **Direct path** (`src/tools/discovery/languages.ts`)  -  the language has an entry in
    `LANGUAGE_PROFILES` (output extension plus prompt label) and, if it has an
    inline-comment form, its source extensions are in `SCANNED_EXTENSIONS` so
    `@human` markers get found. This path has pre-write syntax and structure
    checks, but no API grounding, no project build or test execution, no
    sandbox, and no `VERIFIED` status.
    *Today: TypeScript, JavaScript, Python, Rust, Go, Java, Ruby, C#, C++, C.*
-2. **General fallback** (`src/analysis/adapters/general.ts`)  -  any declared
+2. **General fallback** (`src/tools/analysis/adapters/general.ts`)  -  any declared
    language can flow through the converter ungrounded, permanently
    `INCONCLUSIVE`. Every language already has this. It's the floor, not a goal.
 3. **Grounded profile**  -  a static `EcosystemAdapter` recognizes real projects,
@@ -24,7 +24,7 @@ levels on purpose, one step at a time:
    declared in the support matrix at `preview` tier. This is what every plan in
    this folder is describing.
 4. **Certified**  -  the profile passes the benchmark gate in
-   `src/providers/certification.ts` (>=25 tasks x 3 runs x >=95% strong-sandbox
+   `src/llms/certification.ts` (>=25 tasks x 3 runs x >=95% strong-sandbox
    pass rate, per provider and model). Never self-declared.
 
 ## What every plan has to cover

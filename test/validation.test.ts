@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { sha256Text, type ValidationPlanV1 } from "../src/core/contracts.ts";
-import { ValidationError, validateBaselineAndCandidate } from "../src/pipeline/validation.ts";
+import { ValidationError, validateBaselineAndCandidate } from "../src/tools/validation/sandbox-validation.ts";
 
 function plan(argv: string[] = ["npm", "run", "test"]): ValidationPlanV1 {
   return {

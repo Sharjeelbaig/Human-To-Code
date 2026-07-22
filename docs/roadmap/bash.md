@@ -39,7 +39,7 @@ must be flagged as elevated risk in contracts.
 
 ## Checklist
 0. Add `bash` to `LANGUAGE_PROFILES` (`.sh`) and `.sh`/`.bash` to `SCANNED_EXTENSIONS`.
-1. `Ecosystem` union + `analysis/adapters/shell.ts` (small, signal-based).
+1. `Ecosystem` union + `tools/analysis/adapters/shell.ts` (small, signal-based).
 2. `shell/script-collection` at `preview`.
 3. Register adapter; shell skill pack.
 4. Tests: shebang inventory, non-script repos not claimed, bats detection, stable fingerprints.

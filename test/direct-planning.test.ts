@@ -13,7 +13,7 @@ import {
   unaddressedRequirements,
   type ConversionUnit,
   type UnitPlanningOutcome,
-} from "../src/agents/direct/index.ts";
+} from "../src/index.ts";
 import { buildDirectBlueprintPrompt } from "../src/prompts/direct-blueprint.ts";
 import { buildDirectTodoPrompt } from "../src/prompts/direct-todos.ts";
 import { buildDirectConversionPrompt } from "../src/prompts/direct-conversion.ts";

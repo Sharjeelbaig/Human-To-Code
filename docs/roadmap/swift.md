@@ -36,7 +36,7 @@ code), and `@objc`/C interop are elevated-risk.
 
 ## Checklist
 0. Add `swift` to `LANGUAGE_PROFILES` (`.swift`) and scan `.swift` for `// @human`.
-1. `Ecosystem` union + `analysis/adapters/swift.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/swift.ts`.
 2. `swift/spm-package` at `preview`; Xcode variants declared unsupported.
 3. Register adapter; Swift skill pack.
 4. Tests: computed manifests refused, platform-gated packages, resolved-file absence, stable fingerprints.

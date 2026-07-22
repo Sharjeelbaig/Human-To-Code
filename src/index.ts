@@ -1,8 +1,9 @@
 /**
  * Stable public API for embedding Human-to-Code.
  *
- * Exports are grouped by layer; see docs/ARCHITECTURE.md for how the layers
- * relate. The CLI (`src/cli.ts`) is a thin shell over this same surface.
+ * Exports are grouped by the agentic folders described in
+ * `docs/Codebase_Tour.md`. The CLI (`src/cli.ts`) is a shell over this same
+ * surface, so reorganizing internal files does not change consumer imports.
  */
 
 // Core primitives: shared types and versioned artifact contracts.
@@ -35,7 +36,7 @@ export {
   fastApiEcosystemAdapter,
   RustEcosystemAdapter,
   rustEcosystemAdapter,
-} from "./analysis/analyzer.ts";
+} from "./tools/analysis/analyzer.ts";
 export type {
   AnalysisEvidenceV1,
   AnalyzerContext,
@@ -57,30 +58,29 @@ export type {
   WorkspaceProfileV1,
   ValidationCategory as AnalyzerValidationCategory,
   ValidationCommandV1 as AnalyzerValidationCommandV1,
-} from "./analysis/analyzer.ts";
+} from "./tools/analysis/analyzer.ts";
 
 // Security: fail-closed repository secret scanning.
-export * from "./security/secret-scan.ts";
+export * from "./tools/security/secret-scan.ts";
 
 // Grounded context: selection, documentation retrieval, compiler skills/tools.
-export * from "./context/context.ts";
-export * from "./context/documentation.ts";
-export * from "./context/compiler-skills.ts";
-export * from "./context/compiler-tools.ts";
+export * from "./memory/context.ts";
+export * from "./memory/documentation.ts";
+export * from "./memory/compiler-skills.ts";
+export * from "./memory/compiler-tools.ts";
+export * from "./memory/project-memory.ts";
+export * from "./memory/file-memory.ts";
 
 // Providers: adapter contract, bundled adapters, certification gate, schemas.
-export * from "./providers/provider.ts";
-export * from "./providers/providers.ts";
-export * from "./providers/certification.ts";
-export * from "./providers/schemas.ts";
+export * from "./llms/index.ts";
 
-// Agents: model-facing orchestration with prompts and transport kept separate.
-export * from "./agents/direct/index.ts";
+// Workflows sequence model-facing work; focused capabilities remain in tools.
+export * from "./workflows/index.ts";
+export * from "./tools/discovery/languages.ts";
+export * from "./tools/discovery/marker-parser.ts";
+export * from "./tools/discovery/language-relationships.ts";
+export * from "./tools/discovery/discovery.ts";
+export * from "./tools/discovery/declarations.ts";
+export * from "./tools/validation/index.ts";
+export * from "./tools/file-ops/index.ts";
 export * from "./prompts/index.ts";
-
-// Pipeline: plan -> generate -> validate -> apply orchestration and storage.
-export * from "./pipeline/planner.ts";
-export * from "./pipeline/patch.ts";
-export * from "./pipeline/snapshot.ts";
-export * from "./pipeline/run-store.ts";
-export * from "./pipeline/validation.ts";

@@ -37,7 +37,7 @@ inventory helper both adapters reuse (`analyzer-utils.ts` addition).
 
 ## Checklist
 0. Add `kotlin` to `LANGUAGE_PROFILES` (`.kt`) and scan `.kt`/`.kts` for `// @human`.
-1. `Ecosystem` union + `analysis/adapters/kotlin.ts` (shared Gradle helpers with java.md's adapter).
+1. `Ecosystem` union + `tools/analysis/adapters/kotlin.ts` (shared Gradle helpers with java.md's adapter).
 2. `kotlin/gradle-jvm` at `preview`; `kotlin/android` deferred and documented.
 3. Register adapter; Kotlin skill pack.
 4. Tests: catalog vs literal versions, multiplatform refusal, Android detection, stable fingerprints.

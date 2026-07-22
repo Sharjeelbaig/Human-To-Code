@@ -39,16 +39,16 @@ require touching the layers above.
 
 ### Adding an ecosystem (Django, Spring, whatever)
 
-1. Implement `EcosystemAdapter` (`analysis/analyzer-types.ts`) in a new
-   `analysis/adapters/<name>.ts`. Analysis has to stay static: inspect only the
+1. Implement `EcosystemAdapter` (`tools/analysis/analyzer-types.ts`) in a new
+   `tools/analysis/adapters/<name>.ts`. Analysis has to stay static: inspect only the
    bounded `AnalyzerContext`, and never import project modules, evaluate config,
    or spawn tools. Emit version evidence and candidate validation commands.
 2. Declare the recognized variants and versions in
-   `analysis/support-matrix.ts`, starting at the `preview` tier. Support gets
+   `tools/analysis/support-matrix.ts`, starting at the `preview` tier. Support gets
    declared, never inferred.
 3. Register the adapter in `DEFAULT_ECOSYSTEM_ADAPTERS`
-   (`analysis/analyzer.ts`).
-4. Add a skill pack in `context/compiler-skills.ts` for the ecosystem's
+   (`tools/analysis/analyzer.ts`).
+4. Add a skill pack in `memory/compiler-skills.ts` for the ecosystem's
    conventions. Policy data only  -  it grants no authority.
 5. Add positive and adversarial fixtures per the analyzer checklist in
    CONTRIBUTING.md: conflicting lockfiles, ambiguous workspaces, symlinks,
@@ -56,9 +56,9 @@ require touching the layers above.
 
 ### Adding a provider (Anthropic, say)
 
-1. Implement `ProviderAdapter` (`providers/provider.ts`) in
-   `providers/providers.ts` or a sibling file, using only Node built-ins plus
-   `security/pinned-http.ts` for transport. No new runtime dependencies.
+1. Implement `ProviderAdapter` (`llms/provider.ts`) in
+   `llms/adapters.ts` or a sibling file, using only Node built-ins plus
+   `tools/security/pinned-http.ts` for transport. No new runtime dependencies.
 2. Route all output through the existing schema gate (`generateValidated`) and
    the budget accounting  -  pessimistic pre-request reservation, reconciliation
    against provider-reported usage, conservative charge on failure.
@@ -76,7 +76,7 @@ Artifacts (`*V1` in `core/contracts.ts`) are the contracts between stages *and*
 between releases:
 
 - **Additive and compatible?** Extend the V1 type and its exact validator
-  together, plus the JSON Schema in `providers/schemas.ts` if the artifact
+  together, plus the JSON Schema in `llms/schemas.ts` if the artifact
   crosses the provider boundary.
 - **Meaning changing?** That's a new version (`*V2`), a new validator, and an
   explicit migration  -  the `migrate-config` command is the pattern to copy.
@@ -111,7 +111,7 @@ them.
   discovery inventory, prioritizes a fixed maximum of nearby and contract files,
   indexes current files by directory for relationship lookup, and caps every
   rendered tree and prompt block. Add new language contract extractors as
-  deterministic summaries in `agents/direct/project-contracts.ts`. Don't send
+  deterministic summaries in `workflows/project-contracts.ts`. Don't send
   whole repositories, and don't reach for a persistent embedding cache as a
   shortcut. A new relationship rule has to provide an exact relative path, stay
   evidence rather than authority, and ship with an adversarial
@@ -158,7 +158,7 @@ Documentation is layered like the code. Update the layer that owns the fact:
 | --- | --- | --- |
 | Module headers | What one file does | That file's behavior changes |
 | [docs/CODE_CLARITY.md](CODE_CLARITY.md) | Naming, variables, lifecycle comments, compatibility aliases | Source-clarity practices change |
-| [docs/CODEBASE_TOUR.md](CODEBASE_TOUR.md) | The newcomer explanation of product journeys, project culture, folders, important functions, and how files cooperate | A file is added, or its role in the product changes |
+| [docs/Codebase_Tour.md](Codebase_Tour.md) | The newcomer explanation of product journeys, project culture, folders, important functions, and how files cooperate | A file is added, or its role in the product changes |
 | [docs/MODULES.md](MODULES.md) | The per-file map | A module is added, moved, or repurposed |
 | [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Layers, flow, design decisions | A layer, stage, or invariant-relevant design changes |
 | [Readme.md](../Readme.md) | User-facing behavior and guarantees | CLI behavior, config, statuses, or limitations change |

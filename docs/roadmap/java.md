@@ -41,7 +41,7 @@ changes, and dependency additions are elevated-risk; build scripts are
 executable code and must never be model-editable.
 
 ## Checklist
-1. `Ecosystem` union + `analysis/adapters/java.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/java.ts`.
 2. `java/maven`, `java/gradle` at `preview` in `support-matrix.ts`.
 3. Register adapter; Java/Spring skill pack.
 4. Adversarial tests: multi-module reactors, dynamic Gradle includes, version properties, wrapper absence, stable fingerprints.

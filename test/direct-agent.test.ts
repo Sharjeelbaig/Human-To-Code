@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ContextSecurityError } from "../src/context/context.ts";
+import { ContextSecurityError } from "../src/memory/context.ts";
 import {
   FileMemory,
   FileMemoryConflictError,
@@ -14,7 +14,7 @@ import {
   generateCode,
   generateConversionUnits,
   type UnitGenerationContext,
-} from "../src/agents/direct/index.ts";
+} from "../src/index.ts";
 
 test("inline marker extraction ignores marker-shaped text in strings and comments", () => {
   const source = [

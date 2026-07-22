@@ -10,8 +10,8 @@ import {
   validateCertificationEvidenceV1,
   type BenchmarkRunOutcome,
   type CertificationEvidenceV1,
-} from "../src/providers/certification.ts";
-import { SUPPORT_MATRIX_VERSION } from "../src/analysis/support-matrix.ts";
+} from "../src/llms/certification.ts";
+import { SUPPORT_MATRIX_VERSION } from "../src/tools/analysis/support-matrix.ts";
 
 const CORPUS_HASH = createHash("sha256").update("react-vite-spa-corpus").digest("hex");
 const PROFILE = providerProfileId("Ollama", "qwen2.5-coder:7b");

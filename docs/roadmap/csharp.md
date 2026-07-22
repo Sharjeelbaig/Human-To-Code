@@ -37,7 +37,7 @@ Source generators/analyzers in project files, `unsafe` blocks, P/Invoke
 generated for review, never applied (existing invariant).
 
 ## Checklist
-1. `Ecosystem` union + `analysis/adapters/dotnet.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/dotnet.ts`.
 2. `dotnet/sdk-project`, `dotnet/solution` at `preview`.
 3. Register adapter; .NET skill pack.
 4. Tests: solution/project graph ambiguity, lockfile vs floating versions, offline-restore behavior, stable fingerprints.

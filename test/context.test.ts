@@ -12,7 +12,7 @@ import {
   scanSecrets,
   selectContext,
   validateContextManifestV1,
-} from "../src/context/context.ts";
+} from "../src/memory/context.ts";
 
 async function fixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "h2c-context-"));

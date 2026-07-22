@@ -3,14 +3,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { analyzeProject } from "../src/analysis/analyzer.ts";
+import { analyzeProject } from "../src/tools/analysis/analyzer.ts";
 import { ArtifactValidationError, validateChangeContractV1 } from "../src/core/contracts.ts";
 import {
   PlanningError,
   createDraftContract,
   loadReviewedContract,
   writeDraftContract,
-} from "../src/pipeline/planner.ts";
+} from "../src/workflows/planner.ts";
 import type { SourceFile } from "../src/core/types.ts";
 
 async function put(root: string, path: string, contents: string): Promise<void> {

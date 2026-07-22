@@ -17,8 +17,8 @@ import {
   stripCodeFence,
   validateGeneratedUnit,
   type ConversionUnit,
-} from "../src/agents/direct/index.ts";
-import { extractStaticFileMemory } from "../src/pipeline/file-memory.ts";
+} from "../src/index.ts";
+import { extractStaticFileMemory } from "../src/memory/file-memory-extraction.ts";
 
 test("issue 02: single-line and decorated multiline JSDoc markers are discovered", () => {
   const source = [

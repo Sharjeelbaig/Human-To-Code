@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
  * The CLI shell. Exposes the conversion flow and prints the results. The
- * actual conversion policy lives in the direct agent.
+ * actual conversion policy lives in workflows, while focused discovery,
+ * validation, and file-writing work lives in tools.
+ *
+ * (Example: `npx human-to-code . --yes` enters here, then composes memory,
+ * model, validation, and file-operation modules without hiding the sequence.)
  */
 
 import { realpathSync } from "node:fs";
@@ -18,13 +22,13 @@ import {
   validateConfig,
   type ConfigV1,
 } from "./config/config.ts";
-import { ContextSecurityError } from "./context/context.ts";
+import { ContextSecurityError } from "./memory/context.ts";
 import { DiscoveryError } from "./config/discovery.ts";
-import { ProviderError, type ProviderAdapter } from "./providers/provider.ts";
+import { ProviderError, type ProviderAdapter } from "./llms/provider.ts";
 import {
   createOllamaProvider,
   createOpenAIProvider,
-} from "./providers/providers.ts";
+} from "./llms/adapters.ts";
 import {
   applyWholeFileBatch,
   applyInlineFileBatch,
@@ -60,7 +64,7 @@ import {
   type ReferenceFinding,
   type StagedValidationProgress,
   type UnitPlanningOutcome,
-} from "./agents/direct/index.ts";
+} from "./index.ts";
 import type { ProviderName } from "./core/types.ts";
 
 const HELP = `human-to-code - turn plain-language requests into code

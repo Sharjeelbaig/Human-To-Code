@@ -15,8 +15,8 @@ import {
   type JsonSchemaV1,
   type ProviderAdapter,
   type ProviderGenerationRequestV1,
-} from "../src/providers/provider.ts";
-import { COMPILER_SKILLS } from "../src/context/compiler-skills.ts";
+} from "../src/llms/provider.ts";
+import { COMPILER_SKILLS } from "../src/memory/compiler-skills.ts";
 
 const schema: JsonSchemaV1 = {
   type: "object",

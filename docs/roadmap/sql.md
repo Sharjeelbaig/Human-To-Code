@@ -41,7 +41,7 @@ migration files are immutable history  -  protected paths; only new files may
 be created.
 
 ## Checklist
-1. `Ecosystem` union + `analysis/adapters/sql.ts` keyed on migration-tool detection.
+1. `Ecosystem` union + `tools/analysis/adapters/sql.ts` keyed on migration-tool detection.
 2. `sql/migration-set` at `preview`.
 3. SQL skill pack; extend patch policy tests for "create-only in migrations dir".
 4. Tests: ordering, tool detection, destructive-statement gating, dialect signals.

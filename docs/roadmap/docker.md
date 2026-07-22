@@ -2,7 +2,7 @@
 
 ## Status today
 Level 2 only. Note the tool already *consumes* Docker/Podman as its
-validation sandbox (`src/pipeline/validation.ts`); this plan is about
+validation sandbox (`src/tools/validation/sandbox-validation.ts`); this plan is about
 generating and editing Dockerfiles/Compose files as change targets.
 
 ## Target profile
@@ -39,7 +39,7 @@ implicit-downloader rejection), privileged/host-mount Compose options, and
 port/secret exposure are elevated-risk requiring contract authorization.
 
 ## Checklist
-1. `Ecosystem` union + `analysis/adapters/container.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/container.ts`.
 2. `container/dockerfile`, `container/compose` at `preview`.
 3. Skill pack; patch-policy tests for RUN-pattern and privilege gating.
 4. Tests: multi-stage graphs, digest vs tag evidence, compose schema versions.

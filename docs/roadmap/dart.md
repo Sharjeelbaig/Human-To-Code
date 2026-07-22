@@ -36,7 +36,7 @@ initially.
 
 ## Checklist
 0. Add `dart` to `LANGUAGE_PROFILES` (`.dart`) and scan `.dart` for `// @human`.
-1. `Ecosystem` union + `analysis/adapters/dart.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/dart.ts`.
 2. `dart/package`, `dart/flutter-app` at `preview`.
 3. Register adapter; Dart/Flutter skill pack.
 4. Tests: lock absence, flutter vs pure-dart, generated-file protection, stable fingerprints.

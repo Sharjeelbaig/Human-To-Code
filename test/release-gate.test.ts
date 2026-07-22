@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { CERTIFIED_EVIDENCE, evaluateProviderCertification } from "../src/providers/certification.ts";
-import { SUPPORT_MATRIX } from "../src/analysis/support-matrix.ts";
+import { CERTIFIED_EVIDENCE, evaluateProviderCertification } from "../src/llms/certification.ts";
+import { SUPPORT_MATRIX } from "../src/tools/analysis/support-matrix.ts";
 
 test("an uncertified shipped matrix cannot be released as 1.0 or claim certified profiles", async () => {
   const packageJson = JSON.parse(

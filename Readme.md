@@ -593,7 +593,7 @@ Pick whichever one matches your question:
 | I want to understand... | Read |
 | --- | --- |
 | What a project term means | [Architecture glossary](docs/GLOSSARY.md) |
-| How the product works, why each source folder and file exists, and where to start in VS Code | [Codebase tour](docs/CODEBASE_TOUR.md) |
+| How the product works and where a source change belongs | [Codebase tour](docs/Codebase_Tour.md) |
 | Why the source is split into these layers | [Architecture](docs/ARCHITECTURE.md) |
 | What each source file owns | [Module guide](docs/MODULES.md) |
 | How functions, variables, and lifecycle comments should be named | [Source clarity and naming practices](docs/CODE_CLARITY.md) |

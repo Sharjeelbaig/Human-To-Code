@@ -38,7 +38,7 @@ elevated-risk. Dynamic requires make import grounding partially opaque  -
 document as an accepted limitation like Python's.
 
 ## Checklist
-1. `Ecosystem` union + `analysis/adapters/ruby.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/ruby.ts`.
 2. `ruby/gem`, `ruby/rails`, `ruby/rack` at `preview`.
 3. Register adapter; Ruby/Rails skill pack.
 4. Tests: lockfile absence, Rails vs Rack ambiguity, engine subdirectories, stable fingerprints.

@@ -8,7 +8,7 @@ import {
   type ConversionUnit,
   type ProjectMemoryProvider,
   type ProjectRelationship,
-} from "../src/agents/direct/index.ts";
+} from "../src/index.ts";
 import {
   buildDirectIntegrationAuditPrompt,
   buildDirectIntegrationRepairPrompt,

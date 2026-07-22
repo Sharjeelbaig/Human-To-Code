@@ -9,14 +9,14 @@ import {
   ProviderError,
   type JsonSchemaV1,
   type ProviderGenerationRequestV1,
-} from "../src/providers/provider.ts";
+} from "../src/llms/provider.ts";
 import {
   OllamaProvider,
   OpenAIResponsesProvider,
   type ProviderFetch,
   type ProviderHostnameResolver,
-} from "../src/providers/providers.ts";
-import { pinnedHttpFetch } from "../src/security/pinned-http.ts";
+} from "../src/llms/adapters.ts";
+import { pinnedHttpFetch } from "../src/tools/security/pinned-http.ts";
 
 const RESPONSE_SCHEMA: JsonSchemaV1 = {
   type: "object",

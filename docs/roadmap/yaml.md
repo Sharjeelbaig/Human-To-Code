@@ -40,7 +40,7 @@ explicit contract authorization. Secrets scanning already covers values;
 the skill pack must also forbid *referencing* new secret names silently.
 
 ## Checklist
-1. `Ecosystem` union + `analysis/adapters/yaml-config.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/yaml-config.ts`.
 2. Variants at `preview`; bundle schema data as frozen package assets.
 3. Skill pack; patch-policy tests for workflow-edit gating.
 4. Tests: schema discovery, multi-doc files, duplicate keys, unschema'd refusal.

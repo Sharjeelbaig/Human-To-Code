@@ -15,7 +15,7 @@ import {
   type ConversionUnit,
   type GeneratedConversionUnit,
   type ProjectMemoryProvider,
-} from "../src/agents/direct/index.ts";
+} from "../src/index.ts";
 import { buildDirectConversionPrompt } from "../src/prompts/direct-conversion.ts";
 
 async function put(root: string, path: string, content: string): Promise<void> {

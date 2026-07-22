@@ -3,8 +3,8 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { ContextSecurityError } from "../src/context/context.ts";
-import { DocumentationError, OfficialDocumentationClient } from "../src/context/documentation.ts";
+import { ContextSecurityError } from "../src/memory/context.ts";
+import { DocumentationError, OfficialDocumentationClient } from "../src/memory/documentation.ts";
 
 async function temporary(): Promise<string> {
   return mkdtemp(join(tmpdir(), "human-to-code-doc-test-"));

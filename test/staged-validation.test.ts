@@ -11,7 +11,7 @@ import {
   type ConversionUnit,
   type GeneratedConversionUnit,
   type StagedRepairRequest,
-} from "../src/agents/direct/index.ts";
+} from "../src/index.ts";
 import { buildDirectRepairPrompt } from "../src/prompts/direct-repair.ts";
 
 function fileUnit(root: string, source: string, output: string): ConversionUnit {

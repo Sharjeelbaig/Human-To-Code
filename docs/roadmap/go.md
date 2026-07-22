@@ -40,7 +40,7 @@ elevated-risk and need explicit contract authorization  -  same posture as
 Rust's `unsafe`/FFI gates.
 
 ## Checklist
-1. Add `go` to the `Ecosystem` union + `analysis/adapters/go.ts` implementing `EcosystemAdapter`.
+1. Add `go` to the `Ecosystem` union + `tools/analysis/adapters/go.ts` implementing `EcosystemAdapter`.
 2. Declare `go/module` + `go/workspace` in `support-matrix.ts` at `preview`.
 3. Register in `DEFAULT_ECOSYSTEM_ADAPTERS`; add a Go skill pack in `compiler-skills.ts`.
 4. Tests per CONTRIBUTING's analyzer checklist: nested modules, missing `go.sum`, `go.work` ambiguity, cgo detection, stable fingerprints.

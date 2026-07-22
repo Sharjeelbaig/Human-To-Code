@@ -3,7 +3,7 @@
  * enforce the patch schema themselves.
  */
 import { canonicalJson } from "../core/contracts.ts";
-import type { JsonSchemaV1 } from "../providers/provider.ts";
+import type { JsonSchemaV1 } from "../llms/provider.ts";
 
 /** Fallback output-contract prompt for providers without native JSON Schema. */
 export function buildProviderOutputContractPrompt(schema: JsonSchemaV1): string {

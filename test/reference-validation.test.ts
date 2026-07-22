@@ -7,7 +7,7 @@ import {
   selectorSpecificity,
   type ReferenceFile,
   type ReferenceFindingCode,
-} from "../src/agents/direct/reference-validation.ts";
+} from "../src/tools/validation/reference-validation.ts";
 
 function generated(path: string, content: string): ReferenceFile {
   return { path, content, generated: true };

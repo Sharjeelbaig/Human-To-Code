@@ -10,7 +10,7 @@ import {
   generateConversionUnits,
   type ConversionUnit,
   type UnitGenerationContext,
-} from "../src/agents/direct/index.ts";
+} from "../src/index.ts";
 import { buildDirectConversionPrompt } from "../src/prompts/direct-conversion.ts";
 import { buildDirectRepairPrompt } from "../src/prompts/direct-repair.ts";
 

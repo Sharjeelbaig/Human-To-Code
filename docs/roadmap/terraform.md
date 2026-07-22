@@ -41,7 +41,7 @@ apply-safe  -  plan/apply stay human-owned.
 
 ## Checklist
 0. Scan `.tf` for `# @human` markers (direct-path quick win, `LANGUAGE_PROFILES` entry `hcl`/`.tf`).
-1. `Ecosystem` union + `analysis/adapters/terraform.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/terraform.ts`.
 2. `terraform/root-module`, `terraform/child-module` at `preview`.
 3. Skill pack; tests for lockfile evidence, multi-root refusal, moved-block gating.
 4. Docs updates (including the honest validate-vs-apply distinction in README).

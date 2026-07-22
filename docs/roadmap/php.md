@@ -35,7 +35,7 @@ grounding; service-provider registration changes are elevated-risk.
 
 ## Checklist
 0. Add `php` to `LANGUAGE_PROFILES` (`.php`) and `.php` to `SCANNED_EXTENSIONS`  -  direct-path quick win.
-1. `Ecosystem` union + `analysis/adapters/php.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/php.ts`.
 2. `php/composer-app`, `php/laravel` at `preview`.
 3. Register adapter; PHP/Laravel skill pack.
 4. Tests: missing lockfile, PSR-4 mismatches, Laravel vs plain-composer ambiguity, stable fingerprints.

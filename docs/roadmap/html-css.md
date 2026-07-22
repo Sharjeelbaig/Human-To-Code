@@ -57,7 +57,7 @@ ordinary code and reviewed as such.
 
 ## Checklist
 0. Add `html`/`css` to `LANGUAGE_PROFILES` (`.html`, `.css`) for the direct path.
-1. `Ecosystem` union + `analysis/adapters/static-web.ts`.
+1. `Ecosystem` union + `tools/analysis/adapters/static-web.ts`.
 2. `static-web/static-site` at `preview`.
 3. Skill pack centred on accessibility conventions.
 4. Tests: framework-owned trees not double-claimed, CDN pin detection, link-graph checks.
