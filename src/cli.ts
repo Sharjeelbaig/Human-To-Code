@@ -1239,20 +1239,20 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
 function isMainModule(): boolean {
   // Step 1: Find out what file the user told Node to execute in the terminal.
   // (Example: if you run `node dist/cli.js`, this variable holds the path to `dist/cli.js`)
-  const entry = process.argv[1]; 
-  
+  const entry = process.argv[1];
+
   // Step 2: If there is no file, it means another script imported us, so we are not the main program.
   // (Example: this runs when your custom agent does `import { runHumanToCodeCli } from "./cli"`)
-  if (!entry) return false; 
-  
+  if (!entry) return false;
+
   try {
     // Step 3: Check if the file the user ran is THIS exact file.
     // 'realpathSync' is used to trace through any file shortcuts to find the true file paths before comparing them.
     // (Example: this returns true when you run `npx human-to-code .` because npx acts as a shortcut to this file)
-    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url)); 
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     // Step 4: If tracing shortcuts fails, fallback to doing a basic text comparison of the two file paths.
-    return resolve(entry) === resolve(fileURLToPath(import.meta.url)); 
+    return resolve(entry) === resolve(fileURLToPath(import.meta.url));
   }
 }
 
