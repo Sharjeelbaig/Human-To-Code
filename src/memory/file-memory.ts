@@ -24,6 +24,29 @@ import type {
   UnitGenerationContext,
 } from "../workflows/types.ts";
 
+interface SessionTurn {
+  sourcePath: string;
+  line?: number;
+  message: string;
+}
+
+/** Keep the newest complete turns while preserving their chronological order. */
+function renderSessionMemory(turns: readonly SessionTurn[], charBudget: number): string | undefined {
+  if (turns.length === 0 || charBudget <= 0) return undefined;
+  const header = "Earlier @human messages in this conversion session, oldest to newest:";
+  const selected: string[] = [];
+  let used = header.length;
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index]!;
+    const location = `${turn.sourcePath}${turn.line === undefined ? "" : `:${turn.line}`}`;
+    const rendered = `- ${location}: ${JSON.stringify(turn.message)}`;
+    if (used + rendered.length + 1 > charBudget) break;
+    selected.unshift(rendered);
+    used += rendered.length + 1;
+  }
+  return selected.length > 0 ? [header, ...selected].join("\n") : undefined;
+}
+
 export class FileMemoryConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -164,6 +187,7 @@ export async function generateConversionUnits(
   // from pass 1 with no draft, while coding passes close a todo coverage gap.
   const maxCodingPasses = Math.max(1, options.maxCodingPasses ?? 1);
   const contextCharBudget = options.contextCharBudget ?? Number.MAX_SAFE_INTEGER;
+  const sessionTurns: SessionTurn[] = [];
 
   for (const unit of ordered) {
     let memory: FileMemory | undefined;
@@ -179,12 +203,15 @@ export async function generateConversionUnits(
     let failure: string | undefined;
     let todoRequests = 0;
     let codingRequests = 0;
+    let classificationRequests = 0;
     let refinementRejected: string | undefined;
     let coverage: TodoCoverage = { addressed: [], unaddressed: [], unverifiable: [] };
     let plannedTodos: UnitTodoList | undefined;
     let planningAttempted = false;
     let rejectedDraft: string | undefined;
     let validationFailure: string | undefined;
+    let contextOnly = false;
+    let classifiedAction: "context" | "edit" | undefined;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       options.onProgress?.({ kind: "start", unit, attempt });
       try {
@@ -196,13 +223,34 @@ export async function generateConversionUnits(
             unit.sourcePath,
           );
         }
-        const remaining = Math.max(0, contextCharBudget - (renderedMemory?.length ?? 0));
+        const sessionBudget = Math.max(0, contextCharBudget - (renderedMemory?.length ?? 0));
+        const renderedSessionMemory = renderSessionMemory(sessionTurns, sessionBudget);
+        const remaining = Math.max(
+          0,
+          contextCharBudget - (renderedMemory?.length ?? 0) - (renderedSessionMemory?.length ?? 0),
+        );
         const renderedProjectMemory = options.projectMemory?.renderFor(unit, remaining);
         const baseContext: UnitGenerationContext = {
           inline: unit.kind === "inline",
+          ...(renderedSessionMemory ? { sessionMemory: renderedSessionMemory } : {}),
           ...(renderedMemory ? { fileMemory: renderedMemory } : {}),
           ...(renderedProjectMemory ? { projectMemory: renderedProjectMemory } : {}),
         };
+
+        if (
+          options.classify
+          && options.shouldClassify?.(unit) !== false
+          && classifiedAction === undefined
+        ) {
+          options.onProgress?.({ kind: "classify", unit });
+          classificationRequests += 1;
+          classifiedAction = await options.classify(unit, baseContext);
+        }
+        if (classifiedAction === "context") {
+          contextOnly = true;
+          failure = undefined;
+          break;
+        }
 
         // Planning enriches context; it is never allowed to fail the unit.
         if (options.plan && options.shouldPlan?.(unit) !== false && !planningAttempted) {
@@ -276,6 +324,7 @@ export async function generateConversionUnits(
     }
     options.onPlanningOutcome?.({
       unit,
+      classificationRequests,
       todoRequests,
       codingRequests,
       ...(refinementRejected !== undefined ? { refinementRejected } : {}),
@@ -283,6 +332,17 @@ export async function generateConversionUnits(
       unaddressed: coverage.unaddressed.length,
       unverifiable: coverage.unverifiable.length,
     });
+    sessionTurns.push({
+      sourcePath: unit.sourcePath,
+      ...(unit.line === undefined ? {} : { line: unit.line }),
+      message: unit.prompt,
+    });
+
+    if (contextOnly) {
+      generated.push({ unit, code: "", contextOnly: true });
+      options.onProgress?.({ kind: "context", unit });
+      continue;
+    }
 
     if (failure !== undefined || code === undefined) {
       generated.push({ unit, code: "", error: failure ?? "generation produced no code" });

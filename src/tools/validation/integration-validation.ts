@@ -163,7 +163,7 @@ function relationshipGroups(
   generated: readonly GeneratedConversionUnit[],
   projectMemory?: ProjectMemoryProvider,
 ): RelationshipGroup[] {
-  const wholeFiles = generated.filter((item) => unitOwnsCompleteFile(item.unit));
+  const wholeFiles = generated.filter((item) => item.contextOnly !== true && unitOwnsCompleteFile(item.unit));
   const byPath = new Map(wholeFiles.map((item) => [targetPath(item.unit), item.unit]));
   const adjacency = new Map<string, Set<string>>([...byPath.keys()].map((path) => [path, new Set()]));
   const relationships = new Map<string, DirectIntegrationRelationship>();
@@ -391,7 +391,7 @@ export async function reconcileGeneratedIntegrations(
 
   for (const group of groups) {
     const unavailable = group.units.map((unit) => byUnit.get(unit)!)
-      .filter((item) => item.error !== undefined || item.code.trim().length === 0);
+      .filter((item) => item.contextOnly !== true && (item.error !== undefined || item.code.trim().length === 0));
     if (unavailable.length > 0) {
       rejectGroup(group, `cross-file integration group is incomplete because ${unavailable.map((item) => item.unit.sourcePath).join(", ")} did not produce an applicable candidate`);
       continue;

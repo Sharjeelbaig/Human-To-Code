@@ -17,6 +17,10 @@ import {
   type ProjectMemoryProvider,
 } from "../src/index.ts";
 import { buildDirectConversionPrompt } from "../src/prompts/direct-conversion.ts";
+import {
+  buildDirectTurnClassificationPrompt,
+  parseDirectTurnClassification,
+} from "../src/prompts/direct-turn-classification.ts";
 
 async function put(root: string, path: string, content: string): Promise<void> {
   const absolute = join(root, path);
@@ -48,6 +52,81 @@ test("inline prompts state the exact insertion grammar", () => {
   assert.match(prompt.system, /declarations only/u);
   assert.match(prompt.system, /Do not output a selector, nested rule, braces/u);
   assert.match(prompt.user, /<INSERTION_CONTEXT>/u);
+});
+
+test("every earlier @human message becomes ordered session memory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-inline-session-memory-"));
+  try {
+    const source = [
+      "/* @human This is context:",
+      "Return the 256th day under the historical Russian calendar.",
+      "*/",
+      "function dayOfProgrammer(year: number): string {",
+      "  // @human Write your code here",
+      "}",
+      "",
+    ].join("\n");
+    await put(root, "main.ts", source);
+
+    const { units } = await discoverDirectUnits(root, ["typescript"]);
+    assert.equal(units.length, 2);
+    const classifiedMemory: Array<string | undefined> = [];
+    const generated = await generateConversionUnits(units, async () => {
+      return 'return `13.09.${year}`;';
+    }, {
+      classify: async (unit, context) => {
+        classifiedMemory.push(context.sessionMemory);
+        return unit === units[0] ? "context" : "edit";
+      },
+    });
+    assert.equal(classifiedMemory[0], undefined);
+    assert.match(classifiedMemory[1] ?? "", /historical Russian calendar/u);
+    assert.equal(generated[0]!.contextOnly, true);
+
+    const candidate = (await candidateTextsForGenerated(generated)).get("main.ts");
+    assert.match(candidate ?? "", /@human This is context:/u);
+    assert.match(candidate ?? "", /return `13\.09\.\$\{year\}`;/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a strict classifier handles arbitrary conversational turns, not named directives", () => {
+  const prompt = buildDirectTurnClassificationPrompt({
+    targetPath: "main.ts",
+    instruction: "Write your code here",
+    sessionMemory: '- main.ts:1: "Hi"',
+  });
+  assert.match(prompt.system, /greeting, background\/reference information/u);
+  assert.match(prompt.system, /exactly \{"action":"context"\}/u);
+  assert.match(prompt.user, /<SESSION_MEMORY>\n- main\.ts:1: "Hi"/u);
+  assert.equal(parseDirectTurnClassification('{"action":"context"}'), "context");
+  assert.equal(parseDirectTurnClassification('{"action":"edit"}'), "edit");
+  assert.throws(() => parseDirectTurnClassification('{"action":"context","code":"oops"}'));
+});
+
+test("a greeting is retained without blocking the next edit in the same file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-inline-greeting-memory-"));
+  try {
+    await put(root, "example.ts", [
+      "// @human Hi",
+      "// @human declare a result constant",
+      "",
+    ].join("\n"));
+
+    const { units } = await discoverDirectUnits(root, ["typescript"]);
+    const generated = await generateConversionUnits(units, async (_unit, context) => {
+      assert.match(context.sessionMemory ?? "", /"Hi"/u);
+      return "const result = true;";
+    }, {
+      classify: async (unit) => unit.prompt === "Hi" ? "context" : "edit",
+    });
+    assert.equal(generated[0]!.contextOnly, true);
+    assert.equal(generated[1]!.code, "const result = true;");
+    assert.match((await candidateTextsForGenerated(generated)).get("example.ts") ?? "", /@human Hi[\s\S]*const result = true;/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("a selector cannot be inserted into a CSS declaration body", async () => {

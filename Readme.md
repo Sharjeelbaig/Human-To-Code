@@ -134,19 +134,27 @@ another comment stays inert. When it does replace a marker, it removes exactly
 the comment range it recognized and leaves the surrounding text, newline style,
 and indentation alone.
 
+Inline markers are ordered conversation turns. Before code generation, a
+dedicated strict classifier decides whether each current message requests an
+edit or only contributes conversation/background (including greetings and
+problem statements). Context-only markers stay unchanged, and every earlier
+message enters bounded session memory for later markers in the same run.
+
 ### Fast deterministic engine
 
-The host stays in control; the model only writes code. For each unit the host
-sends **one plain model completion**  -  no tool calls  -  and applies the result by
-exact marker range. When TypeScript (or JavaScript you've opted into) project
+The host stays in control; the model only writes code. Each inline marker gets
+a small structured turn-classification request; edit turns then receive a plain
+code completion, while context-only turns are preserved. Whole-file `.human`
+units go directly to coding. Results are applied by exact marker range. When
+TypeScript (or JavaScript you've opted into) project
 validation turns up a repairable cross-file error, a whole-file unit can earn
 **one extra bounded repair completion** using the same provider and model.
-That's it. This is why it's quick and why small models work: a 1.5B coder model
-converts a four-marker file in about 4 seconds. And since nothing here needs
-tool-calling, models that can only generate plain text do just fine.
+That's it. The requests remain small and bounded, and nothing here needs
+tool-calling, so models that can only generate plain text still work.
 
-- **Per-marker isolation**  -  every `@human` marker is generated and applied on
-  its own. If one marker's output is bad (say a small model redeclares a symbol
+- **Per-marker isolation**  -  every `@human` marker is classified on its own;
+  edit turns are generated and applied independently, while context turns are
+  retained for later session memory. If one marker's output is bad (say a small model redeclares a symbol
   that already exists), that marker gets retried, then skipped with a printed
   reason. The rest still convert. One failure never takes down the run.
 - **FileMemory**  -  declarations already in the file are handed to the model as
@@ -233,7 +241,7 @@ npx human-to-code . --yes --model qwen2.5-coder:1.5b
 
 | Command | Behavior |
 | --- | --- |
-| `human-to-code [root]` | The default direct flow: find `.human` files and `@human` markers, show a receipt, and on confirmation convert them with the **fast deterministic engine** (one plain model completion per marker, plus at most one bounded cross-file repair completion per whole-file JS/TS unit  -  see above). `npx human-to-code .` is the normal way in. |
+| `human-to-code [root]` | The default direct flow: find `.human` files and `@human` markers, show a receipt, classify inline turns, and convert edit turns with the **fast deterministic engine** (plus at most one bounded cross-file repair completion per whole-file JS/TS unit—see above). `npx human-to-code .` is the normal way in. |
 | `human-to-code --init [root]` | Create a schema-v1 config without overwriting an existing one. Review the generated provider before you use it. |
 
 Options you'll actually use: `--provider`, `--model`,
@@ -334,7 +342,10 @@ vocabulary. `direct.planning` (on by default) splits the job up:
    has to use verbatim. Skipped when fewer than two files are planned.
 2. **Per-target todo list**  -  one request per `.human` file and, unless
    `markerTodo` is off, one per inline `@human` marker.
-3. **Coding**  -  one request per target, grounded in both of the above. A second
+3. **Turn classification**  -  one small strict request per inline marker,
+   deciding whether it is context-only or requests an edit. This is semantic;
+   no special `context:` wording is required.
+4. **Coding**  -  one request per edit target, grounded in the context above. A second
    pass only happens when a deterministic coverage check finds todo items the
    first pass missed, and it's only kept if it preserved everything the previous
    pass produced. That ratchet is what makes re-emitting a whole file safe: a

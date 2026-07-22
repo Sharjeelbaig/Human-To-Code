@@ -7,6 +7,12 @@ import {
   type DirectBlueprintPromptInput,
 } from "../prompts/direct-blueprint.ts";
 import { buildDirectConversionPrompt, type PromptMessages } from "../prompts/direct-conversion.ts";
+import {
+  buildDirectTurnClassificationPrompt,
+  parseDirectTurnClassification,
+  type DirectTurnClassificationPromptInput,
+  type DirectTurnAction,
+} from "../prompts/direct-turn-classification.ts";
 import { buildDirectTodoPrompt, type DirectTodoPromptInput } from "../prompts/direct-todos.ts";
 import {
   buildDirectIntegrationAuditPrompt,
@@ -96,6 +102,7 @@ export async function generateCode(instruction: string, options: GenerateOptions
     languageLabel,
     ...(options.targetPath ? { targetPath: options.targetPath } : {}),
     instruction,
+    ...(options.sessionMemory ? { sessionMemory: options.sessionMemory } : {}),
     inline: options.inline ?? false,
     ...(options.insertionContext ? { insertionContext: options.insertionContext } : {}),
     ...(options.insertionOwner ? { insertionOwner: options.insertionOwner } : {}),
@@ -123,6 +130,15 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ],
   });
   return requestChatCompletion(prompt, options);
+}
+
+/** Decide whether one marker is conversation/context or an actual source edit. */
+export async function classifyHumanTurn(
+  request: DirectTurnClassificationPromptInput,
+  options: GenerateOptions,
+): Promise<DirectTurnAction> {
+  const raw = await requestChatCompletion(buildDirectTurnClassificationPrompt(request), options);
+  return parseDirectTurnClassification(raw);
 }
 
 /**

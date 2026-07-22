@@ -29,6 +29,8 @@ export interface PlanningDisclosureOptions {
 }
 
 export interface PlannedRequestCounts {
+  /** One semantic turn decision per inline marker. */
+  classification: number;
   /** 0 or 1: the shared contract is skipped when there is nothing to agree. */
   blueprint: number;
   todo: number;
@@ -44,11 +46,18 @@ export function plannedRequestCounts(
   planning: PlanningDisclosureOptions,
 ): PlannedRequestCounts {
   if (!planning.enabled) {
-    return { blueprint: 0, todo: units.length, coding: units.length, refinementUpTo: 0 };
+    return {
+      classification: units.filter((unit) => unit.kind === "inline").length,
+      blueprint: 0,
+      todo: 0,
+      coding: units.length,
+      refinementUpTo: 0,
+    };
   }
   const fileUnits = units.filter(unitOwnsCompleteFile).length;
   const todo = units.filter((unit) => unit.kind === "file" ? planning.fileTodo : planning.markerTodo).length;
   return {
+    classification: units.filter((unit) => unit.kind === "inline").length,
     blueprint: planning.projectBlueprint && fileUnits >= 2 ? 1 : 0,
     todo,
     coding: units.length,
@@ -115,11 +124,14 @@ export function renderReceipt(
   const multiPass = planning?.enabled === true;
   const plannedTotal = planned === undefined
     ? units.length
-    : planned.blueprint + planned.todo + planned.coding;
-  const requestBreakdown = planned === undefined || !multiPass
+    : planned.classification + planned.blueprint + planned.todo + planned.coding;
+  const requestBreakdown = planned === undefined
     ? `${units.length} planned`
-    : `${plannedTotal} planned (${planned.blueprint} shared contract, ${planned.todo} per-target todo,`
-      + ` ${planned.coding} coding)`;
+    : !multiPass
+      ? `${plannedTotal} planned`
+      : `${plannedTotal} planned (`
+        + (planned.classification > 0 ? `${planned.classification} turn classification, ` : "")
+        + `${planned.blueprint} shared contract, ${planned.todo} per-target todo, ${planned.coding} coding)`;
   const refinementDisclaimer = planned !== undefined && planned.refinementUpTo > 0
     ? `  Additional: up to ${planned.refinementUpTo} completion request(s), only for targets whose todo list is not fully covered by the first pass.`
     : undefined;
@@ -130,8 +142,10 @@ export function renderReceipt(
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
     `  Engine   : ${multiPass
-      ? "direct (shared contract, per-target todo, then coding; bounded cross-file repair may add requests)"
-      : "direct (one model request per prompt; bounded cross-file repair may add requests)"}`,
+      ? "direct (inline turn classification, shared contract, per-target todo, then coding; bounded cross-file repair may add requests)"
+      : (planned?.classification ?? 0) > 0
+        ? "direct (inline turn classification, then coding; bounded cross-file repair may add requests)"
+        : "direct (one model request per prompt; bounded cross-file repair may add requests)"}`,
     `  Context  : compact current/projected ProjectMemory (target-specific, bounded)`,
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
@@ -143,7 +157,9 @@ export function renderReceipt(
   ];
   if (units.length === 0) lines.push("  No .human files or @human markers were found.");
   else {
-    lines.push("  The following will be generated:");
+    lines.push(units.some((unit) => unit.kind === "inline")
+      ? "  The following will be processed (context turns are retained; edit turns are generated):"
+      : "  The following will be generated:");
     for (const unit of units) lines.push(`    • ${unit.describe}`);
   }
   return `${lines.join("\n")}\n`;

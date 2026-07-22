@@ -4,4 +4,5 @@ export * from "./direct-conversion.ts";
 export * from "./direct-integration.ts";
 export * from "./direct-repair.ts";
 export * from "./direct-todos.ts";
+export * from "./direct-turn-classification.ts";
 export * from "./provider-output.ts";

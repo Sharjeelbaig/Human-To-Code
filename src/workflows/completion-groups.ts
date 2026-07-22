@@ -46,13 +46,13 @@ export function withholdIncompleteRelatedTargets(
       }
     }
     const failed = component.flatMap((path) => byPath.get(path) ?? [])
-      .filter((item) => item.error !== undefined || item.code.trim().length === 0);
+      .filter((item) => item.contextOnly !== true && (item.error !== undefined || item.code.trim().length === 0));
     if (failed.length === 0) continue;
     const failedPaths = [...new Set(failed.map(targetPath))].sort();
     const reason = `related conversion group was withheld because ${failedPaths.join(", ")} did not produce every applicable replacement`;
     for (const path of component) {
       for (const item of byPath.get(path) ?? []) {
-        if (item.error !== undefined || item.code.trim().length === 0) continue;
+        if (item.contextOnly === true || item.error !== undefined || item.code.trim().length === 0) continue;
         item.error = reason;
         item.code = "";
       }

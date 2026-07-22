@@ -204,7 +204,7 @@ export async function candidateTextsForGenerated(
   generated: readonly GeneratedConversionUnit[],
 ): Promise<Map<string, string>> {
   const byPath = new Map<string, GeneratedConversionUnit[]>();
-  for (const item of generated) {
+  for (const item of generated.filter((entry) => entry.contextOnly !== true)) {
     const path = item.unit.kind === "file" ? item.unit.outputPath! : item.unit.sourcePath;
     byPath.set(path, [...(byPath.get(path) ?? []), item]);
   }

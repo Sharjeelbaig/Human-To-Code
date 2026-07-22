@@ -35,6 +35,7 @@ import {
   buildProjectMemory,
   collectReferenceFindings,
   candidateTextsForGenerated,
+  classifyHumanTurn,
   normalizeGeneratedUnitCode,
   conditionalRequestAllowance,
   plannedRequestCounts,
@@ -65,6 +66,7 @@ import {
   type ReferenceFinding,
   type StagedValidationProgress,
   type UnitPlanningOutcome,
+  type UnitGenerationContext,
 } from "./index.ts";
 import type { ProviderName } from "./core/types.ts";
 
@@ -518,6 +520,8 @@ async function buildCommand(
           const retry =
             event.attempt > 1 ? ` (retry ${event.attempt - 1})` : "";
           spinner.label(`generating ${describeUnit(event.unit)}${retry}`);
+        } else if (event.kind === "classify") {
+          spinner.label(`understanding ${describeUnit(event.unit)}`);
         } else if (event.kind === "plan") {
           spinner.label(`planning ${describeUnit(event.unit)}`);
         } else if (event.kind === "refine") {
@@ -528,6 +532,8 @@ async function buildCommand(
           spinner.note(
             `  ⊘ skipped ${describeUnit(event.unit)}: ${event.reason}`,
           );
+        } else if (event.kind === "context") {
+          spinner.note(`  · retained ${describeUnit(event.unit)} as session context`);
         }
       }
     : undefined;
@@ -596,7 +602,7 @@ async function buildCommand(
     (unit.kind === "file" ? planning.fileTodo : planning.markerTodo);
   const planningEnabledFor =
     planning.enabled && (planning.fileTodo || planning.markerTodo)
-      ? async (unit: ConversionUnit, context: { projectMemory?: string }) => {
+      ? async (unit: ConversionUnit, context: UnitGenerationContext) => {
           if (!todoEnabled(unit)) return undefined;
           const target =
             unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
@@ -604,6 +610,9 @@ async function buildCommand(
             {
               targetPath: target,
               instruction: unit.prompt,
+              ...(context.sessionMemory
+                ? { sessionMemory: context.sessionMemory }
+                : {}),
               inline: unit.kind === "inline",
               ...(blueprint
                 ? { blueprint: renderBlueprintFor(blueprint, target) }
@@ -633,12 +642,13 @@ async function buildCommand(
       (unit, context) => {
         if (
           (context.fileMemory?.length ?? 0) +
-            (context.projectMemory?.length ?? 0) >
+            (context.projectMemory?.length ?? 0) +
+            (context.sessionMemory?.length ?? 0) >
           contextCharBudget
         ) {
           throw new ContextSecurityError(
             "BUDGET_EXCEEDED",
-            `Combined FileMemory and ProjectMemory for ${unit.sourcePath} exceed the configured context budget.`,
+            `Combined session memory, FileMemory, and ProjectMemory for ${unit.sourcePath} exceed the configured context budget.`,
             unit.sourcePath,
           );
         }
@@ -646,6 +656,9 @@ async function buildCommand(
           language: unit.language ?? language,
           ...requestOptions,
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
+          ...(context.sessionMemory
+            ? { sessionMemory: context.sessionMemory }
+            : {}),
           ...(!unit.ownsWholeFile && unit.insertionContext
             ? { insertionContext: unit.insertionContext }
             : {}),
@@ -662,6 +675,21 @@ async function buildCommand(
       {
         retries: 1,
         validate: validateGeneratedUnit,
+        classify: (unit, context) =>
+          classifyHumanTurn(
+            {
+              targetPath: unit.sourcePath,
+              instruction: unit.prompt,
+              ...(context.sessionMemory ? { sessionMemory: context.sessionMemory } : {}),
+              ...(unit.surroundingSource ? { surroundingSource: unit.surroundingSource } : {}),
+            },
+            {
+              ...requestOptions,
+              language: unit.language ?? language,
+              targetPath: unit.sourcePath,
+            },
+          ),
+        shouldClassify: (unit) => unit.kind === "inline",
         projectMemory,
         contextCharBudget,
         maxCodingPasses: planning.enabled ? planning.maxCodingPassesPerUnit : 1,
@@ -1009,14 +1037,14 @@ async function buildCommand(
   const skipped: Array<{ source: string; reason: string }> = [];
   const wholeFiles = ordered.filter((item) => item.unit.kind === "file");
   const incompleteWholeFiles = wholeFiles.filter(
-    (item) => item.error !== undefined || item.code.trim().length === 0,
+    (item) => item.contextOnly !== true && (item.error !== undefined || item.code.trim().length === 0),
   );
   if (incompleteWholeFiles.length > 0) {
     const blocker = incompleteWholeFiles[0]!;
     const blockerReason = blocker.error ?? "empty model output";
     const batchReason = `whole-file conversion batch was withheld because ${blocker.unit.sourcePath} failed: ${blockerReason}`;
     for (const item of wholeFiles) {
-      if (item.error !== undefined || item.code.trim().length === 0) continue;
+      if (item.contextOnly === true || item.error !== undefined || item.code.trim().length === 0) continue;
       item.error = batchReason;
       item.code = "";
       if (!cli.json)
@@ -1025,7 +1053,7 @@ async function buildCommand(
   }
 
   const applicableWholeFiles = wholeFiles.filter(
-    (item) => item.error === undefined && item.code.trim().length > 0,
+    (item) => item.contextOnly !== true && item.error === undefined && item.code.trim().length > 0,
   );
   if (applicableWholeFiles.length > 0) {
     try {
@@ -1046,6 +1074,7 @@ async function buildCommand(
     }
   }
   for (const item of wholeFiles) {
+    if (item.contextOnly === true) continue;
     if (item.error !== undefined)
       skipped.push({ source: item.unit.sourcePath, reason: item.error });
     else if (item.code.trim().length === 0)
@@ -1057,6 +1086,7 @@ async function buildCommand(
 
   const inline = ordered.filter((item) => item.unit.kind === "inline");
   for (const item of inline) {
+    if (item.contextOnly === true) continue;
     if (item.error !== undefined)
       skipped.push({ source: item.unit.sourcePath, reason: item.error });
     else if (item.code.trim().length === 0)
@@ -1067,7 +1097,7 @@ async function buildCommand(
   }
   const applicableInlineByPath = new Map<string, typeof inline>();
   for (const item of inline.filter(
-    (entry) => entry.error === undefined && entry.code.trim().length > 0,
+    (entry) => entry.contextOnly !== true && entry.error === undefined && entry.code.trim().length > 0,
   )) {
     applicableInlineByPath.set(item.unit.sourcePath, [
       ...(applicableInlineByPath.get(item.unit.sourcePath) ?? []),
@@ -1100,6 +1130,10 @@ async function buildCommand(
     (total, outcome) => total + outcome.codingRequests,
     0,
   );
+  const classificationRequests = planningOutcomes.reduce(
+    (total, outcome) => total + outcome.classificationRequests,
+    0,
+  );
   const refinementsRejected = planningOutcomes.filter(
     (outcome) => outcome.refinementRejected !== undefined,
   );
@@ -1111,6 +1145,7 @@ async function buildCommand(
         written,
         skipped,
         blueprintRequests,
+        classificationRequests,
         ...(blueprintNotice !== undefined ? { blueprintNotice } : {}),
         todoRequests,
         codingRequests,
@@ -1157,8 +1192,8 @@ async function buildCommand(
     const repairs =
       repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
     const planned =
-      blueprintRequests + todoRequests > 0
-        ? `, ${blueprintRequests} blueprint and ${todoRequests} todo request(s)`
+      blueprintRequests + todoRequests + classificationRequests > 0
+        ? `, ${classificationRequests} classification, ${blueprintRequests} blueprint, and ${todoRequests} todo request(s)`
         : "";
     output(
       `\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${planned}${integrations}${repairs}.`,

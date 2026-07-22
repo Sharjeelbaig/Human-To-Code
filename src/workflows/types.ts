@@ -51,6 +51,8 @@ export type FileMemoryEntry = StaticFileMemoryEntry;
 
 export interface UnitGenerationContext {
   inline: boolean;
+  /** Earlier `@human` messages in this run, ordered and bounded. */
+  sessionMemory?: string;
   /** Static declarations and earlier replacements in this unit's file. */
   fileMemory?: string;
   /** Target-specific current/projected repository evidence. */
@@ -87,6 +89,8 @@ export interface ProjectMemoryProvider {
 export interface GeneratedConversionUnit {
   unit: ConversionUnit;
   code: string;
+  /** The message was retained in session memory but requested no source edit. */
+  contextOnly?: boolean;
   /** Set when this unit could not be generated; the others are unaffected. */
   error?: string;
 }
@@ -94,14 +98,17 @@ export interface GeneratedConversionUnit {
 /** Live progress for one unit during a deterministic conversion run. */
 export type ConversionProgress =
   | { kind: "start"; unit: ConversionUnit; attempt: number }
+  | { kind: "classify"; unit: ConversionUnit }
   | { kind: "plan"; unit: ConversionUnit }
   | { kind: "refine"; unit: ConversionUnit; pass: number; unaddressed: number }
   | { kind: "done"; unit: ConversionUnit }
+  | { kind: "context"; unit: ConversionUnit }
   | { kind: "skip"; unit: ConversionUnit; reason: string };
 
 /** What one unit's planning passes produced, for honest run disclosure. */
 export interface UnitPlanningOutcome {
   unit: ConversionUnit;
+  classificationRequests: number;
   todoRequests: number;
   codingRequests: number;
   /** Set when a refinement was generated and then rejected by the ratchet. */
@@ -117,6 +124,10 @@ export interface GenerateUnitsOptions {
   onProgress?: (event: ConversionProgress) => void;
   /** Fail-closed candidate check run before a unit is remembered or applied. */
   validate?: (unit: ConversionUnit, code: string) => Promise<void>;
+  /** Model-backed semantic boundary between context-only and source-edit turns. */
+  classify?: (unit: ConversionUnit, context: UnitGenerationContext) => Promise<"context" | "edit">;
+  /** Fast deterministic gate limiting classification to inline @human markers. */
+  shouldClassify?: (unit: ConversionUnit) => boolean;
   /** Shared current/projected repository memory updated after accepted units. */
   projectMemory?: ProjectMemoryProvider;
   /** Total FileMemory + ProjectMemory character allowance for one request. */
@@ -161,6 +172,8 @@ export interface GenerateOptions {
   apiKey?: string;
   /** Whether this request replaces one inline @human marker. */
   inline?: boolean;
+  /** Earlier `@human` messages in this run, ordered and bounded. */
+  sessionMemory?: string;
   /** Grammar position receiving an inline replacement. */
   insertionContext?: ConversionUnit["insertionContext"];
   insertionOwner?: string;

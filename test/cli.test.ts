@@ -135,7 +135,9 @@ test("unreachable cross-file CSS receives one bounded repair before atomic write
       const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       const user = parsed.messages.find((message) => message.role === "user")?.content ?? "";
-      const content = system.includes("repairing previously generated code")
+      const content = system.includes("Classify one @human")
+        ? '{"action":"edit"}'
+        : system.includes("repairing previously generated code")
         ? ".hero-gradient { position: absolute; inset: 0; background: linear-gradient(red, blue); }"
         : system.includes("target: src/Hero.tsx")
           ? '<div className="hero-gradient" aria-hidden="true" />'
@@ -200,7 +202,9 @@ test("unused generated CSS selector drift receives one bounded reconciliation pa
     incoming.on("end", () => {
       const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
-      const content = system.includes("planning a shared contract")
+      const content = system.includes("Classify one @human")
+        ? '{"action":"edit"}'
+        : system.includes("planning a shared contract")
         ? JSON.stringify({
             files: [
               { path: "src/Projects.tsx", responsibility: "Render the project grid." },
