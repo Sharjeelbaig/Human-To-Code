@@ -1,0 +1,4 @@
+interface:
+  display_name: "Async Lifecycle"
+  short_description: "Help with Async Lifecycle tasks"
+  default_prompt: "Use $async-lifecycle to guide an exact local human-to-code replacement."

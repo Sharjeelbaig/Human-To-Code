@@ -1,0 +1,4 @@
+interface:
+  display_name: "Security Sensitive Code"
+  short_description: "Help with Security Sensitive Code tasks"
+  default_prompt: "Use $security-sensitive-code to guide an exact local human-to-code replacement."

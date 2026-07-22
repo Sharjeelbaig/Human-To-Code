@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reference Contracts"
+  short_description: "Help with Reference Contracts tasks"
+  default_prompt: "Use $reference-contracts to guide an exact local human-to-code replacement."

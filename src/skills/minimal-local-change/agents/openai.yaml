@@ -1,0 +1,4 @@
+interface:
+  display_name: "Minimal Local Change"
+  short_description: "Help with Minimal Local Change tasks"
+  default_prompt: "Use $minimal-local-change to guide an exact local human-to-code replacement."

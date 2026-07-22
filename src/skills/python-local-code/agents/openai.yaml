@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python Local Code"
+  short_description: "Help with Python Local Code tasks"
+  default_prompt: "Use $python-local-code to guide an exact local human-to-code replacement."

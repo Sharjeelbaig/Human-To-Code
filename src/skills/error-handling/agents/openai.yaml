@@ -1,0 +1,4 @@
+interface:
+  display_name: "Error Handling"
+  short_description: "Help with Error Handling tasks"
+  default_prompt: "Use $error-handling to guide an exact local human-to-code replacement."

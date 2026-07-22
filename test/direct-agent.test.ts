@@ -377,6 +377,11 @@ test("inline provider prompts attach FileMemory as read-only earlier code", asyn
     assert.match(requestBody?.messages?.[0]?.content ?? "", /NEVER redeclare, repeat, or re-output them/u);
     assert.match(requestBody?.messages?.[1]?.content ?? "", /line 1 to line 1:\nconst value = 5;/u);
     assert.match(requestBody?.messages?.[1]?.content ?? "", /Current @human instruction:\nconsole log the const/u);
+    assert.match(requestBody?.messages?.[1]?.content ?? "", /<SKILL name="insertion-grammar">/u);
+    assert.match(requestBody?.messages?.[1]?.content ?? "", /<SKILL name="local-intent">/u);
+    assert.match(requestBody?.messages?.[1]?.content ?? "", /<SKILL name="scope-symbol-contracts">/u);
+    assert.match(requestBody?.messages?.[1]?.content ?? "", /<SKILL name="typescript-local-code">/u);
+    assert.doesNotMatch(requestBody?.messages?.[1]?.content ?? "", /python-local-code/u);
   } finally {
     globalThis.fetch = originalFetch;
   }

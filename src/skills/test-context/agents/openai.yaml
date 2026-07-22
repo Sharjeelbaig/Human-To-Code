@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Context"
+  short_description: "Help with Test Context tasks"
+  default_prompt: "Use $test-context to guide an exact local human-to-code replacement."

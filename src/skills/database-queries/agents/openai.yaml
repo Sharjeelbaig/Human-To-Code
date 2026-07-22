@@ -1,0 +1,4 @@
+interface:
+  display_name: "Database Queries"
+  short_description: "Help with Database Queries tasks"
+  default_prompt: "Use $database-queries to guide an exact local human-to-code replacement."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Configuration Context"
+  short_description: "Help with Configuration Context tasks"
+  default_prompt: "Use $configuration-context to guide an exact local human-to-code replacement."

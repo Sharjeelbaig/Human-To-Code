@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQL Local Code"
+  short_description: "Help with SQL Local Code tasks"
+  default_prompt: "Use $sql-local-code to guide an exact local human-to-code replacement."

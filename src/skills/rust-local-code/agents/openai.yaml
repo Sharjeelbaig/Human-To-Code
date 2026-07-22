@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rust Local Code"
+  short_description: "Help with Rust Local Code tasks"
+  default_prompt: "Use $rust-local-code to guide an exact local human-to-code replacement."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Type Correctness"
+  short_description: "Help with Type Correctness tasks"
+  default_prompt: "Use $type-correctness to guide an exact local human-to-code replacement."

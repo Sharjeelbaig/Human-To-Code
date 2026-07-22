@@ -1,0 +1,4 @@
+interface:
+  display_name: "Typescript Local Code"
+  short_description: "Help with Typescript Local Code tasks"
+  default_prompt: "Use $typescript-local-code to guide an exact local human-to-code replacement."

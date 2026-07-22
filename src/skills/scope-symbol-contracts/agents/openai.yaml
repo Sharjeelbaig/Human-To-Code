@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scope Symbol Contracts"
+  short_description: "Help with Scope Symbol Contracts tasks"
+  default_prompt: "Use $scope-symbol-contracts to guide an exact local human-to-code replacement."

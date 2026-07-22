@@ -1,0 +1,4 @@
+interface:
+  display_name: "Documentation Context"
+  short_description: "Help with Documentation Context tasks"
+  default_prompt: "Use $documentation-context to guide an exact local human-to-code replacement."

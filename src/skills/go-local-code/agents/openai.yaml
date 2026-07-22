@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go Local Code"
+  short_description: "Help with Go Local Code tasks"
+  default_prompt: "Use $go-local-code to guide an exact local human-to-code replacement."

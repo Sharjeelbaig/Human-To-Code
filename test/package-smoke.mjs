@@ -78,6 +78,10 @@ try {
   // `npx human-to-code .` loads markdown beside dist, not from the repository.
   const installedSkills = await exported.discoverModelSkills();
   assert.ok(installedSkills.some((skill) => skill.id === "css-selector-contracts"));
+  assert.ok(installedSkills.some((skill) => skill.id === "local-intent"));
+  assert.ok(installedSkills.some((skill) => skill.id === "insertion-grammar"));
+  assert.ok(installedSkills.some((skill) => skill.id === "typescript-local-code"));
+  assert.ok(installedSkills.some((skill) => skill.id === "security-sensitive-code"));
 
   const cli = join(
     installRoot,

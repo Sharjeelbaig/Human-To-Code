@@ -1,0 +1,4 @@
+interface:
+  display_name: "Insertion Grammar"
+  short_description: "Help with Insertion Grammar tasks"
+  default_prompt: "Use $insertion-grammar to guide an exact local human-to-code replacement."

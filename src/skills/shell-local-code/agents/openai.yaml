@@ -1,0 +1,4 @@
+interface:
+  display_name: "Shell Local Code"
+  short_description: "Help with Shell Local Code tasks"
+  default_prompt: "Use $shell-local-code to guide an exact local human-to-code replacement."

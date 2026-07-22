@@ -1,0 +1,4 @@
+interface:
+  display_name: "Control Flow"
+  short_description: "Help with Control Flow tasks"
+  default_prompt: "Use $control-flow to guide an exact local human-to-code replacement."

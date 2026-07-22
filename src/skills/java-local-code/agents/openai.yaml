@@ -1,0 +1,4 @@
+interface:
+  display_name: "Java Local Code"
+  short_description: "Help with Java Local Code tasks"
+  default_prompt: "Use $java-local-code to guide an exact local human-to-code replacement."

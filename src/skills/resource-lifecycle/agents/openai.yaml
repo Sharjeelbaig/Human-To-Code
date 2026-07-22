@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resource Lifecycle"
+  short_description: "Help with Resource Lifecycle tasks"
+  default_prompt: "Use $resource-lifecycle to guide an exact local human-to-code replacement."

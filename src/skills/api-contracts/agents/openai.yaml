@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Contracts"
+  short_description: "Help with API Contracts tasks"
+  default_prompt: "Use $api-contracts to guide an exact local human-to-code replacement."

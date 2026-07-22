@@ -1,0 +1,4 @@
+interface:
+  display_name: "Local Intent"
+  short_description: "Help with Local Intent tasks"
+  default_prompt: "Use $local-intent to guide an exact local human-to-code replacement."

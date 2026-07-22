@@ -1,0 +1,4 @@
+interface:
+  display_name: "Csharp Local Code"
+  short_description: "Help with Csharp Local Code tasks"
+  default_prompt: "Use $csharp-local-code to guide an exact local human-to-code replacement."

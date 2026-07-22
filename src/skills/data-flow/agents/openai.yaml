@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Flow"
+  short_description: "Help with Data Flow tasks"
+  default_prompt: "Use $data-flow to guide an exact local human-to-code replacement."

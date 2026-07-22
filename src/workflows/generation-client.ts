@@ -111,6 +111,8 @@ export async function generateCode(instruction: string, options: GenerateOptions
   }), {
     phase: "coding",
     languages: [options.language, languageLabel],
+    mode: options.inline ? "inline" : "file",
+    insertionContexts: options.insertionContext ? [options.insertionContext] : [],
     targetPaths: options.targetPath ? [options.targetPath] : [],
     instructions: [instruction],
     evidence: [
@@ -151,6 +153,7 @@ export async function generateUnitTodos(
   const prompt = await withSkills(buildDirectTodoPrompt({ languageLabel: profile.label, ...request }), {
     phase: "todo",
     languages: [options.language, profile.label],
+    mode: request.inline ? "inline" : "file",
     targetPaths: [request.targetPath],
     instructions: [request.instruction],
     evidence: [request.projectMemory ?? "", request.blueprint ?? ""],
@@ -203,6 +206,7 @@ export async function generateIntegrationRepairCode(
     {
       phase: "repair",
       languages: [options.language, profile.label],
+      mode: "file",
       targetPaths: [request.targetPath, ...request.relatedFiles.map((file) => file.path)],
       instructions: [request.instruction],
       evidence: [
@@ -235,6 +239,7 @@ export async function generateRepairCode(
   const prompt = await withSkills(buildDirectRepairPrompt({ languageLabel: profile.label, ...request }), {
     phase: "repair",
     languages: [options.language, profile.label],
+    mode: request.inline ? "inline" : "file",
     targetPaths: [request.targetPath, ...request.relatedFiles.map((file) => file.path)],
     instructions: [request.instruction],
     evidence: [

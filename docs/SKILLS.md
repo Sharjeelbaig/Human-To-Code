@@ -6,6 +6,32 @@ The loader applies progressive disclosure: it selects skills immediately before 
 
 The default visual direction is professional and light-first: coherent page structure, near-white surfaces, readable dark text, restrained borders, and one purposeful accent family. An explicit user palette, dark-theme request, or established project design always takes precedence.
 
+## Local human-to-code skills
+
+The general library is designed for file, line, and code-block instructions—not autonomous product planning.
+
+| Group | Folders |
+| --- | --- |
+| Core local contract | `local-intent`, `insertion-grammar`, `scope-symbol-contracts`, `minimal-local-change` |
+| Semantic behavior | `type-correctness`, `control-flow`, `data-flow`, `error-handling` |
+| Lifecycles and relationships | `async-lifecycle`, `resource-lifecycle`, `reference-contracts` |
+| Conditional domains | `api-contracts`, `database-queries`, `security-sensitive-code`, `test-context`, `configuration-context`, `documentation-context` |
+| Target languages | `typescript-local-code`, `javascript-local-code`, `python-local-code`, `rust-local-code`, `go-local-code`, `java-local-code`, `csharp-local-code`, `sql-local-code`, `shell-local-code` |
+
+Core skills are selected for coding/repair phases. `insertion-grammar` is selected only for inline markers. Exactly the matching language skill is eligible from the real language/extension, while domain skills require corresponding instruction or bounded project evidence.
+
+For example, this marker selects local intent, insertion grammar, scope contracts, minimal change, TypeScript, type correctness, and control flow. The comment is discovered by `npx human-to-code .`; the code block itself is ordinary project source and never runs during skill selection:
+
+```ts
+function load(): Result {
+  const result = read();
+  // @human return early when result is undefined
+  return result;
+}
+```
+
+An async Python repository instruction can additionally select database, async, error, and resource-lifecycle guidance. A Python task that merely parses CSS text does not receive CSS or JavaScript skills.
+
 ## Run the normal path
 
 This command scans the current project, shows the conversion receipt, and—after confirmation—runs the selected skills only for the model requests that need them:
@@ -44,7 +70,7 @@ The markdown block above is model guidance. It is read only when `css-tables` is
 
 ## Limits and failure reproduction
 
-Only real directories and real markdown files are accepted; symlinked folders/files are ignored. A markdown file above 12,000 characters fails loudly, at most eight skills and 36,000 total characters are attached, and unknown or malformed folder names are skipped.
+Only real directories and real markdown files are accepted; symlinked folders/files are ignored. A markdown file above 12,000 characters fails loudly, at most 64 folders are discovered, at most 12 skills and 48,000 total characters are attached to one request, and unknown or malformed folder names are skipped.
 
 This intentionally bypasses the copy step and reproduces a package-build error where compiled JavaScript exists but installed skill markdown would be missing:
 
