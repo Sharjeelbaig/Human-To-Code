@@ -67,6 +67,10 @@ import {
 } from "./index.ts";
 import type { ProviderName } from "./core/types.ts";
 
+const BANNER = `╦ ╦╦ ╦╔╦╗╔═╗╔╗╔   ╔╦╗╔═╗    ╔═╗╔═╗╔╦╗╔═╗
+╠═╣║ ║║║║╠═╣║║║    ║ ║ ║    ║  ║ ║ ║║║╣
+╩ ╩╚═╝╩ ╩╩ ╩╝╚╝────╩ ╚═╝────╚═╝╚═╝═╩╝╚═╝`;
+
 const HELP = `human-to-code - turn plain-language requests into code
 
 Usage:
@@ -1175,6 +1179,9 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
     console.log(HELP);
     return 0;
   }
+  // Keep machine-readable output valid while giving the normal conversion
+  // command its terminal wordmark.
+  if (!cli.json && !cli.init) console.log(`${BANNER}\n`);
   try {
     if (cli.init) {
       // This codeblock runs when the user passes the init flag for example `npx human-to-code . --init`

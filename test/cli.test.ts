@@ -34,6 +34,25 @@ async function cli(
   });
 }
 
+test("default human-readable flow starts with the human-to-code ASCII banner", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-banner-"));
+  try {
+    await put(root, "hello.human", "Write a hello-world function.\n");
+
+    const result = await cli([root, "--dry-run"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    assert.ok(result.stdout.startsWith([
+      "╦ ╦╦ ╦╔╦╗╔═╗╔╗╔   ╔╦╗╔═╗    ╔═╗╔═╗╔╦╗╔═╗",
+      "╠═╣║ ║║║║╠═╣║║║    ║ ║ ║    ║  ║ ║ ║║║╣",
+      "╩ ╩╚═╝╩ ╩╩ ╩╝╚╝────╩ ╚═╝────╚═╝╚═╝═╩╝╚═╝",
+      "",
+      "",
+    ].join("\n")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("--agent is no longer a supported CLI option", async () => {
   const result = await cli(["--agent"]);
   assert.equal(result.code, 1, result.stderr || result.stdout);
