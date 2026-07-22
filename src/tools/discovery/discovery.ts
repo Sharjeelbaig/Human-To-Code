@@ -250,12 +250,16 @@ export async function discoverDirectUnits(
       continue;
     }
     if (!content.includes("@human")) continue;
-    for (const marker of extractInlineMarkers(content, rel)) {
+    const markers = extractInlineMarkers(content, rel);
+    for (const marker of markers) {
       const line = content.slice(0, marker.start).split("\n").length;
       const expectedMarker = content.slice(marker.start, marker.end);
       const cssDetails = extname(rel).toLowerCase() === ".css"
         ? cssInsertionDetails(content, marker.start)
         : undefined;
+      const ownsWholeFile = markers.length === 1 &&
+        content.slice(0, marker.start).trim().length === 0 &&
+        content.slice(marker.end).trim().length === 0;
       units.push({
         kind: "inline",
         sourcePath: rel,
@@ -264,6 +268,7 @@ export async function discoverDirectUnits(
         language: languageForExtension(extname(absolute)) ?? primary,
         range: { start: marker.start, end: marker.end },
         expectedMarker,
+        ...(ownsWholeFile ? { ownsWholeFile: true } : {}),
         insertionContext: insertionContextFor(rel, content, marker.start, expectedMarker),
         ...(cssDetails?.owner ? { insertionOwner: cssDetails.owner } : {}),
         surroundingSource: surroundingSource(content, marker.start, marker.end),

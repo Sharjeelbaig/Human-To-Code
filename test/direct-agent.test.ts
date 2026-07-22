@@ -46,6 +46,21 @@ test("inline marker extraction ignores marker-shaped text in strings and comment
   ]);
 });
 
+test("a marker-only source is recognized as a safe whole-file replacement", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-whole-marker-"));
+  try {
+    await writeFile(join(root, "App.tsx"), "// @human build the complete application component\n");
+    await writeFile(join(root, "fragment.ts"), "const before = 1;\n// @human add another statement\n");
+    const units = await discoverUnits(root, "typescript");
+    const app = units.find((unit) => unit.sourcePath === "App.tsx")!;
+    const fragment = units.find((unit) => unit.sourcePath === "fragment.ts")!;
+    assert.equal(app.ownsWholeFile, true);
+    assert.equal(fragment.ownsWholeFile, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("direct discovery does not create a unit for @human example text", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-lexical-marker-"));
   try {

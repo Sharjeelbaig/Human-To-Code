@@ -4,7 +4,7 @@
  */
 import { languageProfile } from "../tools/discovery/languages.ts";
 import { potentialIntegrationRequests } from "../tools/validation/integration-validation.ts";
-import type { ConversionUnit } from "./types.ts";
+import { unitOwnsCompleteFile, type ConversionUnit } from "./types.ts";
 
 export class ModelOutputError extends Error {
   constructor(message: string) {
@@ -46,7 +46,7 @@ export function plannedRequestCounts(
   if (!planning.enabled) {
     return { blueprint: 0, todo: units.length, coding: units.length, refinementUpTo: 0 };
   }
-  const fileUnits = units.filter((unit) => unit.kind === "file").length;
+  const fileUnits = units.filter(unitOwnsCompleteFile).length;
   const todo = units.filter((unit) => unit.kind === "file" ? planning.fileTodo : planning.markerTodo).length;
   return {
     blueprint: planning.projectBlueprint && fileUnits >= 2 ? 1 : 0,
@@ -69,7 +69,7 @@ export function conditionalRequestAllowance(
     integrationRepairUpTo: integration.repairUpTo,
     compilerRepairUpTo: units.filter((unit) => {
       const language = unit.language ?? primary;
-      return unit.kind === "file" && (language === "typescript" || language === "javascript");
+      return unitOwnsCompleteFile(unit) && (language === "typescript" || language === "javascript");
     }).length,
   };
 }

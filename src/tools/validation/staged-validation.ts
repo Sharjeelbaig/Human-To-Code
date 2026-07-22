@@ -21,7 +21,7 @@ import {
   newlyIntroducedProjectDiagnostics,
   type ProjectDiagnostic,
 } from "./program-diagnostics.ts";
-import type { ConversionUnit, GeneratedConversionUnit, ProjectMemoryProvider } from "../../workflows/types.ts";
+import { unitOwnsCompleteFile, type ConversionUnit, type GeneratedConversionUnit, type ProjectMemoryProvider } from "../../workflows/types.ts";
 
 export interface StagedRepairRequest {
   unit: ConversionUnit;
@@ -92,9 +92,12 @@ function describeDiagnostics(diagnostics: readonly ProjectDiagnostic[]): string 
 function repairHints(unit: ConversionUnit, diagnostics: readonly ProjectDiagnostic[]): string[] {
   const path = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
   const javascript = [".js", ".jsx", ".mjs", ".cjs"].includes(extname(path).toLowerCase());
-  if (!javascript) return [];
   const hints = new Set<string>();
   for (const diagnostic of diagnostics) {
+    if ([2305, 2613, 2724].includes(diagnostic.code)) {
+      hints.add("The target's import form disagrees with the related module's actual exports. Reconcile every import/export diagnostic in this target in one response; prefer changing imports to the exact evidenced named or default exports rather than inventing aliases.");
+    }
+    if (!javascript) continue;
     if (diagnostic.code !== 2339) continue;
     const match = /Property '([^']+)' does not exist on type '([^']+)'/u.exec(diagnostic.message);
     if (!match) continue;
@@ -174,7 +177,7 @@ export async function validateCandidateProject(
         // Only whole-file candidates are repairable; an inline-modified file
         // may hold several markers whose replacements cannot be regenerated
         // independently without guessing, so its group fails closed instead.
-        if (!file.created || file.units.length !== 1) continue;
+        if (file.units.length !== 1 || !unitOwnsCompleteFile(file.units[0]!)) continue;
         const unit = file.units[0]!;
         const attempts = repairAttempts.get(unit) ?? 0;
         if (attempts >= maxRepairAttempts) continue;

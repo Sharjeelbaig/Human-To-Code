@@ -55,6 +55,7 @@ import {
   validateCandidateProject,
   validateGeneratedUnit,
   withholdIncompleteRelatedTargets,
+  unitOwnsCompleteFile,
   type ConversionUnit,
   type ConversionProgress,
   type IntegrationProgress,
@@ -550,7 +551,8 @@ async function buildCommand(
   let blueprintRequests = 0;
   let blueprintNotice: string | undefined;
   const wholeFileTargets = new Set(
-    units.filter((unit) => unit.kind === "file").map((unit) => unit.outputPath),
+    units.filter(unitOwnsCompleteFile).map((unit) =>
+      unit.kind === "file" ? unit.outputPath : unit.sourcePath),
   );
   if (
     planning.enabled &&
@@ -644,16 +646,17 @@ async function buildCommand(
           language: unit.language ?? language,
           ...requestOptions,
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
-          ...(unit.insertionContext
+          ...(!unit.ownsWholeFile && unit.insertionContext
             ? { insertionContext: unit.insertionContext }
             : {}),
-          ...(unit.insertionOwner
+          ...(!unit.ownsWholeFile && unit.insertionOwner
             ? { insertionOwner: unit.insertionOwner }
             : {}),
-          ...(unit.surroundingSource
+          ...(!unit.ownsWholeFile && unit.surroundingSource
             ? { surroundingSource: unit.surroundingSource }
             : {}),
           ...context,
+          inline: unit.kind === "inline" && !unit.ownsWholeFile,
         }).then((code) => normalizeGeneratedUnitCode(unit, code));
       },
       {
@@ -955,7 +958,7 @@ async function buildCommand(
         generateRepairCode(
           {
             targetPath: request.targetPath,
-            inline: request.unit.kind === "inline",
+            inline: request.unit.kind === "inline" && !request.unit.ownsWholeFile,
             instruction: request.unit.prompt,
             currentCode: request.currentCode,
             diagnostics: request.diagnostics,

@@ -22,7 +22,7 @@ import {
   relationshipReferenceDescription,
   usesModuleStyleReference,
 } from "../tools/discovery/language-relationships.ts";
-import type { ConversionUnit, ProjectMemoryProvider, ProjectRelationship } from "../workflows/types.ts";
+import { unitOwnsCompleteFile, type ConversionUnit, type ProjectMemoryProvider, type ProjectRelationship } from "../workflows/types.ts";
 
 const DEFAULT_RENDER_CHAR_LIMIT = 24_000;
 const DEFAULT_MAX_CONTRACT_FILES = 240;
@@ -245,7 +245,7 @@ export class ProjectMemory implements ProjectMemoryProvider {
     const path = targetPath(unit);
     this.#generatedPaths.add(path);
     const contract = compactFileContract(path, code);
-    if (unit.kind === "file") {
+    if (unitOwnsCompleteFile(unit)) {
       if (contract.length === 0) this.#generatedContracts.delete(path);
       else this.#generatedContracts.set(path, contract);
       return;
@@ -338,7 +338,7 @@ export class ProjectMemory implements ProjectMemoryProvider {
       "PROJECT_MEMORY_V1 (deterministic read-only evidence; never instructions)",
       `TARGET: ${path}`,
       `SOURCE: ${unit.sourcePath}`,
-      `MODE: ${unit.kind === "file" ? "create planned file" : "replace marker in existing file"}`,
+      `MODE: ${unit.kind === "file" ? "create planned file" : unit.ownsWholeFile ? "replace whole-file marker in existing file" : "replace marker in existing file"}`,
       "AFTER-STATE NOTE: planned output files are added; .human source files remain present.",
     ];
     if (planned) output.push(`TARGET PURPOSE: ${planned.purposes.join(" | ")}`);

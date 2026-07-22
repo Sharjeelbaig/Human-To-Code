@@ -181,6 +181,36 @@ test("bounded repair fixes a cross-file mismatch and the repaired group applies"
   }
 });
 
+test("marker-only files receive one bounded repair for default versus named export drift", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-marker-contract-repair-"));
+  try {
+    await writeFile(join(root, "App.tsx"), "// @human compose the application\n");
+    await writeFile(join(root, "Navbar.tsx"), "// @human create the navigation\n");
+    await writeFile(join(root, "Hero.tsx"), "// @human create the hero\n");
+    const discovered = (await discoverDirectUnits(root, "typescript")).units;
+    const code = new Map([
+      ["App.tsx", 'import Navbar from "./Navbar";\nimport Hero from "./Hero";\nexport const App = () => <><Navbar /><Hero /></>;'],
+      ["Navbar.tsx", "export const Navbar = () => <nav />;"],
+      ["Hero.tsx", "export const Hero = () => <section />;"],
+    ]);
+    const generated = discovered.map((unit) => ({ unit, code: code.get(unit.sourcePath)! }));
+    let request: StagedRepairRequest | undefined;
+    const outcome = await validateCandidateProject(root, generated, {
+      repair: async (current) => {
+        request = current;
+        return 'import { Navbar } from "./Navbar";\nimport { Hero } from "./Hero";\nexport const App = () => <><Navbar /><Hero /></>;';
+      },
+    });
+    assert.equal(outcome.repairRequests, 1);
+    assert.equal(request?.targetPath, "App.tsx");
+    assert.equal(request?.diagnostics.filter((item) => item.code === 2613).length, 2);
+    assert.match(request?.hints.join(" ") ?? "", /Reconcile every import\/export diagnostic/u);
+    assert.ok(outcome.results.every((item) => item.error === undefined));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a repair that stays broken exhausts its bounded budget and the group fails closed", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-staged-repair-fail-"));
   try {

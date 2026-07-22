@@ -28,6 +28,8 @@ export interface ConversionUnit {
   range?: { start: number; end: number };
   /** Exact marker bytes captured during discovery; required for stale-edit detection. */
   expectedMarker?: string;
+  /** True when a single inline marker is the file's only meaningful content. */
+  ownsWholeFile?: boolean;
   /** 1-based source line of the marker, for progress display. */
   line?: number;
   /** Grammar position receiving an inline replacement. */
@@ -38,6 +40,11 @@ export interface ConversionUnit {
   surroundingSource?: string;
   /** Short human-readable description for the receipt. */
   describe: string;
+}
+
+/** Whether generated code represents the complete target file. */
+export function unitOwnsCompleteFile(unit: ConversionUnit): boolean {
+  return unit.kind === "file" || unit.ownsWholeFile === true;
 }
 
 export type FileMemoryEntry = StaticFileMemoryEntry;

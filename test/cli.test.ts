@@ -200,7 +200,17 @@ test("unused generated CSS selector drift receives one bounded reconciliation pa
     incoming.on("end", () => {
       const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
-      const content = system.includes("repairing previously generated code")
+      const content = system.includes("planning a shared contract")
+        ? JSON.stringify({
+            files: [
+              { path: "src/Projects.tsx", responsibility: "Render the project grid." },
+              { path: "src/portfolio.css", responsibility: "Style the project grid." },
+            ],
+            vocabulary: [
+              { name: "project-grid", kind: "class", definedIn: "src/Projects.tsx", usedIn: ["src/portfolio.css"] },
+            ],
+          })
+        : system.includes("repairing previously generated code")
         ? (repairs += 1, ".project-grid { display: grid; }")
         : system.includes("target: src/Projects.tsx")
           ? 'export default function Projects() { return <section className="project-grid" />; }'
@@ -222,6 +232,7 @@ test("unused generated CSS selector drift receives one bounded reconciliation pa
         baseUrl: `http://127.0.0.1:${address.port}`,
         trustCustomEndpoint: true,
       },
+      direct: { reconcileIntegrations: false },
     }));
     await put(root, "src/Projects.tsx", "/* @human render the project grid */\n");
     await put(root, "src/portfolio.css", "/* @human style the project grid */\n");

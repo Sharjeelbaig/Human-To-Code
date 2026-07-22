@@ -14,11 +14,12 @@ import type {
 } from "../../prompts/direct-integration.ts";
 import { validateGeneratedUnit } from "./candidate-validation.ts";
 import { compactFileContract } from "../../workflows/project-contracts.ts";
-import type {
-  ConversionUnit,
-  GeneratedConversionUnit,
-  ProjectMemoryProvider,
-  ProjectRelationship,
+import {
+  unitOwnsCompleteFile,
+  type ConversionUnit,
+  type GeneratedConversionUnit,
+  type ProjectMemoryProvider,
+  type ProjectRelationship,
 } from "../../workflows/types.ts";
 
 export interface IntegrationAuditRequest {
@@ -162,7 +163,7 @@ function relationshipGroups(
   generated: readonly GeneratedConversionUnit[],
   projectMemory?: ProjectMemoryProvider,
 ): RelationshipGroup[] {
-  const wholeFiles = generated.filter((item) => item.unit.kind === "file");
+  const wholeFiles = generated.filter((item) => unitOwnsCompleteFile(item.unit));
   const byPath = new Map(wholeFiles.map((item) => [targetPath(item.unit), item.unit]));
   const adjacency = new Map<string, Set<string>>([...byPath.keys()].map((path) => [path, new Set()]));
   const relationships = new Map<string, DirectIntegrationRelationship>();
@@ -234,7 +235,7 @@ export function potentialIntegrationRequests(units: readonly ConversionUnit[]): 
   auditUpTo: number;
   repairUpTo: number;
 } {
-  const files = units.filter((unit) => unit.kind === "file").length;
+  const files = units.filter(unitOwnsCompleteFile).length;
   return files < 2 ? { auditUpTo: 0, repairUpTo: 0 } : { auditUpTo: files * 2, repairUpTo: files };
 }
 
