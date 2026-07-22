@@ -1,0 +1,4 @@
+interface:
+  display_name: "Responsive CSS"
+  short_description: "Design fluid interfaces that reflow cleanly"
+  default_prompt: "Use $css-responsive to make the interface responsive."

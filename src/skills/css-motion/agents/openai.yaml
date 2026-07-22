@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSS Motion"
+  short_description: "Create purposeful reduced-motion-safe animation"
+  default_prompt: "Use $css-motion to add accessible interface motion."

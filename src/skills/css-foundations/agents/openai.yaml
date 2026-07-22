@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSS Foundations"
+  short_description: "Build robust, maintainable stylesheet foundations"
+  default_prompt: "Use $css-foundations to create a reliable stylesheet."

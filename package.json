@@ -1,6 +1,6 @@
 {
   "name": "human-to-code",
-  "version": "0.1.40",
+  "version": "0.1.41",
   "description": "Turn plain-language .human files and @human markers into code.",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,7 +33,7 @@
     "typescript": "5.9.3"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-skills.mjs",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "dev": "node src/cli.ts",
     "start": "node dist/cli.js",

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accessible CSS"
+  short_description: "Style inclusive keyboard-friendly interfaces"
+  default_prompt: "Use $css-accessibility to improve interface accessibility."

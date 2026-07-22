@@ -71,7 +71,13 @@ try {
   assert.equal(typeof exported.reconcileGeneratedIntegrations, "function");
   assert.equal(typeof exported.compactFileContract, "function");
   assert.equal(typeof exported.discoverHumanInstructionSources, "function");
+  assert.equal(typeof exported.discoverModelSkills, "function");
   assert.equal(exported.discover, exported.discoverHumanInstructionSources);
+
+  // This block catches the packaging-only failure that source tests cannot:
+  // `npx human-to-code .` loads markdown beside dist, not from the repository.
+  const installedSkills = await exported.discoverModelSkills();
+  assert.ok(installedSkills.some((skill) => skill.id === "css-selector-contracts"));
 
   const cli = join(
     installRoot,

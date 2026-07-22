@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSS Selector Contracts"
+  short_description: "Keep CSS selectors aligned with rendered markup"
+  default_prompt: "Use $css-selector-contracts to align styles with markup."

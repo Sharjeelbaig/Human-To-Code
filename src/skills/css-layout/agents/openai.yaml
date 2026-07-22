@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSS Layout"
+  short_description: "Create resilient Grid and Flexbox layouts"
+  default_prompt: "Use $css-layout to build a resilient page layout."

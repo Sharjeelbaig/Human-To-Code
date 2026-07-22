@@ -1,0 +1,4 @@
+interface:
+  display_name: "React CSS Integration"
+  short_description: "Connect React class names and stylesheet imports"
+  default_prompt: "Use $react-css-integration to connect React markup and CSS."

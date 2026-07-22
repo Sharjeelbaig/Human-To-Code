@@ -20,6 +20,11 @@ import {
   type DirectRepairDiagnostic,
   type DirectRepairRelatedFile,
 } from "../prompts/direct-repair.ts";
+import {
+  attachModelSkills,
+  loadSelectedModelSkills,
+  type SkillSelectionInput,
+} from "../skills/index.ts";
 import { languageProfile } from "../tools/discovery/languages.ts";
 import { stripCodeFence } from "./presentation.ts";
 import type { GenerateOptions } from "./types.ts";
@@ -69,6 +74,15 @@ async function requestChatCompletion(prompt: PromptMessages, options: GenerateOp
   return stripCodeFence(data.message?.content ?? "");
 }
 
+/**
+ * Selects markdown immediately before the model call. For example,
+ * `npx human-to-code .` loads `css-responsive` for a responsive stylesheet,
+ * while a Python request receives no web/CSS skill block at all.
+ */
+async function withSkills(prompt: PromptMessages, input: SkillSelectionInput): Promise<PromptMessages> {
+  return attachModelSkills(prompt, await loadSelectedModelSkills(input));
+}
+
 /** Send one direct-conversion request to OpenAI-compatible chat or Ollama. */
 export async function generateCode(instruction: string, options: GenerateOptions): Promise<string> {
   const profile = languageProfile(options.language);
@@ -78,7 +92,7 @@ export async function generateCode(instruction: string, options: GenerateOptions
     : extension === ".jsx"
       ? "JavaScript with JSX"
       : profile.label;
-  const prompt = buildDirectConversionPrompt({
+  const prompt = await withSkills(buildDirectConversionPrompt({
     languageLabel,
     ...(options.targetPath ? { targetPath: options.targetPath } : {}),
     instruction,
@@ -94,6 +108,17 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.unaddressedTodos ? { unaddressedTodos: options.unaddressedTodos } : {}),
     ...(options.rejectedDraft ? { rejectedDraft: options.rejectedDraft } : {}),
     ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
+  }), {
+    phase: "coding",
+    languages: [options.language, languageLabel],
+    targetPaths: options.targetPath ? [options.targetPath] : [],
+    instructions: [instruction],
+    evidence: [
+      options.projectMemory ?? "",
+      options.blueprint ?? "",
+      options.todos ?? "",
+      options.validationFailure ?? "",
+    ],
   });
   return requestChatCompletion(prompt, options);
 }
@@ -107,7 +132,14 @@ export async function generateBlueprint(
   request: DirectBlueprintPromptInput,
   options: GenerateOptions,
 ): Promise<string> {
-  return requestChatCompletion(buildDirectBlueprintPrompt(request), options);
+  const prompt = await withSkills(buildDirectBlueprintPrompt(request), {
+    phase: "blueprint",
+    languages: request.targets.map((target) => target.language),
+    targetPaths: request.targets.map((target) => target.path),
+    instructions: request.targets.map((target) => target.instruction),
+    evidence: request.currentTree,
+  });
+  return requestChatCompletion(prompt, options);
 }
 
 /** One todo-list planning request for exactly one target. */
@@ -116,7 +148,14 @@ export async function generateUnitTodos(
   options: GenerateOptions,
 ): Promise<string> {
   const profile = languageProfile(options.language);
-  return requestChatCompletion(buildDirectTodoPrompt({ languageLabel: profile.label, ...request }), options);
+  const prompt = await withSkills(buildDirectTodoPrompt({ languageLabel: profile.label, ...request }), {
+    phase: "todo",
+    languages: [options.language, profile.label],
+    targetPaths: [request.targetPath],
+    instructions: [request.instruction],
+    evidence: [request.projectMemory ?? "", request.blueprint ?? ""],
+  });
+  return requestChatCompletion(prompt, options);
 }
 
 export interface IntegrationAuditGenerationRequest {
@@ -130,7 +169,17 @@ export async function generateIntegrationAudit(
   request: IntegrationAuditGenerationRequest,
   options: GenerateOptions,
 ): Promise<string> {
-  const prompt = buildDirectIntegrationAuditPrompt(request);
+  const prompt = await withSkills(buildDirectIntegrationAuditPrompt(request), {
+    phase: "audit",
+    languages: request.files.map((file) => file.language),
+    targetPaths: request.files.map((file) => file.path),
+    instructions: request.files.map((file) => file.instruction),
+    evidence: [
+      request.projectMemory ?? "",
+      ...request.files.flatMap((file) => [file.contract, file.content ?? ""]),
+      ...request.relationships.map((relationship) => `${relationship.role} ${relationship.reference}`),
+    ],
+  });
   return requestChatCompletion(prompt, options);
 }
 
@@ -149,7 +198,20 @@ export async function generateIntegrationRepairCode(
   options: GenerateOptions,
 ): Promise<string> {
   const profile = languageProfile(options.language);
-  const prompt = buildDirectIntegrationRepairPrompt({ languageLabel: profile.label, ...request });
+  const prompt = await withSkills(
+    buildDirectIntegrationRepairPrompt({ languageLabel: profile.label, ...request }),
+    {
+      phase: "repair",
+      languages: [options.language, profile.label],
+      targetPaths: [request.targetPath, ...request.relatedFiles.map((file) => file.path)],
+      instructions: [request.instruction],
+      evidence: [
+        request.projectMemory ?? "",
+        ...request.issues.map((issue) => `${issue.code} ${issue.message}`),
+        ...request.relatedFiles.map((file) => file.content),
+      ],
+    },
+  );
   return requestChatCompletion(prompt, options);
 }
 
@@ -170,6 +232,17 @@ export async function generateRepairCode(
   options: GenerateOptions,
 ): Promise<string> {
   const profile = languageProfile(options.language);
-  const prompt = buildDirectRepairPrompt({ languageLabel: profile.label, ...request });
+  const prompt = await withSkills(buildDirectRepairPrompt({ languageLabel: profile.label, ...request }), {
+    phase: "repair",
+    languages: [options.language, profile.label],
+    targetPaths: [request.targetPath, ...request.relatedFiles.map((file) => file.path)],
+    instructions: [request.instruction],
+    evidence: [
+      request.projectMemory ?? "",
+      ...(request.hints ?? []),
+      ...request.diagnostics.map((diagnostic) => diagnostic.message),
+      ...request.relatedFiles.map((file) => file.content),
+    ],
+  });
   return requestChatCompletion(prompt, options);
 }

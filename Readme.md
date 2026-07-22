@@ -167,6 +167,13 @@ tool-calling, models that can only generate plain text do just fine.
   building a web app. It's rebuilt from scratch every run instead of being
   persisted, so it can never become a stale cache. As candidates are accepted they
   update the shared in-memory contracts before later files get generated.
+- **Selected model skills**  -  package-owned markdown under `src/skills` is
+  attached only when its folder name matches the current language, target,
+  task, or bounded project evidence. CSS foundations and selector contracts
+  prevent independently generated React markup and stylesheets from drifting;
+  responsive, layout, accessibility, and motion guidance stays out of unrelated
+  requests. See [the skill-folder guide](docs/SKILLS.md) to add a skill without
+  editing a registry.
 - **Candidate and write guards**  -  ambiguous fenced responses and malformed
   candidates get retried; existing sibling files, stale inline markers, and
   unsafe indentation changes get refused before anything is written. Whole
@@ -599,6 +606,7 @@ Pick whichever one matches your question:
 | How functions, variables, and lifecycle comments should be named | [Source clarity and naming practices](docs/CODE_CLARITY.md) |
 | Every configuration field and default | [Configuration reference](docs/CONFIGURATION.md) |
 | How to add ecosystems, providers, or schema versions safely | [Scalability and engineering practices](docs/SCALABILITY.md) |
+| How package-owned model skills are selected and extended | [Model skill folders](docs/SKILLS.md) |
 | Security boundaries, secrets, sandboxing, apply, and rollback | [Security model](SECURITY.md) |
 | How to prepare and review a contribution | [Contributor guide](CONTRIBUTING.md) |
 
