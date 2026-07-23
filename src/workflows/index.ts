@@ -2,6 +2,7 @@
 export * from "./types.ts";
 export * from "./generation-client.ts";
 export * from "./project-blueprint.ts";
+export * from "./adaptive-planning.ts";
 export * from "./unit-todos.ts";
 export * from "./project-contracts.ts";
 export * from "./presentation.ts";

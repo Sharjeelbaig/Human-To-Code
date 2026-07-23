@@ -154,6 +154,7 @@ once  -  and nothing makes two independently generated files agree on any of it.
 | Key | Type | Default | Rules |
 | --- | --- | --- | --- |
 | `enabled` | boolean | `true` | The one off switch. `false` restores exactly one model request per unit and skips every planning pass, whatever the siblings below say. |
+| `adaptive` | boolean | `false` | When on, a single batched triage request decides which todo-eligible units are substantial enough to plan; the rest skip the per-unit todo call and are coded in one request. Units are batched (40 per request), so a handful of triage calls replaces a todo call for every request judged simple  -  the payoff grows with the number of files. A triage batch that can't be classified falls back to planning all of its units, so quality is never silently dropped. Needs `enabled` and at least one of `fileTodo`/`markerTodo`. |
 | `projectBlueprint` | boolean | `true` | One shared request before any file is generated, settling the file roster and the vocabulary  -  class names, ids, exported symbols, routes  -  that every target has to use verbatim. Skipped automatically when fewer than two files are planned. |
 | `fileTodo` | boolean | `true` | One todo-list request per whole-file `.human` target. |
 | `markerTodo` | boolean | `false` | One todo-list request per inline `@human` marker. Keep this off for small marker replacements. |
@@ -165,10 +166,20 @@ requests, plus at most `N` conditional completion requests. The existing bounded
 repair and reconciliation ceilings don't change. The receipt and the `--json`
 plan both disclose the exact breakdown before the confirmation prompt.
 
+With `adaptive` on, the `N` todo requests become `ceil(T / 40)` triage requests
+(where `T` is the number of todo-eligible units) plus at most `T` todo requests
+- only the units the triage flags are planned, so the receipt reports the todo
+count as an upper bound (`up to T per-target todo`) and the `--json` plan adds a
+`planClassification` count. The post-run summary reports the triage requests
+actually spent as `planTriageRequests`.
+
 **Failure behavior.** Every planning pass is best-effort. A blueprint that can't
 be parsed is discarded and the run carries on without a shared contract. A todo
-list that can't be parsed leaves that unit on the single-pass path. No planning
-failure ever fails a unit, and one unit failing never affects another.
+list that can't be parsed leaves that unit on the single-pass path. An adaptive
+triage batch that can't be classified falls back to planning every unit in it,
+and a total triage failure falls back to planning every eligible unit  -  the
+pre-adaptive behavior. No planning failure ever fails a unit, and one unit
+failing never affects another.
 
 **Trust.** Blueprints and todo lists are model output, which makes them
 untrusted evidence: paths get checked against the real planned targets, names
@@ -242,6 +253,7 @@ This is exactly what `human-to-code --init` writes.
     "crossFileChecks": true,
     "planning": {
       "enabled": true,
+      "adaptive": false,
       "projectBlueprint": true,
       "fileTodo": true,
       "markerTodo": false,

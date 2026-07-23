@@ -127,6 +127,14 @@ export interface BudgetConfigV1 {
 export interface DirectPlanningConfigV1 {
   /** Master switch. False restores exactly one model request per unit. */
   enabled: boolean;
+  /**
+   * When true, a single batched classification pass decides which todo-eligible
+   * units actually need a plan, so simple requests skip the per-unit todo call.
+   * One cheap classification request replaces a todo request for every unit it
+   * judges simple; failure falls back to planning the affected units. When
+   * false, every todo-eligible unit is planned (the original behavior).
+   */
+  adaptive: boolean;
   /** One shared blueprint request per run, before any file is generated. */
   projectBlueprint: boolean;
   /** One todo-list request per whole-file unit. */
@@ -245,6 +253,10 @@ const DEFAULT_CONFIG_VALUE: ConfigV1 = {
     crossFileChecks: true,
     planning: {
       enabled: true,
+      // Opt-in. Off by default so an unchanged config plans every eligible unit
+      // exactly as before; turning it on trades one batched classification pass
+      // for the per-unit todo calls of every request it judges simple.
+      adaptive: false,
       projectBlueprint: true,
       fileTodo: true,
       markerTodo: false,
@@ -903,11 +915,11 @@ function validateDirectPlanning(raw: unknown, path: string): Partial<DirectPlann
   const value = expectObject(raw, path);
   assertKnownKeys(
     value,
-    ["enabled", "projectBlueprint", "fileTodo", "markerTodo", "maxCodingPassesPerUnit"],
+    ["enabled", "adaptive", "projectBlueprint", "fileTodo", "markerTodo", "maxCodingPassesPerUnit"],
     path,
   );
   const result: Partial<DirectPlanningConfigV1> = {};
-  for (const key of ["enabled", "projectBlueprint", "fileTodo", "markerTodo"] as const) {
+  for (const key of ["enabled", "adaptive", "projectBlueprint", "fileTodo", "markerTodo"] as const) {
     if (value[key] !== undefined) result[key] = expectBoolean(value[key], `${path}.${key}`);
   }
   if (value.maxCodingPassesPerUnit !== undefined) {

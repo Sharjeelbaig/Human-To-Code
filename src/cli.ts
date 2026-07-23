@@ -36,6 +36,8 @@ import {
   collectReferenceFindings,
   candidateTextsForGenerated,
   classifyHumanTurn,
+  classifyPlanningNeed,
+  classifyUnitsNeedingPlanning,
   normalizeGeneratedUnitCode,
   conditionalRequestAllowance,
   plannedRequestCounts,
@@ -635,6 +637,42 @@ async function buildCommand(
           return parseUnitTodoList(raw);
         }
       : undefined;
+  // Adaptive planning: one batched triage decides which todo-eligible units
+  // actually need a plan, so a simple request never pays for a per-unit todo
+  // call. The orchestrator fails safe per batch (an unclassifiable batch is
+  // planned in full), and a total failure here leaves every eligible unit
+  // planned — exactly the behavior when adaptive is off.
+  let adaptivePlanNeeded: Set<ConversionUnit> | undefined;
+  let planTriageRequests = 0;
+  if (planningEnabledFor !== undefined && planning.adaptive) {
+    const eligible = units.filter(todoEnabled);
+    if (eligible.length > 0) {
+      if (interactive)
+        spinner.label(`deciding which of ${eligible.length} task(s) need planning`);
+      try {
+        const triage = await classifyUnitsNeedingPlanning(eligible, (items) =>
+          classifyPlanningNeed(items, { ...requestOptions, language }),
+        );
+        adaptivePlanNeeded = triage.needsPlanning;
+        planTriageRequests = triage.classificationRequests;
+        if (interactive)
+          for (const reason of triage.fallbacks)
+            spinner.note(
+              `  ! planning triage batch fell back to planning all of its tasks (${reason})`,
+            );
+      } catch (error) {
+        planTriageRequests = 0;
+        adaptivePlanNeeded = undefined;
+        if (interactive)
+          spinner.note(
+            `  ! adaptive planning triage unavailable (${error instanceof Error ? error.message : String(error)}); planning every eligible task`,
+          );
+      }
+    }
+  }
+  const shouldPlan = (unit: ConversionUnit): boolean =>
+    todoEnabled(unit) &&
+    (adaptivePlanNeeded === undefined || adaptivePlanNeeded.has(unit));
   let generated: GeneratedConversionUnit[];
   try {
     generated = await generateConversionUnits(
@@ -697,7 +735,7 @@ async function buildCommand(
           ? { plan: planningEnabledFor }
           : {}),
         ...(planningEnabledFor !== undefined
-          ? { shouldPlan: todoEnabled }
+          ? { shouldPlan }
           : {}),
         onPlanningOutcome: (outcome) => planningOutcomes.push(outcome),
         ...(onProgress ? { onProgress } : {}),
@@ -1146,6 +1184,7 @@ async function buildCommand(
         skipped,
         blueprintRequests,
         classificationRequests,
+        ...(planning.adaptive ? { planTriageRequests } : {}),
         ...(blueprintNotice !== undefined ? { blueprintNotice } : {}),
         todoRequests,
         codingRequests,
@@ -1191,9 +1230,11 @@ async function buildCommand(
         : "";
     const repairs =
       repairRequests > 0 ? `, ${repairRequests} bounded repair request(s)` : "";
+    const triage =
+      planTriageRequests > 0 ? `, ${planTriageRequests} planning-triage request(s)` : "";
     const planned =
-      blueprintRequests + todoRequests + classificationRequests > 0
-        ? `, ${classificationRequests} classification, ${blueprintRequests} blueprint, and ${todoRequests} todo request(s)`
+      blueprintRequests + todoRequests + classificationRequests + planTriageRequests > 0
+        ? `, ${classificationRequests} classification, ${blueprintRequests} blueprint${triage}, and ${todoRequests} todo request(s)`
         : "";
     output(
       `\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${planned}${integrations}${repairs}.`,

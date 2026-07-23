@@ -13,6 +13,11 @@ import {
   type DirectTurnClassificationPromptInput,
   type DirectTurnAction,
 } from "../prompts/direct-turn-classification.ts";
+import {
+  buildDirectPlanClassificationPrompt,
+  parseDirectPlanClassification,
+  type DirectPlanClassificationItem,
+} from "../prompts/direct-plan-classification.ts";
 import { buildDirectTodoPrompt, type DirectTodoPromptInput } from "../prompts/direct-todos.ts";
 import {
   buildDirectIntegrationAuditPrompt,
@@ -130,6 +135,23 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ],
   });
   return requestChatCompletion(prompt, options);
+}
+
+/**
+ * Decide, in one request, which units in a batch need a todo-planning pass.
+ * Returns the set of the batch's 1-based indices that warrant planning. The
+ * output is a bounded integer list, so a mis-classification only shifts cost —
+ * it can never inject content into generated code.
+ */
+export async function classifyPlanningNeed(
+  items: readonly DirectPlanClassificationItem[],
+  options: GenerateOptions,
+): Promise<Set<number>> {
+  const raw = await requestChatCompletion(
+    buildDirectPlanClassificationPrompt({ items }),
+    options,
+  );
+  return parseDirectPlanClassification(raw, items.length);
 }
 
 /** Decide whether one marker is conversation/context or an actual source edit. */

@@ -33,6 +33,7 @@ test("validateConfig fills v1 defaults", () => {
   assert.equal(config.direct.crossFileChecks, true);
   assert.deepEqual(config.direct.planning, {
     enabled: true,
+    adaptive: false,
     projectBlueprint: true,
     fileTodo: true,
     markerTodo: false,
@@ -65,6 +66,18 @@ test("direct.planning rejects unknown keys and out-of-range values", () => {
     () => validateConfig({ ...V1, direct: { planning: { enabled: "yes" } } }),
     /direct\.planning\.enabled/u,
   );
+  assert.throws(
+    () => validateConfig({ ...V1, direct: { planning: { adaptive: "yes" } } }),
+    /direct\.planning\.adaptive/u,
+  );
+});
+
+test("direct.planning.adaptive merges and defaults off", () => {
+  assert.equal(validateConfig(V1).direct.planning.adaptive, false);
+  const config = validateConfig({ ...V1, direct: { planning: { adaptive: true } } });
+  assert.equal(config.direct.planning.adaptive, true);
+  assert.equal(config.direct.planning.enabled, true);
+  assert.equal(config.direct.planning.fileTodo, true);
 });
 
 test("planning defaults are frozen and callers receive their own copy", () => {

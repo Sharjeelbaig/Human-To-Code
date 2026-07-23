@@ -2,6 +2,7 @@
 export * from "./direct-blueprint.ts";
 export * from "./direct-conversion.ts";
 export * from "./direct-integration.ts";
+export * from "./direct-plan-classification.ts";
 export * from "./direct-repair.ts";
 export * from "./direct-todos.ts";
 export * from "./direct-turn-classification.ts";

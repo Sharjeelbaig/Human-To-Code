@@ -4,6 +4,7 @@
  */
 import { languageProfile } from "../tools/discovery/languages.ts";
 import { potentialIntegrationRequests } from "../tools/validation/integration-validation.ts";
+import { planClassificationRequestCount } from "./adaptive-planning.ts";
 import { unitOwnsCompleteFile, type ConversionUnit } from "./types.ts";
 
 export class ModelOutputError extends Error {
@@ -22,6 +23,7 @@ export interface ConditionalRequestAllowance {
 /** Planning knobs the receipt needs; a subset of `direct.planning` config. */
 export interface PlanningDisclosureOptions {
   enabled: boolean;
+  adaptive: boolean;
   projectBlueprint: boolean;
   fileTodo: boolean;
   markerTodo: boolean;
@@ -31,8 +33,11 @@ export interface PlanningDisclosureOptions {
 export interface PlannedRequestCounts {
   /** One semantic turn decision per inline marker. */
   classification: number;
+  /** Batched planning-triage requests; 0 unless adaptive planning is on. */
+  planClassification: number;
   /** 0 or 1: the shared contract is skipped when there is nothing to agree. */
   blueprint: number;
+  /** Per-target todo requests; an upper bound when adaptive planning is on. */
   todo: number;
   /** One per unit; refinement is conditional and reported separately. */
   coding: number;
@@ -48,6 +53,7 @@ export function plannedRequestCounts(
   if (!planning.enabled) {
     return {
       classification: units.filter((unit) => unit.kind === "inline").length,
+      planClassification: 0,
       blueprint: 0,
       todo: 0,
       coding: units.length,
@@ -55,9 +61,12 @@ export function plannedRequestCounts(
     };
   }
   const fileUnits = units.filter(unitOwnsCompleteFile).length;
+  // In adaptive mode `todo` is the ceiling (every eligible unit); the triage
+  // decides how many of those requests are actually spent.
   const todo = units.filter((unit) => unit.kind === "file" ? planning.fileTodo : planning.markerTodo).length;
   return {
     classification: units.filter((unit) => unit.kind === "inline").length,
+    planClassification: planning.adaptive ? planClassificationRequestCount(todo) : 0,
     blueprint: planning.projectBlueprint && fileUnits >= 2 ? 1 : 0,
     todo,
     coding: units.length,
@@ -122,16 +131,23 @@ export function renderReceipt(
   const planning = options.planning;
   const planned = planning === undefined ? undefined : plannedRequestCounts(units, planning);
   const multiPass = planning?.enabled === true;
+  const adaptivePlanning = multiPass && planning?.adaptive === true;
   const plannedTotal = planned === undefined
     ? units.length
-    : planned.classification + planned.blueprint + planned.todo + planned.coding;
+    : planned.classification + planned.planClassification + planned.blueprint + planned.todo + planned.coding;
   const requestBreakdown = planned === undefined
     ? `${units.length} planned`
     : !multiPass
       ? `${plannedTotal} planned`
       : `${plannedTotal} planned (`
         + (planned.classification > 0 ? `${planned.classification} turn classification, ` : "")
-        + `${planned.blueprint} shared contract, ${planned.todo} per-target todo, ${planned.coding} coding)`;
+        + (adaptivePlanning && planned.planClassification > 0 ? `${planned.planClassification} planning triage, ` : "")
+        + `${planned.blueprint} shared contract, `
+        + `${adaptivePlanning ? "up to " : ""}${planned.todo} per-target todo, `
+        + `${planned.coding} coding)`;
+  const adaptiveDisclaimer = adaptivePlanning && planned !== undefined && planned.todo > 0
+    ? `  Adaptive planning: a batched triage decides which of the ${planned.todo} eligible target(s) need a todo pass; the rest are coded in one request.`
+    : undefined;
   const refinementDisclaimer = planned !== undefined && planned.refinementUpTo > 0
     ? `  Additional: up to ${planned.refinementUpTo} completion request(s), only for targets whose todo list is not fully covered by the first pass.`
     : undefined;
@@ -148,6 +164,7 @@ export function renderReceipt(
         : "direct (one model request per prompt; bounded cross-file repair may add requests)"}`,
     `  Context  : compact current/projected ProjectMemory (target-specific, bounded)`,
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
+    ...(adaptiveDisclaimer ? [adaptiveDisclaimer] : []),
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
     ...(integrationDisclaimer ? [integrationDisclaimer] : []),
     ...(conditional !== undefined && conditional.compilerRepairUpTo > 0
