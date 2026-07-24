@@ -612,6 +612,31 @@ test("remote direct conversion requires explicit consent before instructions or 
   }
 });
 
+// Schema v1 accepts the alpha provider names, and the generation client routes
+// everything that is not `openai` down its Ollama branch. Without an explicit
+// refusal, `"name": "anthropic"` reached http://localhost:11434/api/chat and
+// answered with whatever model was listening there.
+test("a configured provider with no adapter is refused instead of using the Ollama endpoint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-no-adapter-"));
+  try {
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      provider: { name: "anthropic", model: "claude-opus-4-5" },
+      privacy: { remoteProviderConsent: true },
+    }));
+    await put(root, "api.human", "Write a health function.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 1, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout) as { status: string; diagnostic: string };
+    assert.equal(output.status, "ERROR");
+    assert.match(output.diagnostic, /has no adapter in this release/u);
+    await assert.rejects(access(join(root, "api.ts")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("planning agrees a shared vocabulary and completes an incomplete first pass", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-planning-"));
   const seen: string[] = [];

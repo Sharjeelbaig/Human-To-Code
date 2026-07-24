@@ -65,6 +65,15 @@ async function requestChatCompletion(prompt: PromptMessages, options: GenerateOp
     return stripCodeFence(data.choices?.[0]?.message?.content ?? "");
   }
 
+  // Everything below speaks Ollama's wire format. Reaching it with a provider
+  // that only exists in the config schema would send the request to the Ollama
+  // endpoint under a foreign model id, so refuse instead of falling through.
+  if (options.provider !== "ollama") {
+    throw new Error(
+      `Provider ${JSON.stringify(options.provider)} has no adapter in this release.`,
+    );
+  }
+
   const base = options.baseUrl ?? "http://localhost:11434";
   const response = await fetch(`${base.replace(/\/api\/?$/u, "")}/api/chat`, {
     method: "POST",

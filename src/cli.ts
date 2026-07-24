@@ -116,6 +116,13 @@ const PROVIDERS: readonly ProviderName[] = [
   "gemini",
 ];
 
+// Schema v1 still accepts the alpha provider names so existing configs keep
+// loading, but only these two have an HTTP adapter. The generation client
+// routes anything that is not `openai` down its Ollama branch, so without this
+// guard `"name": "anthropic"` silently sends the request to the Ollama endpoint
+// and answers with whatever model happens to be listening there.
+const IMPLEMENTED_PROVIDERS: readonly ProviderName[] = ["openai", "ollama"];
+
 interface CliOptions {
   positionals: string[];
   json: boolean;
@@ -407,6 +414,12 @@ async function buildCommand(
   const language = effective.language;
   const languages = effective.languages;
   const providerName = effective.provider.name;
+  if (!IMPLEMENTED_PROVIDERS.includes(providerName)) {
+    throw new ConfigError(
+      `Provider ${JSON.stringify(providerName)} has no adapter in this release. `
+        + `Set provider.name to "openai" or "ollama".`,
+    );
+  }
   const model = effective.provider.model;
   const discovery = await discoverDirectUnits(
     root,

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 300" width="1280" height="300" role="img" aria-labelledby="privTitle privDesc">
+  <title id="privTitle">Where your code goes, by provider</title>
+  <desc id="privDesc">A default install sends requests only to loopback Ollama on your own machine. OpenAI and Ollama Cloud are blocked until you edit the config to set privacy.remoteProviderConsent to true, and no command-line flag can turn that on.</desc>
+
+  <defs>
+    <linearGradient id="privSurface" x1="0" y1="0" x2="1280" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171015"/>
+      <stop offset=".52" stop-color="#0d0d11"/>
+      <stop offset="1" stop-color="#2a0d10"/>
+    </linearGradient>
+    <style>
+      .sans { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .hd   { font-size: 15px; font-weight: 700; letter-spacing: .16em; }
+      .nm   { font-size: 23px; font-weight: 600; fill: #f7f4ef; }
+      .sub  { font-size: 16px; fill: #8b8792; }
+      .cfg  { font-size: 15px; fill: #c9c5cf; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="300" rx="28" fill="url(#privSurface)"/>
+
+  <!-- Default lane -->
+  <g>
+    <rect x="56" y="44" width="552" height="212" rx="16" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".08"/>
+    <text class="sans hd"  x="88" y="84" fill="#8fd6a8">DEFAULT INSTALL</text>
+    <text class="sans nm"  x="88" y="120">Stays on your machine</text>
+    <text class="sans sub" x="88" y="150">Loopback Ollama at localhost:11434.</text>
+    <text class="sans sub" x="88" y="174">Nothing leaves the host, and no key is needed.</text>
+    <rect x="88" y="196" width="488" height="38" rx="8" fill="#000000" fill-opacity=".38" stroke="#ffffff" stroke-opacity=".07"/>
+    <text class="mono cfg" x="106" y="220">your code  &#8594;  127.0.0.1  &#8594;  local model</text>
+  </g>
+
+  <!-- Remote lane -->
+  <g>
+    <rect x="672" y="44" width="552" height="212" rx="16" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".08"/>
+    <text class="sans hd"  x="704" y="84" fill="#ff8a5c">OPENAI OR OLLAMA CLOUD</text>
+    <text class="sans nm"  x="704" y="120">Blocked until you say so</text>
+    <text class="sans sub" x="704" y="150">Requires editing the config by hand.</text>
+    <text class="sans sub" x="704" y="174">No CLI flag can turn this on for you.</text>
+    <rect x="704" y="196" width="488" height="38" rx="8" fill="#000000" fill-opacity=".38" stroke="#ff5f3c" stroke-opacity=".3"/>
+    <g transform="translate(722 205)">
+      <rect x="0" y="8" width="14" height="11" rx="2" fill="none" stroke="#ff5f3c" stroke-width="1.8"/>
+      <path d="M3 8 V5 a4 4 0 0 1 8 0 V8" fill="none" stroke="#ff5f3c" stroke-width="1.8" stroke-linecap="round"/>
+    </g>
+    <text class="mono cfg" x="750" y="220">privacy.remoteProviderConsent: <tspan fill="#ff5f3c">false</tspan></text>
+  </g>
+</svg>

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 330" width="1280" height="330" role="img" aria-labelledby="hiwTitle hiwDesc">
+  <title id="hiwTitle">How human-to-code works, in three steps</title>
+  <desc id="hiwDesc">Step one, write intent as an @human comment. Step two, review a receipt listing the provider, model, request count and every output path. Step three, receive code that was validated before it was written.</desc>
+
+  <defs>
+    <linearGradient id="hiwSurface" x1="0" y1="0" x2="1280" y2="330" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171015"/>
+      <stop offset=".52" stop-color="#0d0d11"/>
+      <stop offset="1" stop-color="#2a0d10"/>
+    </linearGradient>
+    <radialGradient id="hiwGlow" cx="0" cy="0" r="1" gradientTransform="translate(1080 40) rotate(140) scale(380 300)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff5f3c" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#ff5f3c" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .sans { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .step { font-size: 15px; font-weight: 700; fill: #ff8a5c; letter-spacing: .16em; }
+      .ttl  { font-size: 26px; font-weight: 600; fill: #f7f4ef; }
+      .code { font-size: 17px; fill: #c9c5cf; }
+      .key  { font-size: 16px; fill: #8b8792; }
+      .val  { font-size: 16px; fill: #f7f4ef; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="330" rx="28" fill="url(#hiwSurface)"/>
+  <rect width="1280" height="330" rx="28" fill="url(#hiwGlow)"/>
+
+  <!-- Step 1: write intent -->
+  <g>
+    <rect x="56" y="40" width="357" height="250" rx="16" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".08"/>
+    <text class="sans step" x="84" y="82">STEP 01</text>
+    <text class="sans ttl" x="84" y="118">Write intent</text>
+    <rect x="84" y="146" width="301" height="118" rx="10" fill="#000000" fill-opacity=".38" stroke="#ffffff" stroke-opacity=".07"/>
+    <text class="mono code" x="104" y="182"><tspan fill="#ff5f3c">// @human</tspan> add a</text>
+    <text class="mono code" x="104" y="208">health route that</text>
+    <text class="mono code" x="104" y="234">returns status 200</text>
+  </g>
+
+  <path d="M431 152 l13 13 l-13 13" fill="none" stroke="#ff5f3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Step 2: review the receipt -->
+  <g>
+    <rect x="461" y="40" width="357" height="250" rx="16" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".08"/>
+    <text class="sans step" x="489" y="82">STEP 02</text>
+    <text class="sans ttl" x="489" y="118">Review the receipt</text>
+    <rect x="489" y="146" width="301" height="122" rx="10" fill="#000000" fill-opacity=".38" stroke="#ffffff" stroke-opacity=".07"/>
+    <text class="mono key" x="509" y="176">provider</text><text class="mono val" x="770" y="176" text-anchor="end">ollama</text>
+    <text class="mono key" x="509" y="202">model</text><text class="mono val" x="770" y="202" text-anchor="end">qwen2.5-coder</text>
+    <text class="mono key" x="509" y="228">requests</text><text class="mono val" x="770" y="228" text-anchor="end">3</text>
+    <line x1="509" y1="242" x2="770" y2="242" stroke="#ffffff" stroke-opacity=".09"/>
+    <text class="mono key" x="509" y="262">api.human</text><text class="mono val" x="770" y="262" text-anchor="end" fill="#ff8a5c">api.ts</text>
+  </g>
+
+  <path d="M836 152 l13 13 l-13 13" fill="none" stroke="#ff5f3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Step 3: validated code -->
+  <g>
+    <rect x="866" y="40" width="357" height="250" rx="16" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".08"/>
+    <text class="sans step" x="894" y="82">STEP 03</text>
+    <text class="sans ttl" x="894" y="118">Get validated code</text>
+    <rect x="894" y="146" width="301" height="118" rx="10" fill="#000000" fill-opacity=".38" stroke="#ffffff" stroke-opacity=".07"/>
+    <text class="mono code" x="914" y="182">export function health</text>
+    <text class="mono code" x="914" y="208">() { return 200 }</text>
+    <g transform="translate(914 226)">
+      <path d="M0 6 l5 5 l9 -11" fill="none" stroke="#ff5f3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="sans" x="26" y="11" font-size="15" fill="#8b8792">compiler checked</text>
+    </g>
+  </g>
+</svg>
