@@ -17,10 +17,22 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryPackage = JSON.parse(
   readFileSync(join(projectRoot, "package.json"), "utf8"),
 );
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+const isWindows = process.platform === "win32";
+const npm = isWindows ? "npm.cmd" : "npm";
+const npx = isWindows ? "npx.cmd" : "npx";
+
+// Node >=20.19 refuses to spawn .cmd/.bat shims without a shell (EINVAL), and a
+// Windows shell splits on spaces, so quote every argument we hand it.
+const shellOptions = isWindows ? { shell: true } : {};
+const shellArgs = (args) =>
+  isWindows ? args.map((arg) => `"${arg}"`) : args;
+const runSync = (file, args, options) =>
+  execFileSync(file, shellArgs(args), { ...options, ...shellOptions });
+const runSyncCapture = (file, args, options) =>
+  spawnSync(file, shellArgs(args), { ...options, ...shellOptions });
+
 const packed = JSON.parse(
-  execFileSync(npm, ["pack", "--json", "--ignore-scripts"], {
+  runSync(npm, ["pack", "--json", "--ignore-scripts"], {
     cwd: projectRoot,
     encoding: "utf8",
   }),
@@ -31,7 +43,7 @@ const tarball = join(projectRoot, packed[0].filename);
 const installRoot = mkdtempSync(join(tmpdir(), "human-to-code-package-"));
 
 try {
-  execFileSync(npm, ["install", "--ignore-scripts", tarball], {
+  runSync(npm, ["install", "--ignore-scripts", tarball], {
     cwd: installRoot,
     stdio: "pipe",
   });
@@ -87,9 +99,9 @@ try {
     installRoot,
     "node_modules",
     ".bin",
-    process.platform === "win32" ? "human-to-code.cmd" : "human-to-code",
+    isWindows ? "human-to-code.cmd" : "human-to-code",
   );
-  const help = execFileSync(cli, ["--help"], { encoding: "utf8" });
+  const help = runSync(cli, ["--help"], { encoding: "utf8" });
   assert.match(help, /human-to-code/);
 
   // Exercise the installed package through the documented npx entry. The default
@@ -105,7 +117,7 @@ try {
   writeFileSync(join(fixtureRoot, "src", "main.tsx"), "export function App() { return null; }\n");
   writeFileSync(join(fixtureRoot, "feature.human"), "Add a status component.\n");
 
-  const converted = spawnSync(
+  const converted = runSyncCapture(
     npx,
     ["--no-install", "human-to-code", fixtureRoot, "--json"],
     { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
@@ -140,7 +152,7 @@ try {
     "javascript\nRead stylesheet colors and update them on clicks. Do not emit TypeScript syntax.\n",
   );
   writeFileSync(join(mixedRoot, "styles.human"), "Build the calculator styles in CSS.\n");
-  const mixed = spawnSync(
+  const mixed = runSyncCapture(
     npx,
     ["--no-install", "human-to-code", mixedRoot, "--dry-run"],
     { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
@@ -162,7 +174,7 @@ try {
     "",
   ].join("\n"));
   writeFileSync(join(inlineRoot, "styles.css"), "/* @human add page colors */\n");
-  const inline = spawnSync(
+  const inline = runSyncCapture(
     npx,
     ["--no-install", "human-to-code", inlineRoot, "--json"],
     { cwd: installRoot, encoding: "utf8", env: { ...process.env, npm_config_offline: "true" } },
