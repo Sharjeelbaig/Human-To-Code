@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/brand/logo-mark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="20%">
+</p>
+
+<p align="center">
   <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="60%">
 </p>
 
