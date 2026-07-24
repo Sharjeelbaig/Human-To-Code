@@ -28,26 +28,60 @@
   const githubPill = document.getElementById("githubPill");
   const githubMetric = document.getElementById("githubMetric");
   if (githubPill && githubMetric) {
-    fetch("https://api.github.com/repos/sharjeelbaig/human-to-code", {
-      headers: { accept: "application/vnd.github+json" },
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("GitHub stars unavailable");
-        return response.json();
+    /* The public API allows 60 unauthenticated requests per hour per IP.
+       One call per page load burns that fast while iterating, and the count
+       then silently disappears for the rest of the hour. Cache the last good
+       value so a throttled response falls back to it instead of to nothing. */
+    const CACHE_KEY = "h2c-stars";
+    const CACHE_TTL = 6 * 60 * 60 * 1000;
+
+    const paintStars = (stars) => {
+      if (!Number.isSafeInteger(stars) || stars < 0) return false;
+      githubMetric.textContent = new Intl.NumberFormat("en", {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(stars).toLowerCase();
+      githubPill.dataset.starsLoaded = "true";
+      githubPill.setAttribute("aria-label", `View human-to-code on GitHub — ${stars.toLocaleString("en")} stars`);
+      return true;
+    };
+
+    const readCache = () => {
+      try {
+        const entry = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null");
+        return Number.isSafeInteger(entry?.stars) ? entry : null;
+      } catch {
+        return null;
+      }
+    };
+
+    /* Paint the cached value first so the pill is never empty while the
+       request is in flight (or if it never resolves). */
+    const cached = readCache();
+    if (cached) paintStars(cached.stars);
+
+    if (!cached || Date.now() - cached.at > CACHE_TTL) {
+      fetch("https://api.github.com/repos/sharjeelbaig/human-to-code", {
+        headers: { accept: "application/vnd.github+json" },
       })
-      .then((repository) => {
-        const stars = repository?.stargazers_count;
-        if (!Number.isSafeInteger(stars) || stars < 0) return;
-        githubMetric.textContent = new Intl.NumberFormat("en", {
-          notation: "compact",
-          maximumFractionDigits: 1,
-        }).format(stars).toLowerCase();
-        githubPill.dataset.starsLoaded = "true";
-        githubPill.setAttribute("aria-label", `View human-to-code on GitHub — ${stars.toLocaleString("en")} stars`);
-      })
-      .catch(() => {
-        /* Keep the GitHub + star fallback when the public API is unavailable. */
-      });
+        .then((response) => {
+          if (!response.ok) throw new Error(`GitHub stars unavailable (${response.status})`);
+          return response.json();
+        })
+        .then((repository) => {
+          const stars = repository?.stargazers_count;
+          if (!paintStars(stars)) return;
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ stars, at: Date.now() }));
+          } catch {
+            /* storage full or blocked — the count still shows this session */
+          }
+        })
+        .catch(() => {
+          /* Rate-limited or offline: the cached value (if any) stays on
+             screen, otherwise the GitHub + star fallback remains. */
+        });
+    }
   }
 
   /* ---------------- copy command ---------------- */
