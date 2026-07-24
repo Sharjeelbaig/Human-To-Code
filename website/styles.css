@@ -32,12 +32,12 @@
   /* Language bubbles are the most sculptural elements on the page and sit
      on the plain page background, not on a neu surface — so they carry
      their own, punchier set. `face-*` shade the sphere, `hi`/`lo` cast it. */
-  --bubble-face-hi: #ffffff;
-  --bubble-face-lo: #d3d6df;
-  --bubble-hi: rgba(255, 255, 255, 0.95);
-  --bubble-lo: rgba(163, 169, 184, 0.62);
-  --bubble-rim-hi: rgba(255, 255, 255, 0.9);
-  --bubble-rim-lo: rgba(157, 163, 178, 0.42);
+  --bubble-face-hi: #fbfbfd;
+  --bubble-face-lo: #e0e3ea;
+  --bubble-hi: rgba(255, 255, 255, 0.8);
+  --bubble-lo: rgba(176, 182, 196, 0.4);
+  --bubble-rim-hi: rgba(255, 255, 255, 0.6);
+  --bubble-rim-lo: rgba(166, 172, 188, 0.24);
 
   --accent-a: #ff5f3c;      /* warm orange-red */
   --accent-b: #e11d48;      /* rose */
@@ -75,12 +75,12 @@ html[data-theme="dark"] {
 
   /* Dark spheres need a much brighter top-left face than --neu-light
      provides, or the curvature reads as a flat disc against --bg. */
-  --bubble-face-hi: #363b47;
-  --bubble-face-lo: #0e1015;
-  --bubble-hi: rgba(72, 80, 97, 0.85);
-  --bubble-lo: rgba(0, 0, 0, 0.95);
-  --bubble-rim-hi: rgba(112, 122, 145, 0.55);
-  --bubble-rim-lo: rgba(0, 0, 0, 0.75);
+  --bubble-face-hi: #23262e;
+  --bubble-face-lo: #131519;
+  --bubble-hi: rgba(52, 58, 71, 0.42);
+  --bubble-lo: rgba(0, 0, 0, 0.6);
+  --bubble-rim-hi: rgba(84, 92, 110, 0.22);
+  --bubble-rim-lo: rgba(0, 0, 0, 0.38);
   --pipe-casing: rgba(255, 92, 61, 0.18);
   --wire: rgba(255, 138, 92, 0.38);
   --pill-bg: #1d1d24;
@@ -1422,20 +1422,20 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
   border: 0;
   background: linear-gradient(145deg, var(--bubble-face-hi), var(--bubble-face-lo));
   box-shadow:
-    /* cast — long and soft, lit from the top-left */
-    -14px -14px 28px var(--bubble-hi),
-     16px  16px 32px var(--bubble-lo),
-    /* rim — the bright top-left edge and dark underside that make it a
-       sphere rather than a disc */
-    inset  3px  3px 5px var(--bubble-rim-hi),
-    inset -3px -3px 6px var(--bubble-rim-lo);
+    /* cast — lit from the top-left. Kept tight: at wide offsets the
+       highlight reads as a halo ring rather than ambient light. */
+    -7px -7px 14px var(--bubble-hi),
+     8px  8px 16px var(--bubble-lo),
+    /* rim — just enough edge to imply a sphere, not a bevel */
+    inset  2px  2px 3px var(--bubble-rim-hi),
+    inset -2px -2px 4px var(--bubble-rim-lo);
 }
 .bubble:hover .bubble-icon {
   box-shadow:
-    -20px -20px 38px var(--bubble-hi),
-     22px  22px 44px var(--bubble-lo),
-    inset  3px  3px 5px var(--bubble-rim-hi),
-    inset -3px -3px 6px var(--bubble-rim-lo);
+    -10px -10px 20px var(--bubble-hi),
+     11px  11px 22px var(--bubble-lo),
+    inset  2px  2px 3px var(--bubble-rim-hi),
+    inset -2px -2px 4px var(--bubble-rim-lo);
 }
 
 /* ---- section headings & inline code ---- */
@@ -1475,6 +1475,23 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
 }
 /* accent-filled counters keep their colour, gain the extrusion */
 .qs-n, .docs-step-number { box-shadow: var(--neu-out-sm); }
+
+/* ---- quick-start illustrations ----
+   The PNGs are true cut-outs, so drop-shadow() traces the figure's
+   silhouette rather than a bounding box. Swapping the single downward
+   shadow for a top-left/bottom-right pair puts them under the same
+   light as every other element, and the extra desaturation keeps them
+   from being the loudest thing on a muted page. */
+.qs-visual > img,
+html[data-theme="dark"] .qs-visual > img {
+  filter:
+    grayscale(.3) saturate(.74) contrast(1.03)
+    drop-shadow(-8px -8px 14px var(--bubble-hi))
+    drop-shadow(10px 12px 22px var(--bubble-lo));
+}
+html[data-theme="dark"] .qs-visual > img { filter: grayscale(.32) saturate(.7) contrast(1.05) brightness(.94)
+    drop-shadow(-8px -8px 14px var(--bubble-hi))
+    drop-shadow(10px 12px 22px var(--bubble-lo)); }
 
 /* ---- the copyable command ----
    Was a dark maroon gradient slab with a hatch overlay, an inner well
