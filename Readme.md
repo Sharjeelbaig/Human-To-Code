@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
+</p>
+
+<p align="center">
   <img src="assets/banner.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
 </p>
 
@@ -291,10 +295,10 @@ npx human-to-code . --yes --model qwen2.5-coder:1.5b
 
 ## CLI
 
-| Command | Behavior |
-| --- | --- |
-| `human-to-code [root]` | The default flow. Find `.human` files and `@human` markers, show a receipt, classify inline turns, and convert edit turns. `npx human-to-code .` is the normal way in. |
-| `human-to-code --init [root]` | Write a schema-v1 config without overwriting an existing one. Review the generated provider before you use it. |
+| Command                       | Behavior                                                                                                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `human-to-code [root]`        | The default flow. Find `.human` files and `@human` markers, show a receipt, classify inline turns, and convert edit turns. `npx human-to-code .` is the normal way in. |
+| `human-to-code --init [root]` | Write a schema-v1 config without overwriting an existing one. Review the generated provider before you use it.                                                         |
 
 Options: `--provider`, `--model`, `--base-url`, `--api-key-env`,
 `--input-cost-per-million`, `--output-cost-per-million`, `--unmetered-provider`,
@@ -302,14 +306,14 @@ Options: `--provider`, `--model`, `--base-url`, `--api-key-env`,
 
 ### Exit codes
 
-| Code | Meaning |
-| ---: | --- |
-| `0` | The command finished successfully. |
-| `1` | Usage or configuration error. |
-| `3` | `NEEDS_INPUT`, `UNSUPPORTED`, or you declined the confirmation prompt. |
-| `4` | `SECURITY_BLOCKED`. |
-| `5` | Provider dependency failure. |
-| `6` | Internal error or partial scan. |
+| Code | Meaning                                                                |
+| ---: | ---------------------------------------------------------------------- |
+|  `0` | The command finished successfully.                                     |
+|  `1` | Usage or configuration error.                                          |
+|  `3` | `NEEDS_INPUT`, `UNSUPPORTED`, or you declined the confirmation prompt. |
+|  `4` | `SECURITY_BLOCKED`.                                                    |
+|  `5` | Provider dependency failure.                                           |
+|  `6` | Internal error or partial scan.                                        |
 
 ## Configuration
 
@@ -660,17 +664,17 @@ configuration error before any request is made.
 
 ## Codebase documentation
 
-| I want to understand... | Read |
-| --- | --- |
-| How the product works, what each folder owns, and where a source change belongs | [Codebase tour](docs/Codebase_Tour.md) |
-| Every configuration field and default | [Configuration reference](docs/CONFIGURATION.md) |
-| How to add ecosystems, providers, or schema versions safely | [Scalability and engineering practices](docs/SCALABILITY.md) |
-| How package-owned model skills are selected and extended | [Model skill folders](docs/SKILLS.md) |
-| Which languages are supported now and what each still needs | [Language roadmap](docs/roadmap/README.md) |
-| Security boundaries, secrets, apply, and rollback | [Security model](SECURITY.md) |
-| How to prepare and review a contribution | [Contributor guide](CONTRIBUTING.md) |
-| How to report a bug or ask for help | [Support](SUPPORT.md) |
-| What changed between releases | [Changelog](CHANGELOG.md) |
+| I want to understand...                                                         | Read                                                         |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| How the product works, what each folder owns, and where a source change belongs | [Codebase tour](docs/Codebase_Tour.md)                       |
+| Every configuration field and default                                           | [Configuration reference](docs/CONFIGURATION.md)             |
+| How to add ecosystems, providers, or schema versions safely                     | [Scalability and engineering practices](docs/SCALABILITY.md) |
+| How package-owned model skills are selected and extended                        | [Model skill folders](docs/SKILLS.md)                        |
+| Which languages are supported now and what each still needs                     | [Language roadmap](docs/roadmap/README.md)                   |
+| Security boundaries, secrets, apply, and rollback                               | [Security model](SECURITY.md)                                |
+| How to prepare and review a contribution                                        | [Contributor guide](CONTRIBUTING.md)                         |
+| How to report a bug or ask for help                                             | [Support](SUPPORT.md)                                        |
+| What changed between releases                                                   | [Changelog](CHANGELOG.md)                                    |
 
 ## Development checks
 
@@ -690,13 +694,13 @@ imports the public entry point, and invokes the installed CLI.
 human-to-code is a **preview**. It is published from `main`, versioned `0.1.x`,
 and useful today, but the surface is still moving.
 
-| Area | State |
-| --- | --- |
-| `npx human-to-code .` and the `.human` / `@human` model | Stable in practice. This is what the tests and docs cover |
-| Config schema v1 | Stable. Additive changes only, and unknown keys stay a hard error |
-| Public API from `human-to-code` | Unstable. Exports may be reorganized between `0.1.x` releases |
-| `openai` and `ollama` adapters | Working. `anthropic`, `grok`, and `gemini` load from config but are refused at run time |
-| Generated code | Never claimed as verified. Static and structural checks are not proof of runtime correctness, so review the diff |
+| Area                                                    | State                                                                                                            |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `npx human-to-code .` and the `.human` / `@human` model | Stable in practice. This is what the tests and docs cover                                                        |
+| Config schema v1                                        | Stable. Additive changes only, and unknown keys stay a hard error                                                |
+| Public API from `human-to-code`                         | Unstable. Exports may be reorganized between `0.1.x` releases                                                    |
+| `openai` and `ollama` adapters                          | Working. `anthropic`, `grok`, and `gemini` load from config but are refused at run time                          |
+| Generated code                                          | Never claimed as verified. Static and structural checks are not proof of runtime correctness, so review the diff |
 
 Node **24 or newer** is required.
 
