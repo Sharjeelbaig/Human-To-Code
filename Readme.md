@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
+  <img src="assets/banner.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
 </p>
 
 <p align="center">
-  <img src="assets/banner.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
+  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
 </p>
 
 <p align="center">
