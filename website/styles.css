@@ -1439,9 +1439,13 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
 }
 
 /* ---- section headings & inline code ---- */
+/* Keep the accent wash — flattening this to plain --neu-bg left an
+   empty-looking placeholder tile next to the heading. */
 .section-title-icon {
   border: 0;
-  background: var(--neu-bg);
+  background:
+    radial-gradient(circle at 25% 15%, color-mix(in srgb, var(--accent-a) 22%, transparent), transparent 60%),
+    var(--neu-bg);
   box-shadow: var(--neu-out-sm);
 }
 .section code, .section-note code {
@@ -1449,11 +1453,12 @@ html:not(.js) .reveal { opacity: 1; transform: none; }
   background: var(--neu-bg);
   box-shadow: var(--neu-in-sm);
 }
-/* ...but only for *inline* code. Inside a code block or the command
-   field the chip is a stray light rectangle behind the text. */
-.code-block code,
-.qs-command code,
-.term code {
+/* ...but only for *inline* code. Any <code> inside a <pre> is a block —
+   the chip there paints a light band behind every line (the IDE editor
+   and its terminal were both hit). Keyed on `pre` rather than a list of
+   component classes so new blocks can't reintroduce it. */
+.section pre code,
+.section-note pre code {
   background: transparent;
   box-shadow: none;
   color: inherit;
@@ -1571,7 +1576,14 @@ html[data-theme="dark"] .qs-visual > img { filter: grayscale(.32) saturate(.7) c
   background: var(--neu-bg);
   box-shadow: var(--neu-out);
 }
-.docs-card-icon { border: 0; box-shadow: var(--neu-out-lg); }
+/* The organic blob takes the shadow in its own shape, so --neu-out-lg's
+   bright white highlight bloomed into a halo and washed the edge out.
+   Low-alpha bubble tokens + the accent rim keep the silhouette readable. */
+.docs-card-icon {
+  box-shadow:
+    -6px -6px 14px var(--bubble-hi),
+     8px  10px 20px var(--bubble-lo);
+}
 .docs-provider-badges span {
   border: 0;
   background: var(--neu-bg);
