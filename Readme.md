@@ -1,9 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
-</p>
-
-<p align="center">
-  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
+  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="80%">
 </p>
 
 <p align="center">
@@ -13,6 +9,10 @@
   <a href="#development-checks"><img alt="node 24 or newer" src="https://img.shields.io/badge/node-24%2B-brightgreen"></a>
   <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
   <a href="CONTRIBUTING.md"><img alt="contributions welcome" src="https://img.shields.io/badge/contributions-welcome-brightgreen"></a>
+</p>
+
+<p align="center">
+  <img src="assets/banner.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
 </p>
 
 <p align="center">
