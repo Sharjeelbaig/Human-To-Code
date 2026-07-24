@@ -12,6 +12,33 @@
   --nav-bg: rgba(255, 255, 255, 0.82);
   --shadow: 0 10px 30px rgba(17, 17, 20, 0.08);
 
+  /* ---- neumorphic surface ----
+     The base must be a mid-tone: on pure white the light highlight is
+     invisible, so neu surfaces carry their own tint distinct from --bg.
+     The brand palette (--accent-*, --text, --bg) is untouched. */
+  --neu-bg: #ecedf1;
+  --neu-light: #ffffff;
+  --neu-dark: #c6c9d2;
+  --neu-text: #3d3f4a;
+
+  /* Shared extrusions. These resolve --neu-light/--neu-dark at use time,
+     so they follow the theme automatically. */
+  --neu-out:    -5px -5px 10px var(--neu-light),  5px  5px 12px var(--neu-dark);
+  --neu-out-sm: -3px -3px  6px var(--neu-light),  3px  3px  7px var(--neu-dark);
+  --neu-out-lg: -9px -9px 20px var(--neu-light),  9px  9px 22px var(--neu-dark);
+  --neu-in:     inset -4px -4px 8px var(--neu-light), inset 4px 4px 8px var(--neu-dark);
+  --neu-in-sm:  inset -2px -2px 5px var(--neu-light), inset 2px 2px 5px var(--neu-dark);
+
+  /* Language bubbles are the most sculptural elements on the page and sit
+     on the plain page background, not on a neu surface — so they carry
+     their own, punchier set. `face-*` shade the sphere, `hi`/`lo` cast it. */
+  --bubble-face-hi: #ffffff;
+  --bubble-face-lo: #d3d6df;
+  --bubble-hi: rgba(255, 255, 255, 0.95);
+  --bubble-lo: rgba(163, 169, 184, 0.62);
+  --bubble-rim-hi: rgba(255, 255, 255, 0.9);
+  --bubble-rim-lo: rgba(157, 163, 178, 0.42);
+
   --accent-a: #ff5f3c;      /* warm orange-red */
   --accent-b: #e11d48;      /* rose */
   --pipe-a: #ff8a5c;
@@ -39,6 +66,21 @@ html[data-theme="dark"] {
   --card: #16161c;
   --nav-bg: rgba(13, 13, 17, 0.82);
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+
+  /* Dark neumorphism: lift the base off --bg so the highlight has room. */
+  --neu-bg: #191b21;
+  --neu-light: #23262f;
+  --neu-dark: #06070a;
+  --neu-text: #c9cbd4;
+
+  /* Dark spheres need a much brighter top-left face than --neu-light
+     provides, or the curvature reads as a flat disc against --bg. */
+  --bubble-face-hi: #363b47;
+  --bubble-face-lo: #0e1015;
+  --bubble-hi: rgba(72, 80, 97, 0.85);
+  --bubble-lo: rgba(0, 0, 0, 0.95);
+  --bubble-rim-hi: rgba(112, 122, 145, 0.55);
+  --bubble-rim-lo: rgba(0, 0, 0, 0.75);
   --pipe-casing: rgba(255, 92, 61, 0.18);
   --wire: rgba(255, 138, 92, 0.38);
   --pill-bg: #1d1d24;
@@ -63,16 +105,24 @@ img, svg { display: block; max-width: 100%; }
 a { color: inherit; }
 
 /* ============================================================
-   NAV
+   NAV — neumorphic (soft UI), light + dark
+   ------------------------------------------------------------
+   Every control shares the bar's base colour and is separated
+   from it only by a paired highlight/shadow: light from the
+   top-left, shadow to the bottom-right. Pressed states invert
+   the same pair with `inset`.
    ============================================================ */
 .nav-wrap {
   position: sticky;
   top: 0;
   z-index: 50;
   width: 100%;
-  background: var(--nav-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: var(--neu-bg);
+  /* the bar itself reads as one extruded slab */
+  box-shadow:
+    0 8px 18px -6px var(--neu-dark),
+    inset 0 1px 0 var(--neu-light);
+  transition: background 0.35s ease, box-shadow 0.35s ease;
 }
 .nav {
   max-width: 1280px;
@@ -99,9 +149,16 @@ a { color: inherit; }
   width: 44px;
   height: 44px;
   flex: none;
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
-  box-shadow: inset 0 0 0 1px var(--border), 0 8px 20px color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 14px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out);
+  transition: box-shadow 0.25s ease;
+}
+.brand:hover .brand-mark {
+  box-shadow: var(--neu-out-lg);
+}
+.brand:active .brand-mark {
+  box-shadow: var(--neu-in);
 }
 .brand-logo { position: absolute; inset: 5px; width: 34px; height: 34px; }
 .brand-logo-dark { display: none; }
@@ -115,15 +172,23 @@ html[data-theme="dark"] .brand-logo-dark { display: block; }
 }
 .nav-links a {
   display: block;
-  padding: 10px 16px;
+  padding: 10px 18px;
   border-radius: 999px;
   text-decoration: none;
   font-weight: 600;
   font-size: 1.08rem;
-  color: var(--text-soft);
-  transition: color 0.2s ease, background 0.2s ease;
+  color: var(--neu-text);
+  background: var(--neu-bg);
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);   /* flat until hovered */
+  transition: color 0.2s ease, box-shadow 0.25s ease;
 }
-.nav-links a:hover { color: var(--text); background: var(--bg-soft); }
+.nav-links a:hover {
+  color: var(--text);
+  box-shadow: var(--neu-out);
+}
+.nav-links a:active {
+  box-shadow: var(--neu-in);
+}
 .ext { font-size: 0.8em; }
 .nav-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .nav-links + .nav-actions { margin-left: 0; }
@@ -132,17 +197,23 @@ html[data-theme="dark"] .brand-logo-dark { display: block; }
   align-items: center;
   gap: 9px;
   min-height: 44px;
-  padding: 9px 16px;
-  border: 1.5px solid var(--text);
+  padding: 9px 18px;
+  border: 0;
   border-radius: 999px;
-  background: var(--card);
+  background: var(--neu-bg);
   color: var(--text);
   text-decoration: none;
   font-weight: 700;
   font-size: 1.02rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--neu-out);
+  transition: box-shadow 0.25s ease;
 }
-.github-pill:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.github-pill:hover {
+  box-shadow: var(--neu-out-lg);
+}
+.github-pill:active {
+  box-shadow: var(--neu-in);
+}
 .github-mark, .github-fallback-star { flex: none; }
 .github-metric { min-width: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .github-pill[data-stars-loaded="true"] .github-fallback-star { display: none; }
@@ -152,13 +223,35 @@ html[data-theme="dark"] .brand-logo-dark { display: block; }
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--card);
+  border: 0;
+  background: var(--neu-bg);
   color: var(--text);
   cursor: pointer;
-  transition: transform 0.3s ease;
+  box-shadow: var(--neu-out);
+  transition: box-shadow 0.25s ease, transform 0.3s ease;
 }
-.theme-toggle:hover { transform: rotate(20deg) scale(1.06); }
+.theme-toggle:hover {
+  transform: rotate(20deg);
+  box-shadow: var(--neu-out-lg);
+}
+.theme-toggle:active {
+  transform: rotate(20deg);
+  box-shadow: var(--neu-in);
+}
+
+/* Neumorphism drops borders, so keyboard focus needs its own ring. */
+.nav a:focus-visible,
+.nav button:focus-visible {
+  outline: 2px solid var(--accent-a);
+  outline-offset: 3px;
+}
+
+/* Soft UI depends on shadow transitions; respect reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-wrap, .nav a, .nav button, .brand-mark { transition: none; }
+  .theme-toggle:hover, .theme-toggle:active { transform: none; }
+}
+
 .icon-moon { display: none; }
 html[data-theme="dark"] .icon-sun { display: none; }
 html[data-theme="dark"] .icon-moon { display: block; }
@@ -1266,6 +1359,227 @@ html[data-theme="dark"] .qs-visual::before { background: radial-gradient(circle 
 .reveal.in { opacity: 1; transform: none; }
 /* graceful no-JS: everything stays visible */
 html:not(.js) .reveal { opacity: 1; transform: none; }
+
+/* ============================================================
+   NEUMORPHIC LAYER
+   ------------------------------------------------------------
+   Applies soft-UI to the rest of the page, on top of the base
+   rules above. Deliberately last-but-one so it overrides the
+   component defaults while the RESPONSIVE block below still
+   wins on sizing.
+
+   Rules of the system:
+     * a control shares its parent's base colour (--neu-bg) and
+       is defined only by the highlight/shadow pair;
+     * raised = --neu-out, deeper on hover, --neu-in when pressed;
+     * containers that *hold* controls are grooves (--neu-in);
+     * hard 1px borders are removed — they break the illusion;
+     * the brand palette is untouched: accents, text colours and
+       the dark code surfaces keep their existing values, they
+       just get extruded instead of drop-shadowed.
+   ============================================================ */
+
+/* ---- buttons ---- */
+.btn { border: 0; background: var(--neu-bg); color: var(--text); box-shadow: var(--neu-out); }
+.btn:hover { transform: none; box-shadow: var(--neu-out-lg); }
+.btn:active { box-shadow: var(--neu-in); }
+/* the primary CTA keeps its solid fill; only the elevation changes */
+.btn-primary { background: var(--text); color: var(--bg); }
+.btn-ghost { background: var(--neu-bg); color: var(--text); }
+
+/* ---- editor demo: a groove holding raised tabs ---- */
+.editor-tabs {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-in);
+}
+.editor-tab { background: transparent; box-shadow: none; }
+.editor-tab:hover { box-shadow: var(--neu-out-sm); }
+.editor-tab.active {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out);
+}
+
+/* ---- dark "screen" surfaces (terminal, IDE, code) ----
+   Their interiors stay as-is — they depict real editors. Only the
+   outer frame is re-cut so the slab is extruded from the page
+   rather than floating on a generic drop shadow. */
+.term, .ide-window, .code-block {
+  border: 0;
+  box-shadow: var(--neu-out-lg);
+}
+.term:hover { transform: translateY(-4px); box-shadow: var(--neu-out-lg); }
+.docs-card .code-block { border: 0; box-shadow: var(--neu-out); }
+
+/* ---- language bubbles ----
+   These are the most sculptural elements on the page, so they get a
+   stronger treatment than the flat --neu-out: a directional surface
+   gradient (lit from the top-left, matching the shadow pair) plus a
+   1px rim light. The gradient is what actually sells the curvature —
+   without it a circle reads as a flat disc, especially in dark mode
+   where the page is darker than the bubble. */
+.bubble-icon {
+  border: 0;
+  background: linear-gradient(145deg, var(--bubble-face-hi), var(--bubble-face-lo));
+  box-shadow:
+    /* cast — long and soft, lit from the top-left */
+    -14px -14px 28px var(--bubble-hi),
+     16px  16px 32px var(--bubble-lo),
+    /* rim — the bright top-left edge and dark underside that make it a
+       sphere rather than a disc */
+    inset  3px  3px 5px var(--bubble-rim-hi),
+    inset -3px -3px 6px var(--bubble-rim-lo);
+}
+.bubble:hover .bubble-icon {
+  box-shadow:
+    -20px -20px 38px var(--bubble-hi),
+     22px  22px 44px var(--bubble-lo),
+    inset  3px  3px 5px var(--bubble-rim-hi),
+    inset -3px -3px 6px var(--bubble-rim-lo);
+}
+
+/* ---- section headings & inline code ---- */
+.section-title-icon {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out-sm);
+}
+.section code, .section-note code {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-in-sm);
+}
+/* ...but only for *inline* code. Inside a code block or the command
+   field the chip is a stray light rectangle behind the text. */
+.code-block code,
+.qs-command code,
+.term code {
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+
+/* ---- quick-start ---- */
+.qs-provider-trigger, .qs-provider-option {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out-sm);
+}
+.qs-provider-trigger:hover,
+.qs-provider-trigger[aria-expanded="true"] { background: var(--neu-bg); box-shadow: var(--neu-in); }
+.qs-provider-option:hover,
+.qs-provider-option[aria-selected="true"] { background: var(--neu-bg); box-shadow: var(--neu-in-sm); }
+.qs-provider-options {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out-lg);
+}
+/* accent-filled counters keep their colour, gain the extrusion */
+.qs-n, .docs-step-number { box-shadow: var(--neu-out-sm); }
+
+/* ---- the copyable command ----
+   Was a dark maroon gradient slab with a hatch overlay, an inner well
+   and three separate borders — heavy on its own, and jarring dropped on
+   a light page. Rebuilt as the standard soft-UI idiom for an input: one
+   groove holding a raised button. Accent survives only on the prompt
+   glyph and the copied state. */
+.qs-command {
+  padding: 10px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-in);
+}
+.qs-command::before { display: none; }   /* hatch + glare overlay */
+.qs-command pre {
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+}
+.qs-command pre::before { color: var(--accent-a); text-shadow: none; }
+.qs-command ::selection { background: color-mix(in srgb, var(--accent-a) 26%, transparent); color: var(--text); }
+
+.qs-copy {
+  border: 0;
+  background: var(--neu-bg);
+  color: var(--text);
+  box-shadow: var(--neu-out-sm);
+}
+.qs-copy:hover {
+  transform: none;
+  border-color: transparent;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out);
+}
+.qs-copy:active { box-shadow: var(--neu-in-sm); }
+.qs-copy:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; }
+/* the icon's offset "back sheet" has to match whatever it sits on */
+.qs-copy::before { box-shadow: 3px -3px 0 -1px var(--neu-bg), 3px -3px 0 0 currentColor; }
+.qs-copy.copied {
+  background: var(--neu-bg);
+  border-color: transparent;
+  color: #1f8f62;
+  box-shadow: var(--neu-in-sm);
+}
+
+/* ---- examples: groove + raised active tab ---- */
+.ex-nav {
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 0;
+  border-radius: 16px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-in);
+}
+.ex-tab {
+  margin-bottom: 0;
+  padding: 11px 16px;
+  border-radius: 11px;
+  transition: color .25s ease, box-shadow .25s ease;
+}
+.ex-tab:hover { box-shadow: var(--neu-out-sm); }
+.ex-tab.active {
+  border-bottom: 0;
+  padding-bottom: 11px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out);
+}
+.ex-num { background: var(--neu-bg); box-shadow: var(--neu-in-sm); }
+.ex-tab.active .ex-num { background: var(--accent-a); color: #fff; box-shadow: var(--neu-out-sm); }
+
+/* ---- docs cards ---- */
+.docs-card {
+  border-radius: 28px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out);
+}
+.docs-card-icon { border: 0; box-shadow: var(--neu-out-lg); }
+.docs-provider-badges span {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-out-sm);
+}
+
+/* ---- footer: the header slab, mirrored ---- */
+.footer {
+  border-top: 0;
+  background: var(--neu-bg);
+  box-shadow: 0 -8px 18px -6px var(--neu-dark), inset 0 -1px 0 var(--neu-light);
+}
+
+/* Borderless controls need a visible keyboard ring everywhere,
+   not just in the nav. */
+.btn:focus-visible,
+.ex-tab:focus-visible,
+.bubble:focus-visible .bubble-icon {
+  outline: 2px solid var(--accent-a);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .ex-tab, .editor-tab, .bubble-icon, .term { transition: none; }
+}
 
 /* ============================================================
    RESPONSIVE

@@ -10,7 +10,9 @@
   const applyTheme = (theme) => {
     root.setAttribute("data-theme", theme);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", theme === "dark" ? "#0d0d11" : "#ffffff");
+    /* matches the neumorphic header bar (--neu-bg), which is what sits
+       under the browser chrome on mobile */
+    if (meta) meta.setAttribute("content", theme === "dark" ? "#191b21" : "#ecedf1");
   };
   applyTheme(stored ?? (prefersDark.matches ? "dark" : "light"));
   prefersDark.addEventListener("change", (event) => {
@@ -108,7 +110,7 @@
       { lead: "Human", accent: "Language", target: "Code" },
       { lead: "Plain", accent: "Language", target: "Real Code" },
       { lead: "Plain", accent: "Requests", target: "Safe Changes" },
-      { lead: "Change", accent: "Contracts", target: "Grounded Code" },
+      { lead: "Your", accent: "Words", target: "Working Code" },
     ];
     const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
     const sourceText = (phrase) => `${phrase.lead} ${phrase.accent}`;
