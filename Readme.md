@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="80%">
+  <img src="assets/brand/wordmark-dark.svg" alt="human-to-code: reviewed intent, validated code" width="60%">
 </p>
 
 <p align="center">
