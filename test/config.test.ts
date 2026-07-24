@@ -630,7 +630,7 @@ test("the documented default file is exactly what --init writes", async () => {
     new URL("../docs/CONFIGURATION.md", import.meta.url),
     "utf8",
   );
-  const blocks = [...reference.matchAll(/```json\n([\s\S]*?)```/gu)].map((match) => match[1]!);
+  const blocks = [...reference.matchAll(/```json\r?\n([\s\S]*?)```/gu)].map((match) => match[1]!);
   const documented = blocks.find((block) => block.includes("\"schemaVersion\""));
   assert.ok(documented, "the reference must contain a complete default JSON block");
   assert.deepEqual(JSON.parse(documented), JSON.parse(defaultConfigJson()));

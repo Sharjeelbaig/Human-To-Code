@@ -8,7 +8,10 @@
  * This is reference checking, not verification. A clean result means the named
  * references line up, never that the project behaves correctly.
  */
-import { dirname, extname, resolve as resolvePath, sep } from "node:path";
+// Reference paths are project-relative and always POSIX-shaped, independent of
+// the host. Platform path math would resolve a root-relative "/styles.css"
+// against the current drive on Windows ("D:/styles.css") and never match.
+import { dirname, extname, resolve as resolvePath } from "node:path/posix";
 import { cssFacts, htmlFacts, javaScriptFacts } from "../../workflows/project-contracts.ts";
 
 /** Files whose cross-references this module understands. */
@@ -104,10 +107,6 @@ function oneLine(value: string, limit = MAX_DETAIL_CHARS): string {
     .replace(/\s+/gu, " ")
     .trim();
   return sanitized.length <= limit ? sanitized : `${sanitized.slice(0, Math.max(0, limit - 1))}…`;
-}
-
-function toPosix(path: string): string {
-  return path.split(sep).join("/").replace(/^\.\//u, "");
 }
 
 function parseDeclarations(body: string): Map<string, string> {
@@ -249,7 +248,7 @@ function resolveReference(fromPath: string, reference: string): string | undefin
   if (withoutQuery.startsWith("/")) return withoutQuery.slice(1);
   const base = dirname(`/${fromPath}`);
   const resolved = resolvePath(base, withoutQuery);
-  return toPosix(resolved).replace(/^\//u, "");
+  return resolved.replace(/^\//u, "");
 }
 
 function push(

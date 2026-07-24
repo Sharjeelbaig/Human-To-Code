@@ -28,7 +28,11 @@ test("RunStore persists private records and JSON artifacts", async () => {
 
     const artifactPath = await store.writeArtifact("run-1", "patch.json", { safe: true });
     assert.deepEqual(await store.readArtifact("run-1", "patch.json"), { safe: true });
-    assert.equal((await stat(artifactPath)).mode & 0o777, 0o600);
+    // Windows has no POSIX mode bits: chmod only toggles the read-only flag and
+    // stat always reports 0o666, so the owner-only guarantee is unobservable there.
+    if (process.platform !== "win32") {
+      assert.equal((await stat(artifactPath)).mode & 0o777, 0o600);
+    }
 
     await assert.rejects(
       store.writeArtifact("run-1", "../escape.json", {}),

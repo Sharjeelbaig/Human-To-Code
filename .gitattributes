@@ -1,0 +1,4 @@
+# Normalize line endings so checkouts are identical on every platform.
+# Tests parse fenced blocks in docs/ and compare generated text byte-for-byte;
+# a CRLF checkout on Windows makes those comparisons fail spuriously.
+* text=auto eol=lf

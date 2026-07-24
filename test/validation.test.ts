@@ -63,7 +63,11 @@ test("validation rejects shells and implicit downloaders before probing a sandbo
   }
 });
 
-test("validation pins an already-installed image and forbids implicit pulls", async () => {
+// The container-runtime stand-in is a shebang script made executable with chmod.
+// Windows can spawn neither that nor a .cmd wrapper (node:child_process refuses
+// batch files without a shell), so the fixture cannot be expressed there. The
+// code under test is unaffected: on Windows the real binary is docker.exe.
+test("validation pins an already-installed image and forbids implicit pulls", { skip: process.platform === "win32" }, async () => {
   const baseline = await mkdtemp(join(tmpdir(), "h2c-validation-pinned-base-"));
   const candidate = await mkdtemp(join(tmpdir(), "h2c-validation-pinned-candidate-"));
   const runtimeRoot = await mkdtemp(join(tmpdir(), "h2c-validation-runtime-"));
