@@ -12,19 +12,19 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a>
+  <a href="#quick-start"><img src="assets/icons/quick-start.svg" alt="" height="16">&nbsp;Quick start</a>
   &nbsp;·&nbsp;
-  <a href="#how-it-works">How it works</a>
+  <a href="#how-it-works"><img src="assets/icons/how-it-works.svg" alt="" height="16">&nbsp;How it works</a>
   &nbsp;·&nbsp;
-  <a href="#cli">CLI</a>
+  <a href="#cli"><img src="assets/icons/cli.svg" alt="" height="16">&nbsp;CLI</a>
   &nbsp;·&nbsp;
-  <a href="#configuration">Configuration</a>
+  <a href="#configuration"><img src="assets/icons/configuration.svg" alt="" height="16">&nbsp;Configuration</a>
   &nbsp;·&nbsp;
-  <a href="docs/CONFIGURATION.md">Config reference</a>
+  <a href="docs/CONFIGURATION.md"><img src="assets/icons/config-reference.svg" alt="" height="16">&nbsp;Config reference</a>
   &nbsp;·&nbsp;
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="CONTRIBUTING.md"><img src="assets/icons/contributing.svg" alt="" height="16">&nbsp;Contributing</a>
   &nbsp;·&nbsp;
-  <a href="#community">Community</a>
+  <a href="#community"><img src="assets/icons/community.svg" alt="" height="16">&nbsp;Community</a>
 </p>
 
 You know the loop: you're in your IDE, you jump over to ChatGPT, paste some
