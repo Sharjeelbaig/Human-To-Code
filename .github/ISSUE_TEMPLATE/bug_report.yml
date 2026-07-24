@@ -1,0 +1,113 @@
+name: Bug report
+description: Something behaves differently than documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The `--json` output is the single most useful
+        thing you can include  -  it names the exact status, every per-unit skip
+        reason, and the request counts.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+      placeholder: |
+        I expected the @human marker in src/health.ts to be replaced.
+        Instead the run finished with 0 written and 1 skipped.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: >
+        The smallest `.human` file or `@human` marker that triggers it, plus the
+        exact command you ran.
+      render: shell
+      placeholder: |
+        # src/health.ts
+        // @human add a function named health that returns { status: 200 }
+
+        $ npx human-to-code . -y --json
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Full output
+      description: Paste the complete output, ideally from a `--json` run.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Your human-to-code.config.json
+      description: >
+        Remove anything private first. The config never stores credentials  -  it
+        only names environment variables  -  but check your `privatePaths`,
+        `excludedPaths`, and any custom `baseUrl` before pasting.
+      render: json
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: human-to-code version
+      placeholder: "0.1.47"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Node 24 or newer is required. `node --version`
+      placeholder: "v24.5.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - ollama (local / loopback)
+        - ollama (cloud or custom endpoint)
+        - openai
+        - other / not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am on Node 24 or newer.
+          required: true
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: >
+            This is not a security vulnerability. (Those go through
+            SECURITY.md, never a public issue.)
+          required: true

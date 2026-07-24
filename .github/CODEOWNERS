@@ -1,0 +1,14 @@
+# Default owner for everything in the repository.
+# Ordered by precedence: the last matching pattern wins.
+*                       @Sharjeelbaig
+
+# Security-sensitive surfaces: config validation, credential handling, provider
+# transport, secret scanning, and the guarded write path.
+/src/config/            @Sharjeelbaig
+/src/llms/              @Sharjeelbaig
+/src/tools/security/    @Sharjeelbaig
+/src/tools/file-ops/    @Sharjeelbaig
+/SECURITY.md            @Sharjeelbaig
+
+# Release and CI automation.
+/.github/workflows/     @Sharjeelbaig

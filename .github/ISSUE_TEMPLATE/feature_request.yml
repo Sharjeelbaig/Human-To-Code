@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest a capability human-to-code does not have yet
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a language analyzer adapter or a new supported ecosystem is the
+        most common request  -  check
+        [docs/roadmap](../../tree/main/docs/roadmap) first, since several are
+        already scoped and open for contribution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting?
+      description: >
+        Describe the situation, not the solution. What are you trying to do, and
+        where does human-to-code get in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+      description: If you have a concrete design in mind, sketch it here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried or considered?
+      description: >
+        Existing config options, a different provider, doing it by hand  -
+        anything that did not work, and why.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this touch?
+      options:
+        - Discovery (.human files, @human markers, routing)
+        - Generation and planning
+        - Validation (types, structure, cross-file references)
+        - Config and CLI
+        - Providers and adapters
+        - Language support / analyzer adapters
+        - Docs
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: I am willing to open a pull request for this.
+          required: false

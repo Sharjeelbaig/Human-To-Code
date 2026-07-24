@@ -1,12 +1,30 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="human-to-code  -  write intent in plain language, compile it to real code" width="100%">
+  <img src="assets/banner.svg" alt="human-to-code  -  reviewed intent, validated code" width="100%">
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/human-to-code"><img alt="npm version" src="https://img.shields.io/npm/v/human-to-code?color=ff5f3c&label=npm"></a>
   <a href="#release-status"><img alt="status: preview" src="https://img.shields.io/badge/status-preview-orange"></a>
-  <img alt="node >= 24" src="https://img.shields.io/badge/node-%E2%89%A5%2024-brightgreen">
+  <a href="https://github.com/Sharjeelbaig/Human-To-Code/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/Sharjeelbaig/Human-To-Code/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="#development-checks"><img alt="node 24 or newer" src="https://img.shields.io/badge/node-24%2B-brightgreen"></a>
   <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
   <a href="CONTRIBUTING.md"><img alt="contributions welcome" src="https://img.shields.io/badge/contributions-welcome-brightgreen"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a>
+  &nbsp;·&nbsp;
+  <a href="#how-it-works">How it works</a>
+  &nbsp;·&nbsp;
+  <a href="#cli">CLI</a>
+  &nbsp;·&nbsp;
+  <a href="#configuration">Configuration</a>
+  &nbsp;·&nbsp;
+  <a href="docs/CONFIGURATION.md">Config reference</a>
+  &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md">Contributing</a>
+  &nbsp;·&nbsp;
+  <a href="#community">Community</a>
 </p>
 
 You know the loop: you're in your IDE, you jump over to ChatGPT, paste some
@@ -18,10 +36,107 @@ human-to-code removes that loop. Write a comment saying what you want  -
 
 Building something from scratch? Don't start in `.ts` or `.py`. Make a
 `file.human` instead, write what you want line by line in plain English, and it
-compiles down to real TypeScript, Python, or C++. Pseudocode that actually runs.
+compiles down to real TypeScript, JavaScript, Python, Rust, HTML, or CSS.
+Pseudocode that actually runs.
 
 And you keep your grip on the codebase. You're not handing the whole thing to an
 agent and hoping it comes back with something you recognize.
+
+## How it works
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**1 · Write intent**
+
+Drop a `// @human ...` comment in a file you already have, or write a whole
+`file.human` in plain English. No new syntax to learn.
+
+</td>
+<td width="33%" valign="top">
+
+**2 · Review the receipt**
+
+Before anything runs you see the output languages, the provider, the model, and
+every source-to-output path. Nothing is written until you confirm.
+
+</td>
+<td width="33%" valign="top">
+
+**3 · Get validated code**
+
+Each request is generated, checked against the rest of the project, and only
+then written to disk. Failures skip that one target, never the whole run.
+
+</td>
+</tr>
+</table>
+
+### What you get
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Your codebase, not a blank slate**
+
+ProjectMemory gives every request the real tree, the planned outputs, and
+compact contracts for related files, so generated code imports what actually
+exists instead of inventing a module.
+
+</td>
+<td width="50%" valign="top">
+
+**Validated before it is written**
+
+TypeScript and opted-in JavaScript go through the TypeScript compiler against
+your unchanged baseline. Other languages get deterministic structural checks.
+Inline markers are diffed so you are never blamed for pre-existing errors.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**Local-first and private by default**
+
+A fresh install talks to loopback Ollama. Remote providers stay blocked until
+`privacy.remoteProviderConsent` is explicitly enabled, and credentials live in
+environment variables that the config only ever names.
+
+</td>
+<td width="50%" valign="top">
+
+**No surprise requests**
+
+The receipt shows the exact planned request count before you confirm  -
+classification, blueprint, todo, and coding passes broken out separately, with
+conditional repair ceilings listed on top.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**Cross-file coherence**
+
+A shared blueprint agrees names once per run, then deterministic reference
+checks catch a stylesheet selector that no markup matches, or a handler nothing
+calls  -  with no extra model requests.
+
+</td>
+<td width="50%" valign="top">
+
+**Guarded writes**
+
+Whole-file output lands as a rollback-protected batch. Inline replacements use
+exact stale-byte checks, so a file that changed under you is skipped rather
+than clobbered.
+
+</td>
+</tr>
+</table>
 
 ## Quick start
 
@@ -614,16 +729,15 @@ Pick whichever one matches your question:
 
 | I want to understand... | Read |
 | --- | --- |
-| What a project term means | [Architecture glossary](docs/GLOSSARY.md) |
-| How the product works and where a source change belongs | [Codebase tour](docs/Codebase_Tour.md) |
-| Why the source is split into these layers | [Architecture](docs/ARCHITECTURE.md) |
-| What each source file owns | [Module guide](docs/MODULES.md) |
-| How functions, variables, and lifecycle comments should be named | [Source clarity and naming practices](docs/CODE_CLARITY.md) |
+| How the product works, what each folder owns, and where a source change belongs | [Codebase tour](docs/Codebase_Tour.md) |
 | Every configuration field and default | [Configuration reference](docs/CONFIGURATION.md) |
 | How to add ecosystems, providers, or schema versions safely | [Scalability and engineering practices](docs/SCALABILITY.md) |
 | How package-owned model skills are selected and extended | [Model skill folders](docs/SKILLS.md) |
-| Security boundaries, secrets, sandboxing, apply, and rollback | [Security model](SECURITY.md) |
+| Which languages are supported now and what each one still needs | [Language roadmap](docs/roadmap/README.md) |
+| Security boundaries, secrets, apply, and rollback | [Security model](SECURITY.md) |
 | How to prepare and review a contribution | [Contributor guide](CONTRIBUTING.md) |
+| How to report a bug or ask for help | [Support](SUPPORT.md) |
+| What changed between releases | [Changelog](CHANGELOG.md) |
 
 ## Development checks
 
@@ -637,6 +751,31 @@ npm run package:check
 
 `package:check` builds a tarball, installs it into a clean temporary project,
 imports the public entry point, and invokes the installed CLI.
+
+## Release status
+
+human-to-code is a **preview**. It is published from `main`, versioned `0.1.x`,
+and useful today  -  but the surface is still moving.
+
+| Area | State |
+| --- | --- |
+| `npx human-to-code .` and the `.human` / `@human` model | Stable in practice; this is what the tests and docs cover |
+| Config schema v1 | Stable. Additive changes only, and unknown keys stay a hard error |
+| Public API from `human-to-code` | Unstable. Exports may be reorganized between `0.1.x` releases |
+| `openai` and `ollama` adapters | Working. `anthropic`, `grok`, and `gemini` pass config validation but have no adapter yet |
+| Generated code | Never claimed as verified. Static and structural checks are not proof of runtime correctness  -  review the diff |
+
+Node **24 or newer** is required.
+
+## Community
+
+- **Found a bug or want a feature?** Open an [issue](https://github.com/Sharjeelbaig/Human-To-Code/issues/new/choose).
+- **Need help using it?** See [SUPPORT.md](SUPPORT.md).
+- **Want to contribute?** Start with [CONTRIBUTING.md](CONTRIBUTING.md), then look for
+  [good first issues](https://github.com/Sharjeelbaig/Human-To-Code/labels/good%20first%20issue).
+  Adding a language analyzer adapter is the most self-contained place to begin.
+- **Found a security problem?** Do not open a public issue  -  follow [SECURITY.md](SECURITY.md).
+- **Everyone taking part** is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

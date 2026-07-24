@@ -1,0 +1,13 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Sharjeelbaig/Human-To-Code/security/advisories/new
+    about: >
+      Report privately through a GitHub security advisory. Never open a public
+      issue for a vulnerability.
+  - name: Usage help and troubleshooting
+    url: https://github.com/Sharjeelbaig/Human-To-Code/blob/main/SUPPORT.md
+    about: Common failure modes and what to check before filing a bug.
+  - name: Configuration reference
+    url: https://github.com/Sharjeelbaig/Human-To-Code/blob/main/docs/CONFIGURATION.md
+    about: Every config field, its default, and its validation rules.
