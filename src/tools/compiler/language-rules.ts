@@ -265,3 +265,18 @@ export function compileInstructionWithLanguageRules(
   }
   return undefined;
 }
+
+/**
+ * Model names from local runtimes commonly include a parameter-size suffix
+ * (`270m`, `0.5b`, `1.5b`). Only the smallest explicit sizes prefer local
+ * lowering in direct mode; unknown and larger models keep the normal agent.
+ */
+export function prefersDeterministicLanguageRules(model: string): boolean {
+  const matches = [...model.toLowerCase().matchAll(/(?:^|[:_-])(\d+(?:\.\d+)?)([mb])(?:$|[-_])/gu)];
+  const match = matches.at(-1);
+  if (!match) return false;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return false;
+  const millions = match[2] === "b" ? value * 1_000 : value;
+  return millions <= 500;
+}

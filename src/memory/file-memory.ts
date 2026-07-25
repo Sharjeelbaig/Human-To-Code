@@ -275,10 +275,13 @@ export async function generateConversionUnits(
           ...(validationFailure ? { validationFailure } : {}),
         };
         const loweredCode = await options.lower?.(unit, generationContext);
-        const rawCode = loweredCode === undefined
-          ? await generator(unit, generationContext)
-          : loweredCode;
-        if (loweredCode === undefined) codingRequests += 1;
+        let rawCode: string;
+        if (loweredCode === undefined) {
+          codingRequests += 1;
+          rawCode = await generator(unit, generationContext);
+        } else {
+          rawCode = loweredCode;
+        }
         code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
         await options.validate?.(unit, code);
 
@@ -326,6 +329,22 @@ export async function generateConversionUnits(
         if (code !== undefined && code.trim().length > 0) rejectedDraft = code;
         validationFailure = failure;
         code = undefined;
+        const recovered = await options.recover?.(unit, failure);
+        if (recovered !== undefined) {
+          try {
+            code = memory ? memory.normalizeReplacement(recovered) : recovered;
+            await options.validate?.(unit, code);
+            failure = undefined;
+            break;
+          } catch (recoveryError) {
+            if (recoveryError instanceof ContextSecurityError) throw recoveryError;
+            failure = recoveryError instanceof Error
+              ? recoveryError.message
+              : String(recoveryError);
+            validationFailure = failure;
+            code = undefined;
+          }
+        }
       }
     }
     options.onPlanningOutcome?.({

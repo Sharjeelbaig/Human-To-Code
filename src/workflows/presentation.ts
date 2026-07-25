@@ -3,6 +3,10 @@
  * model output before it can ever become candidate code.
  */
 import { languageProfile } from "../tools/discovery/languages.ts";
+import {
+  compileInstructionWithLanguageRules,
+  prefersDeterministicLanguageRules,
+} from "../tools/compiler/language-rules.ts";
 import { potentialIntegrationRequests } from "../tools/validation/integration-validation.ts";
 import type { SpecDiagnostic } from "../tools/compiler/spec-diagnostics.ts";
 import { planClassificationRequestCount } from "./adaptive-planning.ts";
@@ -137,9 +141,22 @@ export function renderReceipt(
   const basePlanned = planning === undefined
     ? undefined
     : plannedRequestCounts(units, planning);
-  const planned = options.compiler?.enabled && basePlanned !== undefined
-    ? { ...basePlanned, classification: 0 }
-    : basePlanned;
+  const directLocalUnits = options.compiler?.enabled !== true
+    && prefersDeterministicLanguageRules(model)
+    ? units.filter((unit) => compileInstructionWithLanguageRules(unit) !== undefined)
+    : [];
+  const directLocalInline = directLocalUnits.filter((unit) => unit.kind === "inline").length;
+  const planned = basePlanned === undefined
+    ? undefined
+    : options.compiler?.enabled
+      ? { ...basePlanned, classification: 0 }
+      : directLocalUnits.length > 0
+        ? {
+            ...basePlanned,
+            classification: Math.max(0, basePlanned.classification - directLocalInline),
+            coding: Math.max(0, basePlanned.coding - directLocalUnits.length),
+          }
+        : basePlanned;
   const multiPass =
     options.compiler?.enabled !== true && planning?.enabled === true;
   const adaptivePlanning = multiPass && planning?.adaptive === true;
@@ -185,6 +202,9 @@ export function renderReceipt(
       : []),
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
     ...(adaptiveDisclaimer ? [adaptiveDisclaimer] : []),
+    ...(directLocalUnits.length > 0
+      ? [`  Local rules: ${directLocalUnits.length} unambiguous target(s) compile locally; unmatched targets retain the normal direct-agent flow.`]
+      : []),
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
     ...(integrationDisclaimer ? [integrationDisclaimer] : []),
     ...(conditional !== undefined && conditional.compilerRepairUpTo > 0

@@ -51,6 +51,7 @@ import {
   normalizeGeneratedUnitCode,
   normalizeCompilerGeneratedUnitCode,
   compileInstructionWithLanguageRules,
+  prefersDeterministicLanguageRules,
   conditionalRequestAllowance,
   plannedRequestCounts,
   discoverDirectUnits,
@@ -1012,6 +1013,12 @@ async function buildCommand(
     output(`\nConverting ${generationUnits.length} item(s) with ${model}…`, false);
 
   const planning = direct.planning;
+  const preferLocalLanguageRules =
+    effective.compiler.enabled
+    || (
+      providerName === "ollama"
+      && prefersDeterministicLanguageRules(model)
+    );
   const requestOptions = {
     provider: providerName,
     model,
@@ -1203,8 +1210,11 @@ async function buildCommand(
       },
       {
         retries: 1,
-        ...(effective.compiler.enabled
+        ...(preferLocalLanguageRules
           ? { lower: (unit: ConversionUnit) => compileInstructionWithLanguageRules(unit) }
+          : {}),
+        ...(!effective.compiler.enabled
+          ? { recover: (unit: ConversionUnit) => compileInstructionWithLanguageRules(unit) }
           : {}),
         validate: validateGeneratedUnit,
         ...(effective.compiler.enabled
@@ -1231,7 +1241,12 @@ async function buildCommand(
                     targetPath: unit.sourcePath,
                   },
                 ),
-              shouldClassify: (unit: ConversionUnit) => unit.kind === "inline",
+              shouldClassify: (unit: ConversionUnit) =>
+                unit.kind === "inline"
+                && !(
+                  preferLocalLanguageRules
+                  && compileInstructionWithLanguageRules(unit) !== undefined
+                ),
               projectMemory,
             }),
         contextCharBudget,

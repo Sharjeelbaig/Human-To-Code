@@ -137,6 +137,14 @@ export interface GenerateUnitsOptions {
     unit: ConversionUnit,
     context: UnitGenerationContext,
   ) => string | undefined | Promise<string | undefined>;
+  /**
+   * Conservative deterministic recovery after provider/validation failure.
+   * The recovered fragment must pass the same validator before it is accepted.
+   */
+  recover?: (
+    unit: ConversionUnit,
+    failure: string,
+  ) => string | undefined | Promise<string | undefined>;
   /** Fail-closed candidate check run before a unit is remembered or applied. */
   validate?: (unit: ConversionUnit, code: string) => Promise<void>;
   /** Model-backed semantic boundary between context-only and source-edit turns. */

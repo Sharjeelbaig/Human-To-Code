@@ -10,6 +10,8 @@ import {
   discoverDirectUnits,
   generateConversionUnits,
   normalizeCompilerGeneratedUnitCode,
+  prefersDeterministicLanguageRules,
+  renderReceipt,
   validateGeneratedUnit,
   type ConversionUnit,
 } from "../src/index.ts";
@@ -36,6 +38,14 @@ test("deterministic compiler syntax profiles cover every supported language", ()
     Object.keys(COMPILER_LANGUAGE_RULE_PROFILES).sort(),
     Object.keys(LANGUAGE_PROFILES).sort(),
   );
+});
+
+test("only explicitly tiny model sizes prefer direct local lowering", () => {
+  assert.equal(prefersDeterministicLanguageRules("gemma3:270m"), true);
+  assert.equal(prefersDeterministicLanguageRules("qwen2.5-coder:0.5b"), true);
+  assert.equal(prefersDeterministicLanguageRules("qwen2.5-coder:1.5b"), false);
+  assert.equal(prefersDeterministicLanguageRules("gemma4:31b-cloud"), false);
+  assert.equal(prefersDeterministicLanguageRules("custom-model:latest"), false);
 });
 
 test("typed parameter lowering follows each language's declaration order", () => {
@@ -132,6 +142,26 @@ test("compiler lowering bypasses the provider while the ordinary path still call
     ].join("\n");
     await writeFile(join(root, "index.ts"), source);
     const units = (await discoverDirectUnits(root, "typescript")).units;
+    const directReceipt = renderReceipt(
+      units,
+      "ollama",
+      "gemma3:270m",
+      "typescript",
+      {
+        planning: {
+          enabled: true,
+          adaptive: false,
+          projectBlueprint: true,
+          fileTodo: true,
+          markerTodo: false,
+          maxCodingPassesPerUnit: 2,
+        },
+        compiler: { enabled: false, onUnderspecified: "error" },
+      },
+    );
+    assert.match(directReceipt, /Requests : 0 planned/u);
+    assert.match(directReceipt, /Local rules: 3 unambiguous target\(s\) compile locally/u);
+
     let compilerProviderCalls = 0;
     const compiled = await generateConversionUnits(
       units,
@@ -171,6 +201,26 @@ test("compiler lowering bypasses the provider while the ordinary path still call
     );
     assert.equal(ordinaryProviderCalls, 1);
     assert.equal(ordinary[0]?.code, "ordinary provider output");
+
+    let recoveryProviderCalls = 0;
+    const recovered = await generateConversionUnits(
+      [units[0]!],
+      async () => {
+        recoveryProviderCalls += 1;
+        return "invalid provider output";
+      },
+      {
+        retries: 0,
+        recover: (current) => compileInstructionWithLanguageRules(current),
+        validate: async (_current, code) => {
+          if (code === "invalid provider output") throw new Error("invalid candidate");
+          await validateGeneratedUnit(units[0]!, code);
+        },
+      },
+    );
+    assert.equal(recoveryProviderCalls, 1);
+    assert.equal(recovered[0]?.error, undefined);
+    assert.equal(recovered[0]?.code, "x: number, y: number");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
