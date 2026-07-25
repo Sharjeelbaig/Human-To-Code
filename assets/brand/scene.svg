@@ -22,13 +22,31 @@
 
 .smooth-zoom {
   animation: smooth-zoom 3s ease-in-out infinite;
+}
+
+.coin {
+  width: 80px;
+  height: 80px;
+  transform-style: preserve-3d;
+  animation: coinFlip 1s linear infinite;
+  will-change: transform;
+  perspective: 800px;
+}
+
+@keyframes coinFlip {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
 }</style>
-<defs><filter id="filter_svg-l6b0uywy" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB"><feDropShadow in="SourceGraphic" dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.4" result="drop_svg-l6b0uywy" /></filter></defs>
-<g data-name="logo-mark-dark" style="" opacity="1" transform="translate(315.3495497058662 368.07051757378014) rotate(0) scale(3.871456021610299) translate(-64 -64)" filter="url(#filter_svg-l6b0uywy)"><g class="smooth-zoom" style="transform-origin:64px 64px;animation-duration:2s!important;animation-delay:0s!important;animation-iteration-count:infinite!important;animation-timing-function:ease!important;"><g style="transform-origin:64px 64px;animation:anim-float 1s ease-in-out infinite ">
+<defs><filter id="filter_svg-19ytwyto" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB"><feDropShadow in="SourceGraphic" dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="1" result="drop_svg-19ytwyto" /></filter></defs>
+<g data-name="logo-mark-dark" style="" opacity="1" transform="translate(319.36876835794476 334.94820554649266) rotate(0) scale(4.730332735665689) translate(-64 -64)" filter="url(#filter_svg-19ytwyto)"><g class="coin" style="transform-origin:64px 64px;animation-duration:2.5s!important;animation-delay:0s!important;animation-iteration-count:infinite!important;animation-timing-function:linear!important;">
   <title id="title">human-to-code logo mark for dark backgrounds</title>
   <desc id="desc">Opposing warm-white code chevrons joined by a coral prompt cursor.</desc>
   <path d="M51 25 17 64l34 39" fill="none" stroke="#f7f4ef" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="m77 25 34 39-34 39" fill="none" stroke="#f7f4ef" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
   <rect x="58" y="45" width="12" height="38" rx="6" fill="#ff5f3c"/>
-</g></g></g>
+</g></g>
 </svg>
