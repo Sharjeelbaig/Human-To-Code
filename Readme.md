@@ -3,7 +3,7 @@
 </p> -->
 
 <p align="center">
-  <img src="assets/brand/scene.svg" alt="human-to-code: reviewed intent, validated code" width="100%">
+  <img src="assets/brand/scene.svg" alt="human-to-code: reviewed intent, validated code" width="20%">
 </p>
 
 <p align="center">
