@@ -317,6 +317,108 @@ export function normalizeGeneratedUnitCode(unit: ConversionUnit, code: string): 
   return normalized;
 }
 
+interface FunctionWrapper {
+  name: string;
+  parameters: string;
+  body: string;
+  suffix: string;
+}
+
+function matchingGeneratedDelimiter(
+  code: string,
+  openOffset: number,
+  open: "(" | "{",
+  close: ")" | "}",
+): number | undefined {
+  let depth = 1;
+  let offset = openOffset + 1;
+  while (offset < code.length) {
+    const char = code[offset]!;
+    if (char === "'" || char === '"' || char === "`") {
+      const quote = char;
+      offset += 1;
+      while (offset < code.length) {
+        if (code[offset] === "\\") offset += 2;
+        else if (code[offset] === quote) {
+          offset += 1;
+          break;
+        } else offset += 1;
+      }
+      continue;
+    }
+    if (code.startsWith("//", offset)) {
+      const newline = code.indexOf("\n", offset + 2);
+      offset = newline === -1 ? code.length : newline + 1;
+      continue;
+    }
+    if (code.startsWith("/*", offset)) {
+      const blockEnd = code.indexOf("*/", offset + 2);
+      offset = blockEnd === -1 ? code.length : blockEnd + 2;
+      continue;
+    }
+    if (char === open) depth += 1;
+    else if (char === close) {
+      depth -= 1;
+      if (depth === 0) return offset;
+    }
+    offset += 1;
+  }
+  return undefined;
+}
+
+function generatedFunctionWrapper(code: string): FunctionWrapper | undefined {
+  const trimmed = code.trim();
+  const declaration = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/u.exec(trimmed);
+  if (!declaration) return undefined;
+  const openParen = trimmed.indexOf("(", declaration.index + declaration[0].length - 1);
+  const closeParen = matchingGeneratedDelimiter(trimmed, openParen, "(", ")");
+  if (closeParen === undefined) return undefined;
+  const openBrace = trimmed.indexOf("{", closeParen + 1);
+  if (openBrace < 0) return undefined;
+  const closeBrace = matchingGeneratedDelimiter(trimmed, openBrace, "{", "}");
+  if (closeBrace === undefined) return undefined;
+  return {
+    name: declaration[1]!,
+    parameters: trimmed.slice(openParen + 1, closeParen).trim(),
+    body: trimmed.slice(openBrace + 1, closeBrace).trim(),
+    suffix: trimmed.slice(closeBrace + 1).trim(),
+  };
+}
+
+function precedingFunctionNames(unit: ConversionUnit): Set<string> {
+  if (!unit.surroundingSource) return new Set();
+  const before = unit.surroundingSource.split("<CURRENT_MARKER>", 1)[0] ?? "";
+  return new Set(
+    [...before.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/gu)]
+      .map((match) => match[1]!),
+  );
+}
+
+/**
+ * Compiler mode may safely peel a full function wrapper from a fragment-only
+ * answer because discovery has already proven the exact grammar slot. This is
+ * not used by agent mode and never invents behavior: it only removes syntax
+ * that belongs to the surrounding source.
+ */
+export function normalizeCompilerGeneratedUnitCode(
+  unit: ConversionUnit,
+  code: string,
+): string {
+  const normalized = normalizeGeneratedUnitCode(unit, code);
+  const wrapper = generatedFunctionWrapper(normalized);
+  if (!wrapper) return normalized;
+  if (unit.insertionContext === "parameter-list") return wrapper.parameters;
+  if (unit.insertionContext === "function-body") return wrapper.body;
+  if (
+    unit.insertionContext === "statement"
+    && wrapper.suffix.length > 0
+    && precedingFunctionNames(unit).has(wrapper.name)
+  ) {
+    return wrapper.suffix;
+  }
+  return normalized;
+}
+
 async function sourceAndCandidateForUnit(
   unit: ConversionUnit,
   code: string,

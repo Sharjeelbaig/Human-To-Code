@@ -49,6 +49,7 @@ import {
   classifyPlanningNeed,
   classifyUnitsNeedingPlanning,
   normalizeGeneratedUnitCode,
+  normalizeCompilerGeneratedUnitCode,
   conditionalRequestAllowance,
   plannedRequestCounts,
   discoverDirectUnits,
@@ -1176,7 +1177,16 @@ async function buildCommand(
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
           ...(effective.compiler.enabled ? { compilerMode: true } : {}),
           ...(!unit.ownsWholeFile && unit.insertionContext
-            ? { insertionContext: unit.insertionContext }
+            ? {
+                insertionContext:
+                  !effective.compiler.enabled
+                  && (
+                    unit.insertionContext === "parameter-list"
+                    || unit.insertionContext === "function-body"
+                  )
+                    ? "statement" as const
+                    : unit.insertionContext,
+              }
             : {}),
           ...(!unit.ownsWholeFile && unit.insertionOwner
             ? { insertionOwner: unit.insertionOwner }
@@ -1186,7 +1196,9 @@ async function buildCommand(
             : {}),
           ...modelContext,
           inline: unit.kind === "inline" && !unit.ownsWholeFile,
-        }).then((code) => normalizeGeneratedUnitCode(unit, code));
+        }).then((code) => effective.compiler.enabled
+          ? normalizeCompilerGeneratedUnitCode(unit, code)
+          : normalizeGeneratedUnitCode(unit, code));
       },
       {
         retries: 1,
@@ -1367,11 +1379,14 @@ async function buildCommand(
             provider: providerName,
             model,
             targetPath: path,
+            ...(effective.compiler.enabled ? { compilerMode: true } : {}),
             ...(baseUrl ? { baseUrl } : {}),
             ...(apiKey ? { apiKey } : {}),
           },
         );
-        item.code = normalizeGeneratedUnitCode(item.unit, repaired);
+        item.code = effective.compiler.enabled
+          ? normalizeCompilerGeneratedUnitCode(item.unit, repaired)
+          : normalizeGeneratedUnitCode(item.unit, repaired);
         await validateGeneratedUnit(item.unit, item.code);
         projectMemory.remember(item.unit, item.code);
       } catch (error) {
@@ -1493,7 +1508,8 @@ async function buildCommand(
   // in-memory candidate overlay. TypeScript and explicitly opted-in JavaScript
   // are type-checked against the unchanged baseline before any file is written.
   // Dependency-connected groups that introduce cross-file errors get one
-  // bounded repair request per whole-file unit, then fail closed together.
+  // bounded repair request per whole-file unit. Compiler mode may also repair
+  // one grammar-scoped inline marker at a time, then fails closed together.
   let repairRequests = referenceRepairRequests;
   try {
     const onStagedProgress = interactive
@@ -1517,7 +1533,7 @@ async function buildCommand(
       maxRepairAttemptsPerUnit: 1,
       contextCharBudget: effective.privacy.maxContextTokens * 4,
       ...(effective.compiler.enabled
-        ? { allowExistingTargets: lockedTargets }
+        ? { allowExistingTargets: lockedTargets, repairInlineUnits: true }
         : {}),
       repair: (request) =>
         generateRepairCode(
@@ -1538,10 +1554,13 @@ async function buildCommand(
             provider: providerName,
             model,
             targetPath: request.targetPath,
+            ...(effective.compiler.enabled ? { compilerMode: true } : {}),
             ...(baseUrl ? { baseUrl } : {}),
             ...(apiKey ? { apiKey } : {}),
           },
-        ),
+        ).then((code) => effective.compiler.enabled
+          ? normalizeCompilerGeneratedUnitCode(request.unit, code)
+          : code),
       projectMemory,
       ...(onStagedProgress ? { onProgress: onStagedProgress } : {}),
     });

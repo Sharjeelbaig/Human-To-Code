@@ -52,6 +52,154 @@ function cssInsertionDetails(source: string, markerStart: number): {
     : { context: "css-rule-list" };
 }
 
+interface OpenDelimiter {
+  char: "(" | "{" | "[";
+  offset: number;
+}
+
+/**
+ * Return the code delimiters open at an inline marker while ignoring quoted
+ * text and comments. This is deliberately lexical: incomplete source with an
+ * @human marker often cannot produce a useful language AST yet.
+ */
+function openDelimitersAt(
+  source: string,
+  markerStart: number,
+  hashComments: boolean,
+): OpenDelimiter[] {
+  const stack: OpenDelimiter[] = [];
+  let offset = 0;
+  while (offset < markerStart) {
+    const char = source[offset]!;
+    if (char === "'" || char === '"' || char === "`") {
+      const quote = char;
+      offset += 1;
+      while (offset < markerStart) {
+        if (source[offset] === "\\") offset += 2;
+        else if (source[offset] === quote) {
+          offset += 1;
+          break;
+        } else offset += 1;
+      }
+      continue;
+    }
+    if (source.startsWith("//", offset) || (hashComments && source[offset] === "#")) {
+      const newline = source.indexOf("\n", offset + 1);
+      offset = newline === -1 ? markerStart : Math.min(markerStart, newline + 1);
+      continue;
+    }
+    if (source.startsWith("/*", offset)) {
+      const close = source.indexOf("*/", offset + 2);
+      offset = close === -1 ? markerStart : Math.min(markerStart, close + 2);
+      continue;
+    }
+    if (char === "(" || char === "{" || char === "[") {
+      stack.push({ char, offset });
+    } else if (char === ")" || char === "}" || char === "]") {
+      const expected = char === ")" ? "(" : char === "}" ? "{" : "[";
+      const match = stack.findLastIndex((entry) => entry.char === expected);
+      if (match >= 0) stack.splice(match);
+    }
+    offset += 1;
+  }
+  return stack;
+}
+
+function matchingClose(
+  source: string,
+  open: OpenDelimiter,
+  markerEnd: number,
+  hashComments: boolean,
+): number | undefined {
+  const close = open.char === "(" ? ")" : open.char === "{" ? "}" : "]";
+  let depth = 1;
+  let offset = Math.max(open.offset + 1, markerEnd);
+  while (offset < source.length) {
+    const char = source[offset]!;
+    if (char === "'" || char === '"' || char === "`") {
+      const quote = char;
+      offset += 1;
+      while (offset < source.length) {
+        if (source[offset] === "\\") offset += 2;
+        else if (source[offset] === quote) {
+          offset += 1;
+          break;
+        } else offset += 1;
+      }
+      continue;
+    }
+    if (source.startsWith("//", offset) || (hashComments && source[offset] === "#")) {
+      const newline = source.indexOf("\n", offset + 1);
+      offset = newline === -1 ? source.length : newline + 1;
+      continue;
+    }
+    if (source.startsWith("/*", offset)) {
+      const blockEnd = source.indexOf("*/", offset + 2);
+      offset = blockEnd === -1 ? source.length : blockEnd + 2;
+      continue;
+    }
+    if (char === open.char) depth += 1;
+    else if (char === close) {
+      depth -= 1;
+      if (depth === 0) return offset;
+    }
+    offset += 1;
+  }
+  return undefined;
+}
+
+function looksLikeFunctionHeader(prefix: string): boolean {
+  const header = prefix.slice(-320);
+  if (/\b(?:if|for|while|switch|catch|with)\s*\([^()]*\)\s*$/u.test(header))
+    return false;
+  return (
+    /\b(?:async\s+)?function\s+\w[\w$]*\s*\([^()]*\)\s*(?::[^{}]+)?$/u.test(header)
+    || /\b(?:def|fn|func)\s+\w+\s*\([^()]*\)\s*(?:->[^:{]+)?$/u.test(header)
+    || /\b(?:constructor|[A-Za-z_$][\w$]*)\s*\([^()]*\)\s*(?::[^{}]+)?$/u.test(header)
+    || /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:async\s*)?\([^()]*\)\s*(?::[^=]+)?=>\s*$/u.test(header)
+  );
+}
+
+/** Infer the fragment grammar for ordinary source languages. */
+function codeInsertionContext(
+  path: string,
+  source: string,
+  start: number,
+  end: number,
+): "statement" | "parameter-list" | "function-body" {
+  const hashComments = [".py", ".rb"].includes(extname(path).toLowerCase());
+  const stack = openDelimitersAt(source, start, hashComments);
+  const paren = [...stack].reverse().find((entry) => entry.char === "(");
+  if (paren) {
+    const close = matchingClose(source, paren, end, hashComments);
+    const prefix = source.slice(Math.max(0, paren.offset - 180), paren.offset);
+    const suffix = close === undefined
+      ? ""
+      : source.slice(close + 1, Math.min(source.length, close + 220));
+    const declarationPrefix =
+      /\b(?:function|def|fn|func)\s+[A-Za-z_$][\w$]*\s*$/u.test(prefix)
+      || /\b(?:constructor|[A-Za-z_$][\w$]*)\s*$/u.test(prefix)
+      || /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:async\s*)?$/u.test(prefix);
+    const declarationSuffix =
+      /^\s*(?:(?::|->)[^{=;\n]+)?\s*(?:=>|[{:\n])/u.test(suffix);
+    if (
+      declarationPrefix
+      && declarationSuffix
+      && !/\b(?:if|for|while|switch|catch|with)\s*$/u.test(prefix)
+    ) {
+      return "parameter-list";
+    }
+  }
+
+  for (const delimiter of [...stack].reverse()) {
+    if (delimiter.char !== "{") continue;
+    if (looksLikeFunctionHeader(source.slice(0, delimiter.offset))) {
+      return "function-body";
+    }
+  }
+  return "statement";
+}
+
 function insertionContextFor(path: string, source: string, start: number, marker: string): ConversionUnit["insertionContext"] {
   const extension = extname(path).toLowerCase();
   if (extension === ".css") return cssInsertionDetails(source, start).context;
@@ -61,7 +209,7 @@ function insertionContextFor(path: string, source: string, start: number, marker
     && source.slice(start + marker.length, start + marker.length + 1) === "}"
   ) return "jsx-child";
   if ([".html", ".htm"].includes(extension)) return "html-content";
-  return "statement";
+  return codeInsertionContext(path, source, start, start + marker.length);
 }
 
 function surroundingSource(source: string, start: number, end: number): string {

@@ -87,7 +87,15 @@ async function requestChatCompletion(prompt: PromptMessages, options: GenerateOp
     body: JSON.stringify({
       model: options.model,
       stream: false,
-      options: { temperature: 0 },
+      options: options.compilerMode
+        ? {
+            temperature: 0,
+            seed: 0,
+            top_k: 1,
+            top_p: 1,
+            repeat_penalty: 1,
+          }
+        : { temperature: 0 },
       messages: [
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user },
@@ -135,6 +143,7 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.unaddressedTodos ? { unaddressedTodos: options.unaddressedTodos } : {}),
     ...(options.rejectedDraft ? { rejectedDraft: options.rejectedDraft } : {}),
     ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
+    ...(options.compilerMode ? { compilerMode: true } : {}),
   });
   const prompt = options.compilerMode
     ? basePrompt

@@ -55,6 +55,8 @@ export interface StagedValidationOptions {
   projectMemory?: ProjectMemoryProvider;
   /** Existing whole-file targets proven to be owned by a compiler lock entry. */
   allowExistingTargets?: ReadonlySet<string>;
+  /** Permit target-scoped repairs for multi-marker inline files. Compiler mode enables this. */
+  repairInlineUnits?: boolean;
   onProgress?: (event: StagedValidationProgress) => void;
 }
 
@@ -95,6 +97,13 @@ function repairHints(unit: ConversionUnit, diagnostics: readonly ProjectDiagnost
   const path = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
   const javascript = [".js", ".jsx", ".mjs", ".cjs"].includes(extname(path).toLowerCase());
   const hints = new Set<string>();
+  if (unit.insertionContext === "parameter-list") {
+    hints.add("This marker owns only a function parameter list. Return comma-separated parameters only; do not return `function`, a function name, parentheses, a return type, braces, or a body.");
+  } else if (unit.insertionContext === "function-body") {
+    hints.add("This marker owns only statements inside an existing function body. Return statements such as `return expression;` only; do not repeat the function declaration, parameters, or outer braces.");
+  } else if (unit.kind === "inline") {
+    hints.add("This marker owns only its inline fragment. Do not repeat surrounding declarations or other markers.");
+  }
   for (const diagnostic of diagnostics) {
     if ([2305, 2613, 2724].includes(diagnostic.code)) {
       hints.add("The target's import form disagrees with the related module's actual exports. Reconcile every import/export diagnostic in this target in one response; prefer changing imports to the exact evidenced named or default exports rather than inventing aliases.");
@@ -107,6 +116,25 @@ function repairHints(unit: ConversionUnit, diagnostics: readonly ProjectDiagnost
     hints.add(`TS2339 means the inferred type ${inferredType} does not declare ${member}. Preserve the requested behavior by proving/narrowing the value to the correct subtype or by using an equivalent member that the inferred type actually declares; do not use an unsafe universal type or suppress validation.`);
   }
   return [...hints];
+}
+
+function inlineRepairOrder(
+  units: readonly ConversionUnit[],
+  diagnostics: readonly ProjectDiagnostic[],
+): ConversionUnit[] {
+  const returnFailure = diagnostics.some((item) => item.code === 2355 || item.code === 7030);
+  const parameterFailure = diagnostics.some((item) =>
+    [7006, 1016, 1015, 1005].includes(item.code));
+  const score = (unit: ConversionUnit): number => {
+    if (returnFailure && unit.insertionContext === "function-body") return 0;
+    if (parameterFailure && unit.insertionContext === "parameter-list") return 0;
+    if (unit.insertionContext === "function-body") return 1;
+    if (unit.insertionContext === "parameter-list") return 2;
+    return 3;
+  };
+  return [...units].sort((left, right) =>
+    score(left) - score(right)
+    || (left.range?.start ?? 0) - (right.range?.start ?? 0));
 }
 
 /**
@@ -180,39 +208,52 @@ export async function validateCandidateProject(
     if (options.repair && maxRepairAttempts > 0) {
       for (const [key, diagnostics] of attribution.byFile) {
         const file = overlay.files.get(key)!;
-        // Only whole-file candidates are repairable; an inline-modified file
-        // may hold several markers whose replacements cannot be regenerated
-        // independently without guessing, so its group fails closed instead.
-        if (file.units.length !== 1 || !unitOwnsCompleteFile(file.units[0]!)) continue;
-        const unit = file.units[0]!;
-        const attempts = repairAttempts.get(unit) ?? 0;
-        if (attempts >= maxRepairAttempts) continue;
-        repairAttempts.set(unit, attempts + 1);
-        const item = results.find((entry) => entry.unit === unit)!;
         const group = groups.groupOf.get(key)!;
-        const request = buildRepairRequest(unit, item.code, overlay, key, groups.members.get(group) ?? [], [
-          ...(groupDiagnostics.get(group) ?? diagnostics),
-        ], contextCharBudget, options.projectMemory);
-        if (scanSecrets(`${request.currentCode}\n${request.relatedFiles.map((entry) => entry.content).join("\n")}`).length > 0) {
-          // Never send credential-like content in repair context; the unit
-          // simply stays unrepaired and its group is rejected on the next pass.
-          repairAttempts.set(unit, maxRepairAttempts);
-          continue;
+        const groupItems = groupDiagnostics.get(group) ?? diagnostics;
+        const candidates =
+          file.units.length === 1 && unitOwnsCompleteFile(file.units[0]!)
+            ? [file.units[0]!]
+            : options.repairInlineUnits
+              ? inlineRepairOrder(file.units, groupItems)
+              : [];
+        for (const unit of candidates) {
+          const attempts = repairAttempts.get(unit) ?? 0;
+          if (attempts >= maxRepairAttempts) continue;
+          repairAttempts.set(unit, attempts + 1);
+          const item = results.find((entry) => entry.unit === unit)!;
+          const request = buildRepairRequest(
+            unit,
+            item.code,
+            overlay,
+            key,
+            groups.members.get(group) ?? [],
+            [...groupItems],
+            contextCharBudget,
+            options.projectMemory,
+          );
+          if (scanSecrets(`${request.currentCode}\n${request.relatedFiles.map((entry) => entry.content).join("\n")}`).length > 0) {
+            // Never send credential-like content in repair context; the unit
+            // simply stays unrepaired and its group is rejected on the next pass.
+            repairAttempts.set(unit, maxRepairAttempts);
+            continue;
+          }
+          options.onProgress?.({ kind: "repair", unit, attempt: attempts + 1 });
+          repairRequests += 1;
+          try {
+            const repairedCode = await options.repair(request);
+            if (repairedCode.trim().length === 0 || repairedCode === item.code) continue;
+            await validateGeneratedUnit(unit, repairedCode);
+            item.code = repairedCode;
+            options.projectMemory?.remember(unit, repairedCode);
+            repaired = true;
+            break;
+          } catch (error) {
+            if (error instanceof ContextSecurityError) throw error;
+            // A failed or invalid repair keeps the previous candidate; the
+            // attempt budget is already consumed.
+          }
         }
-        options.onProgress?.({ kind: "repair", unit, attempt: attempts + 1 });
-        repairRequests += 1;
-        try {
-          const repairedCode = await options.repair(request);
-          if (repairedCode.trim().length === 0 || repairedCode === item.code) continue;
-          await validateGeneratedUnit(unit, repairedCode);
-          item.code = repairedCode;
-          options.projectMemory?.remember(unit, repairedCode);
-          repaired = true;
-        } catch (error) {
-          if (error instanceof ContextSecurityError) throw error;
-          // A failed or invalid repair keeps the previous candidate; the
-          // attempt budget is already consumed.
-        }
+        if (repaired) break;
       }
     }
     if (repaired) continue;

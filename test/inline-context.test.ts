@@ -9,6 +9,7 @@ import {
   candidateTextsForGenerated,
   discoverDirectUnits,
   generateConversionUnits,
+  normalizeCompilerGeneratedUnitCode,
   normalizeGeneratedUnitCode,
   validateGeneratedUnit,
   withholdIncompleteRelatedTargets,
@@ -41,6 +42,29 @@ test("inline discovery records JSX and CSS grammar positions with bounded source
   }
 });
 
+test("compiler discovery distinguishes parameters, function bodies, and module statements", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-compiler-grammar-"));
+  try {
+    await put(root, "index.ts", [
+      "function add(",
+      "  // @human add the parameters x and y with number types",
+      ") {",
+      "  // @human add the logic of adding x and y",
+      "}",
+      "",
+      "// @human console log the result of calling add with 1 and 2",
+      "",
+    ].join("\n"));
+    const units = (await discoverDirectUnits(root, ["typescript"])).units;
+    assert.deepEqual(
+      units.map((unit) => unit.insertionContext),
+      ["parameter-list", "function-body", "statement"],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("inline prompts state the exact insertion grammar", () => {
   const prompt = buildDirectConversionPrompt({
     languageLabel: "CSS",
@@ -52,6 +76,59 @@ test("inline prompts state the exact insertion grammar", () => {
   assert.match(prompt.system, /declarations only/u);
   assert.match(prompt.system, /Do not output a selector, nested rule, braces/u);
   assert.match(prompt.user, /<INSERTION_CONTEXT>/u);
+});
+
+test("compiler prompts provide compact language and fragment rules", () => {
+  const prompt = buildDirectConversionPrompt({
+    languageLabel: "TypeScript",
+    instruction: "add x and y",
+    inline: true,
+    insertionContext: "parameter-list",
+    compilerMode: true,
+  });
+  assert.match(prompt.system, /comma-separated function parameters/u);
+  assert.match(prompt.system, /COMPILER RULESET/u);
+  assert.match(prompt.system, /Function parameters use `name: Type`/u);
+  assert.match(prompt.system, /Do not redeclare/u);
+});
+
+test("compiler normalization peels repeated function wrappers by proven grammar slot", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-compiler-wrapper-"));
+  try {
+    await put(root, "index.ts", [
+      "function add(",
+      "  // @human parameters",
+      ") {",
+      "  // @human body",
+      "}",
+      "",
+      "// @human call it",
+      "",
+    ].join("\n"));
+    const units = (await discoverDirectUnits(root, ["typescript"])).units;
+    const repeated = [
+      "function add(x: number, y: number): number {",
+      "  return x + y;",
+      "}",
+    ].join("\n");
+    assert.equal(
+      normalizeCompilerGeneratedUnitCode(units[0]!, repeated),
+      "x: number, y: number",
+    );
+    assert.equal(
+      normalizeCompilerGeneratedUnitCode(units[1]!, repeated),
+      "return x + y;",
+    );
+    assert.equal(
+      normalizeCompilerGeneratedUnitCode(
+        units[2]!,
+        `${repeated}\nconsole.log(add(1, 2));`,
+      ),
+      "console.log(add(1, 2));",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("every earlier @human message becomes ordered session memory", async () => {

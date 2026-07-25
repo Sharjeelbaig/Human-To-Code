@@ -33,7 +33,14 @@ export interface ConversionUnit {
   /** 1-based source line of the marker, for progress display. */
   line?: number;
   /** Grammar position receiving an inline replacement. */
-  insertionContext?: "statement" | "jsx-child" | "css-declarations" | "css-rule-list" | "html-content";
+  insertionContext?:
+    | "statement"
+    | "parameter-list"
+    | "function-body"
+    | "jsx-child"
+    | "css-declarations"
+    | "css-rule-list"
+    | "html-content";
   /** Existing CSS rule header when the marker sits inside a declaration body. */
   insertionOwner?: string;
   /** Bounded source around the marker, with the marker replaced by a placeholder. */

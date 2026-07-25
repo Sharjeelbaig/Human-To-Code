@@ -9,7 +9,14 @@ export interface DirectConversionPromptInput {
   /** Earlier `@human` messages in this run. */
   sessionMemory?: string;
   inline: boolean;
-  insertionContext?: "statement" | "jsx-child" | "css-declarations" | "css-rule-list" | "html-content";
+  insertionContext?:
+    | "statement"
+    | "parameter-list"
+    | "function-body"
+    | "jsx-child"
+    | "css-declarations"
+    | "css-rule-list"
+    | "html-content";
   insertionOwner?: string;
   surroundingSource?: string;
   fileMemory?: string;
@@ -24,6 +31,8 @@ export interface DirectConversionPromptInput {
   unaddressedTodos?: readonly string[];
   rejectedDraft?: string;
   validationFailure?: string;
+  /** Enables the compact, deterministic compiler-only language rule block. */
+  compilerMode?: boolean;
 }
 
 export interface PromptMessages {
@@ -148,6 +157,105 @@ function targetLanguageTranslationHint(
   return hints.length === 0 ? undefined : hints.join(" ");
 }
 
+/**
+ * Small models do better with a short target-language contract than with a
+ * large general coding handbook. These rules are compiler-mode only and stay
+ * intentionally syntax/type focused.
+ */
+function compilerLanguageRules(languageLabel: string): string[] {
+  const common = [
+    "Emit the smallest fragment that satisfies the current marker; never repeat the surrounding declaration.",
+    "Reuse every evidenced identifier with its exact spelling and preserve the evidenced call arity.",
+    "Do not emit placeholders, pseudocode, ellipses, validation suppressions, or prose comments in place of code.",
+    "Every opened delimiter must close, every required branch must produce a compatible value, and every referenced local name must be declared or already evidenced.",
+  ];
+  if (/\bTypeScript\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use native TypeScript annotations (`number`, `string`, `boolean`, arrays, object types); never use pseudocode types such as integer.",
+      "Function parameters use `name: Type`; function bodies contain statements such as `return expression;`; calls use expressions such as `name(arg1, arg2)`.",
+      "Respect strict nullability and inferred/declared return types. Narrow uncertain values; do not use `any`, `@ts-ignore`, or `@ts-expect-error` to hide an error.",
+      "Do not redeclare an existing function, variable, type, class, import, or parameter.",
+    ];
+  }
+  if (/\bJavaScript\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Emit JavaScript, not TypeScript: do not add type annotations, interfaces, enums, access modifiers, or `as` assertions.",
+      "Use valid declarations, return statements, and the existing module style. Do not redeclare existing bindings.",
+    ];
+  }
+  if (/\bPython\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use Python indentation and colons; never emit braces or JavaScript-style declarations.",
+      "Keep returns type-compatible, handle `None` when required, and reuse existing imports and names.",
+    ];
+  }
+  if (/\bRust\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use Rust ownership, borrowing, `Result`/`Option`, pattern matching, and visibility syntax exactly; do not invent implicit null values or exceptions.",
+      "Return the declared type on every path and avoid `unwrap` unless the instruction proves the value is present.",
+    ];
+  }
+  if (/\bGo\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use Go parameter `name type` syntax, explicit error returns, and the existing package/import style.",
+      "Do not leave unused imports or variables; return all declared result values on every required path.",
+    ];
+  }
+  if (/\bJava\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use Java declaration order (`Type name`), checked/unchecked exception rules, generics, and the existing package/class structure.",
+      "Return a value compatible with the declared method type on every reachable path.",
+    ];
+  }
+  if (/\bC#\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use C# declaration order (`Type name`), nullable-reference rules, `Task`/`async` contracts, and the existing namespace/type structure.",
+      "Dispose owned resources and return a value compatible with the declared member type on every reachable path.",
+    ];
+  }
+  if (/\bC\+\+\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use C++ types, value/reference/pointer ownership, RAII, headers, and namespaces consistently with surrounding code.",
+      "Return a value compatible with the declared function type on every reachable path.",
+    ];
+  }
+  if (/^C$/iu.test(languageLabel.trim())) {
+    return [
+      ...common,
+      "Use valid C declarations, pointer/array bounds, explicit ownership, headers, and error signaling consistent with surrounding code.",
+      "Return a value compatible with the declared function type on every reachable path.",
+    ];
+  }
+  if (/\bRuby\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Use Ruby blocks and `end`; never emit braces or type annotations from another language.",
+      "Reuse existing constants, methods, modules, and exception conventions.",
+    ];
+  }
+  if (/\bHTML\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Emit structurally valid HTML with balanced elements, unique required ids, valid nesting, and accessible native semantics.",
+    ];
+  }
+  if (/\bCSS\b/iu.test(languageLabel)) {
+    return [
+      ...common,
+      "Emit valid CSS declarations or complete rules exactly as the insertion grammar requests; balance braces and preserve evidenced selectors and custom properties.",
+    ];
+  }
+  return common;
+}
+
 /** Model-facing instructions for the direct conversion agent. */
 export function buildDirectConversionPrompt(input: DirectConversionPromptInput): PromptMessages {
   const target = input.targetPath === undefined ? "the requested target" : promptPath(input.targetPath);
@@ -161,6 +269,10 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
   );
   const inlineScope = input.insertionContext === "jsx-child"
     ? "Output one valid JSX expression. The existing JSX braces around <CURRENT_MARKER> stay in the file, so do not add another outer pair of braces. Do not output CSS, a function body, or a complete component."
+    : input.insertionContext === "parameter-list"
+      ? "Output only the comma-separated function parameters that replace <CURRENT_MARKER>, for example `x: number, y: number` in TypeScript. Do not output `function`, the function name, parentheses, braces, a return type, or a function body."
+      : input.insertionContext === "function-body"
+        ? "Output only statements for the existing function body, for example `return x + y;`. Do not output the surrounding function declaration, its name, parameters, or outer braces."
     : input.insertionContext === "css-declarations"
       ? `Output CSS declarations only for the current rule body${input.insertionOwner ? ` (${input.insertionOwner})` : ""}, such as position: relative;. Do not output a selector, nested rule, braces, or another copy of the current rule unless the Current @human instruction explicitly requests a nested selector or state.`
       : input.insertionContext === "css-rule-list"
@@ -202,6 +314,11 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
       ] : []),
       ...(input.rejectedDraft ? [
         `${(input.blueprint ? 1 : 0) + (input.todos ? 1 : 0) + (input.currentDraft ? 1 : 0) + 10}. REJECTED_DRAFT failed a deterministic gate. Correct the exact VALIDATION_FAILURE and return a replacement for the same target and marker. Do not repeat the rejected draft.`,
+      ] : []),
+      ...(input.compilerMode ? [
+        "",
+        "COMPILER RULESET — these are trusted target-language constraints:",
+        ...compilerLanguageRules(input.languageLabel).map((rule) => `- ${rule}`),
       ] : []),
       `TRANSLATION RULE — If the task contains pseudocode, prose algorithms, challenge statements, or user-invented syntax, treat them only as behavioral specifications. Translate them completely into valid ${input.languageLabel}; never copy source notation that is invalid in ${input.languageLabel}. Pseudocode type phrases describe constraints rather than literal type names; map them to native ${input.languageLabel} types. Preserve explicit requirements such as export/public visibility.`,
       "",

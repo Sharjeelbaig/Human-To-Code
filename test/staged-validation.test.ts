@@ -242,6 +242,45 @@ test("a repair that stays broken exhausts its bounded budget and the group fails
   }
 });
 
+test("compiler mode can repair the responsible marker in a multi-marker inline file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-inline-repair-"));
+  try {
+    await writeFile(join(root, "index.ts"), [
+      "function add(",
+      "  // @human add number parameters x and y",
+      "): number {",
+      "  // @human add the sum logic",
+      "  return 0;",
+      "}",
+      "",
+      "// @human log add called with 1 and 2",
+      "",
+    ].join("\n"));
+    const units = (await discoverDirectUnits(root, "typescript")).units;
+    const generated: GeneratedConversionUnit[] = [
+      { unit: units[0]!, code: "x: number, y: number" },
+      { unit: units[1]!, code: 'return "wrong";' },
+      { unit: units[2]!, code: "console.log(add(1, 2));" },
+    ];
+    const requests: StagedRepairRequest[] = [];
+    const outcome = await validateCandidateProject(root, generated, {
+      repairInlineUnits: true,
+      repair: async (request) => {
+        requests.push(request);
+        return "return x + y;";
+      },
+    });
+
+    assert.equal(outcome.repairRequests, 1);
+    assert.equal(requests[0]?.unit.insertionContext, "function-body");
+    assert.match(requests[0]?.hints.join(" ") ?? "", /statements inside an existing function body/u);
+    assert.ok(outcome.results.every((item) => item.error === undefined));
+    assert.equal(outcome.results[1]?.code, "return x + y;");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("incorrect named imports across generated modules are detected", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-staged-named-import-"));
   try {
