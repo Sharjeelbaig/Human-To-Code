@@ -49,6 +49,44 @@ test("direct.planning merges field-by-field instead of replacing the section", (
   assert.equal(config.direct.reconcileIntegrations, true);
 });
 
+test("compiler config defaults, merges, and validates bounded vocabulary", () => {
+  const defaults = validateConfig(V1).compiler;
+  assert.deepEqual(defaults, {
+    enabled: false,
+    onUnderspecified: "error",
+    semanticDiagnostics: false,
+    lockfile: true,
+    replayFromLock: true,
+    vocabulary: {},
+  });
+  const merged = validateConfig({
+    ...V1,
+    compiler: {
+      enabled: true,
+      vocabulary: { "brand blue": "#0A84FF" },
+    },
+  });
+  assert.equal(merged.compiler.enabled, true);
+  assert.equal(merged.compiler.replayFromLock, true);
+  assert.deepEqual(merged.compiler.vocabulary, {
+    "brand blue": "#0A84FF",
+  });
+  assert.throws(
+    () => validateConfig({
+      ...V1,
+      compiler: { onUnderspecified: "guess" },
+    }),
+    /onUnderspecified/u,
+  );
+  assert.throws(
+    () => validateConfig({
+      ...V1,
+      compiler: { vocabulary: { "api token": "opaque" } },
+    }),
+    /compiler\.vocabulary\.api token/u,
+  );
+});
+
 test("direct.planning rejects unknown keys and out-of-range values", () => {
   assert.throws(
     () => validateConfig({ ...V1, direct: { planning: { enabled: true, unknown: 1 } } }),

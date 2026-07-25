@@ -156,7 +156,7 @@ function presentNames(targetPath: string, code: string): Set<string> {
 }
 
 function mentionsName(code: string, name: string): boolean {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\/-]/gu, "\\$&");
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   return new RegExp(`(?:^|[^A-Za-z0-9_$-])${escaped}(?:[^A-Za-z0-9_$-]|$)`, "u").test(code);
 }
 

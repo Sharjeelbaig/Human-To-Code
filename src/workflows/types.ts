@@ -132,6 +132,8 @@ export interface GenerateUnitsOptions {
   projectMemory?: ProjectMemoryProvider;
   /** Total FileMemory + ProjectMemory character allowance for one request. */
   contextCharBudget?: number;
+  /** Omit conversational history so each accepted instruction is an isolated compilation unit. */
+  sessionMemory?: boolean;
   /**
    * Per-unit todo planning. Returning undefined, or throwing, leaves the unit on
    * the single-pass path: planning enriches context and must never fail a unit.
@@ -172,6 +174,8 @@ export interface GenerateOptions {
   apiKey?: string;
   /** Whether this request replaces one inline @human marker. */
   inline?: boolean;
+  /** Use the isolated compiler prompt path without agent skill injection. */
+  compilerMode?: boolean;
   /** Earlier `@human` messages in this run, ordered and bounded. */
   sessionMemory?: string;
   /** Grammar position receiving an inline replacement. */

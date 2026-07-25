@@ -41,6 +41,7 @@ function wholeFileTarget(absoluteRoot: string, unit: ConversionUnit): string {
 export async function applyWholeFileBatch(
   root: string,
   applications: readonly WholeFileApplication[],
+  options: { overwrite?: ReadonlySet<string> } = {},
 ): Promise<string[]> {
   if (applications.length === 0) return [];
   const absoluteRoot = resolve(root);
@@ -48,31 +49,47 @@ export async function applyWholeFileBatch(
   if (new Set(targets).size !== targets.length) {
     throw new DirectApplicationError("Whole-file batch contains duplicate output targets.");
   }
-  const created: Array<{ target: string; expected: string }> = [];
+  const applied: Array<{
+    target: string;
+    expected: string;
+    previous?: string;
+  }> = [];
   try {
     for (let index = 0; index < applications.length; index += 1) {
       const application = applications[index]!;
       const target = targets[index]!;
       const expected = application.code.endsWith("\n") ? application.code : `${application.code}\n`;
-      try {
-        await writeFile(target, expected, { flag: "wx" });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-          throw new DirectApplicationError(`Refusing to overwrite existing generated target: ${application.unit.outputPath}`);
+      if (options.overwrite?.has(application.unit.outputPath!)) {
+        const previous = await readFile(target, "utf8").catch(
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return undefined;
+            throw error;
+          },
+        );
+        await writeFile(target, expected, { flag: previous === undefined ? "wx" : "w" });
+        applied.push({ target, expected, ...(previous !== undefined ? { previous } : {}) });
+      } else {
+        try {
+          await writeFile(target, expected, { flag: "wx" });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+            throw new DirectApplicationError(`Refusing to overwrite existing generated target: ${application.unit.outputPath}`);
+          }
+          throw error;
         }
-        throw error;
+        applied.push({ target, expected });
       }
-      created.push({ target, expected });
     }
   } catch (error) {
     const rollbackFailures: string[] = [];
-    for (const { target, expected } of [...created].reverse()) {
+    for (const { target, expected, previous } of [...applied].reverse()) {
       try {
         if (await readFile(target, "utf8") !== expected) {
           rollbackFailures.push(`${target} changed after creation and was left intact`);
           continue;
         }
-        await unlink(target);
+        if (previous === undefined) await unlink(target);
+        else await writeFile(target, previous);
       } catch (rollbackError) {
         rollbackFailures.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
       }

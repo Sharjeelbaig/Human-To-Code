@@ -103,6 +103,10 @@ export async function discoverDirectUnits(
   root: string,
   language: string | readonly string[],
   humanFileExtensions: readonly HumanFileExtensionConfig[] = [],
+  options: {
+    /** Existing targets owned by a compiler lock may be rebuilt or replayed. */
+    lockedTargets?: ReadonlySet<string>;
+  } = {},
 ): Promise<DirectDiscoveryResult> {
   const absoluteRoot = resolve(root);
   const languages = (typeof language === "string" ? [language] : [...language])
@@ -199,12 +203,14 @@ export async function discoverDirectUnits(
           : `${stem}.${languageProfile(unitLanguage).ext}`;
       try {
         await stat(join(absoluteRoot, ...outputPath.split("/")));
-        notices.push({
-          code: "TARGET_EXISTS",
-          sourcePath: rel,
-          message: `${rel} was skipped because ${outputPath} already exists; existing files are never overwritten.`,
-        });
-        continue;
+        if (!options.lockedTargets?.has(outputPath)) {
+          notices.push({
+            code: "TARGET_EXISTS",
+            sourcePath: rel,
+            message: `${rel} was skipped because ${outputPath} already exists; existing files are never overwritten.`,
+          });
+          continue;
+        }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }

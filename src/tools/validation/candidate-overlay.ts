@@ -59,6 +59,7 @@ export function unitParticipatesInProjectValidation(item: GeneratedConversionUni
 export async function buildCandidateOverlay(
   root: string,
   generated: readonly GeneratedConversionUnit[],
+  options: { allowExistingTargets?: ReadonlySet<string> } = {},
 ): Promise<CandidateOverlay> {
   const absoluteRoot = resolve(root);
   const files = new Map<string, CandidateOverlayFile>();
@@ -79,7 +80,7 @@ export async function buildCandidateOverlay(
     } catch {
       exists = false;
     }
-    if (exists) {
+    if (exists && !options.allowExistingTargets?.has(unit.outputPath!)) {
       excluded.push({ unit, reason: `existing target ${unit.outputPath} is never overwritten` });
       continue;
     }
@@ -92,7 +93,7 @@ export async function buildCandidateOverlay(
       path: unit.outputPath!,
       absolutePath,
       content: item.code.endsWith("\n") ? item.code : `${item.code}\n`,
-      created: true,
+      created: !exists,
       units: [unit],
     });
   }

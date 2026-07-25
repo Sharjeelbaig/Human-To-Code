@@ -8,9 +8,18 @@
  * model, validation, and file-operation modules without hiding the sequence.)
  */
 
-import { realpathSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { constants as fsConstants, realpathSync } from "node:fs";
+import {
+  chmod,
+  lstat,
+  open,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
@@ -19,6 +28,7 @@ import {
   defaultConfigJson,
   defaultModelFor,
   loadConfig,
+  migrateLegacyConfig,
   validateConfig,
   type ConfigV1,
 } from "./config/config.ts";
@@ -48,12 +58,26 @@ import {
   generateIntegrationAudit,
   generateIntegrationRepairCode,
   generateRepairCode,
+  generateSpecDiagnostics,
   generateUnitTodos,
+  hashCanonical,
+  sha256Text,
+  compileKey,
+  compileUnitId,
+  explainUnit,
+  readCompilerArtifact,
+  readCompilerLockfile,
+  resolvedFacetRecord,
+  runCompileGate,
+  writeCompilerArtifact,
+  writeCompilerLockfile,
+  PROMPT_VERSION,
   parseProjectBlueprint,
   parseUnitTodoList,
   reconcileGeneratedIntegrations,
   REFERENCE_EXTENSIONS,
   renderBlueprintFor,
+  renderCompileErrors,
   renderReceipt,
   validateCandidateProject,
   validateGeneratedUnit,
@@ -69,6 +93,9 @@ import {
   type StagedValidationProgress,
   type UnitPlanningOutcome,
   type UnitGenerationContext,
+  type CompilerLockfileV1,
+  type SpecDiagnostic,
+  COMPILER_LOCK_FILENAME,
 } from "./index.ts";
 import type { ProviderName } from "./core/types.ts";
 
@@ -81,6 +108,7 @@ const HELP = `human-to-code - turn plain-language requests into code
 Usage:
   human-to-code [root] [-y]                    Convert .human files and @human markers to code
   human-to-code --init [root]
+  human-to-code migrate-config [root]
 
 Provider options:
   --provider <name>              openai | ollama (other configured names are unsupported)
@@ -97,6 +125,9 @@ Other options:
   --json                         Machine-readable output
   -y, --yes                      Skip the confirmation prompt and write files
   --dry-run                      Analyze and preview only; perform no generation
+  --compiler                     Enable deterministic compiler mode for this command
+  --no-compiler                  Disable compiler mode for this command
+  --explain-spec                 Explain satisfied and unresolved facets, then exit
   -h, --help                     Show this help
 
 Exit codes:
@@ -134,6 +165,9 @@ interface CliOptions {
   yes: boolean;
   simple: boolean;
   init: boolean;
+  compiler: boolean;
+  noCompiler: boolean;
+  explainSpec: boolean;
   help: boolean;
   root?: string;
   file?: string;
@@ -163,6 +197,9 @@ function parse(argv: string[]): CliOptions {
       yes: { type: "boolean", short: "y", default: false },
       simple: { type: "boolean", default: false },
       init: { type: "boolean", default: false },
+      compiler: { type: "boolean", default: false },
+      "no-compiler": { type: "boolean", default: false },
+      "explain-spec": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       root: { type: "string" },
       file: { type: "string" },
@@ -188,6 +225,9 @@ function parse(argv: string[]): CliOptions {
     yes: values.yes === true,
     simple: values.simple === true,
     init: values.init === true,
+    compiler: values.compiler === true,
+    noCompiler: values["no-compiler"] === true,
+    explainSpec: values["explain-spec"] === true,
     help: values.help === true,
     ...(typeof values.root === "string" ? { root: values.root } : {}),
     ...(typeof values.file === "string" ? { file: values.file } : {}),
@@ -230,10 +270,40 @@ function projectRoot(cli: CliOptions, fallback = "."): string {
   return resolve(cli.root ?? fallback);
 }
 
-async function initConfig(root: string): Promise<number> {
-  const target = resolve(root, CONFIG_FILENAME);
+async function confirmDefaultYes(promptText: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    await writeFile(target, defaultConfigJson(), {
+    const answer = (await rl.question(promptText)).trim().toLowerCase();
+    return answer === "" || answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+function compilerChoice(cli: CliOptions): boolean | undefined {
+  if (cli.compiler && cli.noCompiler) {
+    throw new ConfigError("Use only one of --compiler or --no-compiler.");
+  }
+  if (cli.compiler) return true;
+  if (cli.noCompiler) return false;
+  return undefined;
+}
+
+async function chooseCompilerMode(cli: CliOptions): Promise<boolean> {
+  return compilerChoice(cli)
+    ?? await confirmDefaultYes(
+      "Enable compiler mode for deterministic, reproducible output? [Y/n] ",
+    );
+}
+
+async function initConfig(root: string, cli: CliOptions): Promise<number> {
+  const target = resolve(root, CONFIG_FILENAME);
+  const config = JSON.parse(defaultConfigJson()) as ConfigV1;
+  config.compiler.enabled = await chooseCompilerMode(cli);
+  try {
+    await writeFile(target, `${JSON.stringify(config, null, 2)}\n`, {
       encoding: "utf8",
       mode: 0o600,
       flag: "wx",
@@ -247,6 +317,80 @@ async function initConfig(root: string): Promise<number> {
   }
   console.log(
     `Wrote ${target}. Review provider, model, privacy consent, sandbox, and budgets before remote generation.`,
+  );
+  return 0;
+}
+
+async function writeConfigAtomic(path: string, config: ConfigV1): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+    await chmod(temporary, 0o600);
+    await rename(temporary, path);
+    await chmod(path, 0o600);
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+}
+
+async function migrateConfigCommand(
+  root: string,
+  cli: CliOptions,
+): Promise<number> {
+  const path = resolve(root, CONFIG_FILENAME);
+  const metadata = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      throw new ConfigError(
+        `${CONFIG_FILENAME} does not exist; run human-to-code --init first.`,
+      );
+    }
+    throw error;
+  });
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new ConfigError(`${CONFIG_FILENAME} must be a regular, non-symlink file.`);
+  }
+  const handle = await open(
+    path,
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+  );
+  let raw: unknown;
+  try {
+    const opened = await handle.stat();
+    if (opened.dev !== metadata.dev || opened.ino !== metadata.ino) {
+      throw new ConfigError(`${CONFIG_FILENAME} changed while it was being opened.`);
+    }
+    raw = JSON.parse(await handle.readFile("utf8"));
+  } catch (error) {
+    if (error instanceof ConfigError) throw error;
+    throw new ConfigError(
+      `${CONFIG_FILENAME} could not be migrated: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  } finally {
+    await handle.close();
+  }
+  const migrated = migrateLegacyConfig(raw);
+  migrated.compiler.enabled = await chooseCompilerMode(cli);
+  await writeConfigAtomic(path, validateConfig(migrated));
+  const previousKeys =
+    typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? new Set(Object.keys(raw))
+      : new Set<string>();
+  const added = Object.keys(migrated).filter((key) => !previousKeys.has(key));
+  output(
+    cli.json
+      ? {
+          status: "MIGRATED",
+          path,
+          added,
+        }
+      : `Migrated ${path} to schema version 1.${added.length > 0 ? `\n${added.map((key) => `  + ${key}`).join("\n")}` : ""}`,
+    cli.json,
   );
   return 0;
 }
@@ -291,6 +435,8 @@ function overrideConfig(config: ConfigV1, cli: CliOptions): ConfigV1 {
     };
   }
   if (cli.trustCustomEndpoint) raw.provider.trustCustomEndpoint = true;
+  const compiler = compilerChoice(cli);
+  if (compiler !== undefined) raw.compiler.enabled = compiler;
   return validateConfig(raw);
 }
 
@@ -411,6 +557,23 @@ async function buildCommand(
   const root = resolve(cli.root ?? rootInput ?? ".");
   const { config } = await loadConfig(root);
   const effective = overrideConfig(config, cli);
+  // Compiler mode is a source-to-source compilation path, not the ordinary
+  // agent workflow. Model-authored blueprints, todos, refinements, reference
+  // audits, and reconciliation can introduce new decisions after the
+  // deterministic front end has accepted the input. Keep local file context
+  // and deterministic validation, but remove agent-authored planning passes;
+  // the ordinary bounded validation retry remains fail-closed.
+  const direct = effective.compiler.enabled
+    ? {
+        ...effective.direct,
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: {
+          ...effective.direct.planning,
+          enabled: false,
+        },
+      }
+    : effective.direct;
   const language = effective.language;
   const languages = effective.languages;
   const providerName = effective.provider.name;
@@ -421,15 +584,156 @@ async function buildCommand(
     );
   }
   const model = effective.provider.model;
+  const compilerLock =
+    effective.compiler.enabled && effective.compiler.lockfile
+      ? await readCompilerLockfile(root)
+      : undefined;
+  const lockedTargets = new Set(
+    Object.values(compilerLock?.units ?? {}).map((entry) => entry.targetPath),
+  );
   const discovery = await discoverDirectUnits(
     root,
     languages,
     effective.humanFileExtensions,
+    effective.compiler.enabled && effective.compiler.lockfile
+      ? { lockedTargets }
+      : {},
   );
-  const units = discovery.units;
-  const conditionalRequests = effective.direct.reconcileIntegrations
+  const scannedPathSet = new Set(discovery.scannedPaths);
+  const units = discovery.units.filter((unit) => {
+    if (
+      unit.kind !== "file"
+      || !scannedPathSet.has(unit.outputPath!)
+    ) {
+      return true;
+    }
+    const entry = compilerLock?.units[compileUnitId(unit)];
+    const owned =
+      entry !== undefined
+      && entry.targetPath === unit.outputPath;
+    if (!owned) {
+      discovery.notices.push({
+        code: "TARGET_EXISTS",
+        sourcePath: unit.sourcePath,
+        message: `${unit.sourcePath} was skipped because ${unit.outputPath} is not owned by its compiler lock entry.`,
+      });
+    }
+    return owned;
+  });
+  if (cli.explainSpec) {
+    const explanations = units.flatMap((unit) =>
+      explainUnit(unit, { vocabulary: effective.compiler.vocabulary }),
+    );
+    output(
+      cli.json
+        ? { status: "EXPLAINED", explanations }
+        : explanations.length === 0
+          ? "No compiler-mode requirement rules matched."
+          : explanations.map((explanation) => [
+              `${explanation.sourcePath}:${explanation.line ?? 1} (${explanation.rule})`,
+              ...explanation.facets.map((facet) =>
+                `  ${facet.satisfied ? "yes" : "no "} ${facet.id}: ${facet.question}`,
+              ),
+            ].join("\n")).join("\n\n"),
+      cli.json,
+    );
+    return 0;
+  }
+
+  const baseUrl = effective.provider.baseUrl;
+  const apiKey =
+    providerName === "openai"
+      ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
+      : undefined;
+  const localProvider =
+    providerName === "ollama"
+    && (
+      baseUrl === undefined
+      || isLoopbackProviderHost(new URL(baseUrl).hostname)
+    );
+  if (
+    effective.compiler.enabled
+    && effective.compiler.semanticDiagnostics
+    && !localProvider
+    && !effective.privacy.remoteProviderConsent
+  ) {
+    throw new ContextSecurityError(
+      "INVALID_CANDIDATE",
+      "Semantic specification diagnostics would send instructions to a remote provider. Set privacy.remoteProviderConsent to true first.",
+    );
+  }
+  const compileGate = effective.compiler.enabled
+    ? await runCompileGate(units, effective.compiler, {
+        diagnose: effective.compiler.semanticDiagnostics
+          ? async (batch): Promise<SpecDiagnostic[]> => {
+              const semantic = await generateSpecDiagnostics(
+                batch.map((unit, id) => ({
+                  id,
+                  sourcePath: unit.sourcePath,
+                  targetPath:
+                    unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
+                  instruction: unit.prompt,
+                })),
+                {
+                  provider: providerName,
+                  model,
+                  language,
+                  ...(baseUrl ? { baseUrl } : {}),
+                  ...(apiKey ? { apiKey } : {}),
+                },
+              );
+              return semantic.map((diagnostic) => {
+                const unit = batch[diagnostic.id]!;
+                return {
+                  code: "E-UNDERSPECIFIED",
+                  rule: diagnostic.rule,
+                  severity: "error",
+                  sourcePath: unit.sourcePath,
+                  ...(unit.line !== undefined ? { line: unit.line } : {}),
+                  targetPath:
+                    unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
+                  message: diagnostic.message,
+                  facets: diagnostic.facets,
+                };
+              });
+            }
+          : undefined,
+      })
+    : undefined;
+  if (compileGate?.blocked) {
+    output(
+      cli.json
+        ? {
+            status: "NEEDS_SPECIFICATION",
+            compiler: {
+              enabled: true,
+              onUnderspecified: effective.compiler.onUnderspecified,
+            },
+            diagnostics: compileGate.diagnostics.map((diagnostic) => ({
+              code: diagnostic.code,
+              rule: diagnostic.rule,
+              source: diagnostic.sourcePath,
+              ...(diagnostic.line !== undefined
+                ? { line: diagnostic.line }
+                : {}),
+              target: diagnostic.targetPath,
+              message: diagnostic.message,
+              facets: diagnostic.facets,
+            })),
+            warnings: compileGate.warnings,
+          }
+        : renderCompileErrors(compileGate.diagnostics),
+      cli.json,
+    );
+    return 3;
+  }
+  const conditionalRequests = direct.reconcileIntegrations
     ? conditionalRequestAllowance(units, languages)
     : undefined;
+  const basePlannedRequests = plannedRequestCounts(units, direct.planning);
+  const disclosedPlannedRequests = effective.compiler.enabled
+    ? { ...basePlannedRequests, classification: 0 }
+    : basePlannedRequests;
 
   if (cli.json) {
     const plan = {
@@ -447,7 +751,7 @@ async function buildCommand(
       // `requests` keeps its established meaning — the planned minimum — so an
       // existing consumer is not silently redefined. The breakdown is additive.
       requests: units.length,
-      plannedRequests: plannedRequestCounts(units, effective.direct.planning),
+      plannedRequests: disclosedPlannedRequests,
       ...(conditionalRequests !== undefined
         ? {
             additionalRequests: {
@@ -465,6 +769,16 @@ async function buildCommand(
         language: unit.language ?? language,
       })),
       notices: discovery.notices,
+      ...(effective.compiler.enabled
+        ? {
+            compiler: {
+              enabled: true,
+              onUnderspecified: effective.compiler.onUnderspecified,
+              semanticRequests: compileGate?.semanticRequests ?? 0,
+            },
+            diagnostics: compileGate?.diagnostics ?? [],
+          }
+        : {}),
     };
     if (!cli.yes || units.length === 0) {
       output(plan, true);
@@ -473,13 +787,18 @@ async function buildCommand(
   } else {
     output(
       renderReceipt(units, providerName, model, languages, {
-        reconcileIntegrations: effective.direct.reconcileIntegrations,
-        planning: effective.direct.planning,
+        reconcileIntegrations: direct.reconcileIntegrations,
+        planning: direct.planning,
+        compiler: effective.compiler,
       }),
       false,
     );
     for (const notice of discovery.notices)
       output(`  ! ${notice.message}`, false);
+    for (const diagnostic of compileGate?.diagnostics ?? [])
+      output(`  ! ${diagnostic.sourcePath}:${diagnostic.line ?? 1}: ${diagnostic.message}`, false);
+    for (const warning of compileGate?.warnings ?? [])
+      output(`  ! ${warning}`, false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
@@ -496,29 +815,163 @@ async function buildCommand(
     return 3;
   }
 
-  const baseUrl = effective.provider.baseUrl;
-  const apiKey =
-    providerName === "openai"
-      ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
-      : undefined;
-  const localProvider =
-    providerName === "ollama" &&
-    (baseUrl === undefined ||
-      isLoopbackProviderHost(new URL(baseUrl).hostname));
+  const contextCharBudget = effective.privacy.maxContextTokens * 4;
+  const compilerTargetPaths = new Set(
+    units.map((unit) =>
+      unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
+    ),
+  );
+  const projectMemory = await buildProjectMemory(root, units, {
+    scannedPaths: effective.compiler.enabled
+      ? discovery.scannedPaths.filter(
+          (path) =>
+            !compilerTargetPaths.has(path)
+            && path !== COMPILER_LOCK_FILENAME,
+        )
+      : discovery.scannedPaths,
+    ignoredNames: effective.filesToIgnore,
+    excludedPaths: effective.privacy.excludedPaths,
+    maxFileBytes: effective.privacy.maxFileBytes,
+  });
+
+  const compileKeys = new Map<ConversionUnit, string>();
+  const replayedUnits = new Map<
+    ConversionUnit,
+    { code: string; target: string; needsWrite: boolean }
+  >();
+  if (effective.compiler.enabled) {
+    for (const unit of units) {
+      const target =
+        unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+      const localSource = unit.kind === "inline"
+        ? await readFile(unit.absoluteSource, "utf8")
+        : "";
+      const renderedContext = [
+        localSource,
+        unit.surroundingSource ?? "",
+        JSON.stringify({
+          isolatedCompilation: true,
+        }),
+      ].join("\n");
+      const key = compileKey({
+        instruction: unit.prompt,
+        targetPath: target,
+        language: unit.language ?? language,
+        kind: unit.kind,
+        resolvedFacets: resolvedFacetRecord(unit, {
+          vocabulary: effective.compiler.vocabulary,
+        }),
+        promptVersion: PROMPT_VERSION,
+        provider: providerName,
+        model,
+        skillsDigest: hashCanonical([]),
+        renderedContextDigest: sha256Text(renderedContext),
+      });
+      compileKeys.set(unit, key);
+      if (
+        !effective.compiler.lockfile
+        || !effective.compiler.replayFromLock
+      ) {
+        continue;
+      }
+      const entry = compilerLock?.units[compileUnitId(unit)];
+      if (
+        entry === undefined
+        || entry.compileKey !== key
+        || entry.targetPath !== target
+      ) {
+        continue;
+      }
+      const disk = await readFile(resolve(root, target), "utf8")
+        .catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return undefined;
+          throw error;
+        });
+      if (
+        unit.kind === "file"
+        && disk !== undefined
+        && sha256Text(disk) === entry.outputHash
+      ) {
+        replayedUnits.set(unit, {
+          code: disk,
+          target,
+          needsWrite: false,
+        });
+        continue;
+      }
+      const artifact = await readCompilerArtifact(key);
+      if (
+        artifact === undefined
+        || sha256Text(artifact.toString("utf8")) !== entry.outputHash
+      ) {
+        continue;
+      }
+      replayedUnits.set(unit, {
+        code: artifact.toString("utf8"),
+        target,
+        needsWrite: true,
+      });
+    }
+  }
+  const generationUnits = units.filter((unit) => !replayedUnits.has(unit));
+  if (generationUnits.length === 0 && replayedUnits.size > 0) {
+    const wholeFileApplications = [...replayedUnits]
+      .filter(([unit, replay]) =>
+        unit.kind === "file" && replay.needsWrite
+      )
+      .map(([unit, replay]) => ({ unit, code: replay.code }));
+    const written = wholeFileApplications.length === 0
+      ? []
+      : await applyWholeFileBatch(root, wholeFileApplications, {
+          overwrite: lockedTargets,
+        });
+    const inlineByPath = new Map<
+      string,
+      Array<{ unit: ConversionUnit; code: string }>
+    >();
+    for (const [unit, replay] of replayedUnits) {
+      if (unit.kind !== "inline" || !replay.needsWrite) continue;
+      inlineByPath.set(unit.sourcePath, [
+        ...(inlineByPath.get(unit.sourcePath) ?? []),
+        { unit, code: replay.code },
+      ]);
+    }
+    for (const applications of inlineByPath.values()) {
+      written.push(await applyInlineFileBatch(applications));
+    }
+    const replayed = [
+      ...new Set([...replayedUnits.values()].map(({ target }) => target)),
+    ];
+    output(
+      cli.json
+        ? {
+            status: "DONE",
+            engine: "compiler",
+            written,
+            skipped: [],
+            replayed,
+            compiler: {
+              enabled: true,
+              semanticRequests: compileGate?.semanticRequests ?? 0,
+            },
+            blueprintRequests: 0,
+            classificationRequests: 0,
+            todoRequests: 0,
+            codingRequests: 0,
+            repairRequests: 0,
+          }
+        : `Up to date. ${replayed.length} target(s) replayed from the lockfile, 0 generation requests.`,
+      cli.json,
+    );
+    return 0;
+  }
+
   if (!localProvider && !effective.privacy.remoteProviderConsent) {
     throw new ContextSecurityError(
       "INVALID_CANDIDATE",
       "Direct conversion would send change instructions and possibly source context to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
     );
   }
-
-  const contextCharBudget = effective.privacy.maxContextTokens * 4;
-  const projectMemory = await buildProjectMemory(root, units, {
-    scannedPaths: discovery.scannedPaths,
-    ignoredNames: effective.filesToIgnore,
-    excludedPaths: effective.privacy.excludedPaths,
-    maxFileBytes: effective.privacy.maxFileBytes,
-  });
 
   // Default engine: deterministic per-target generation, optionally preceded by
   // a shared planning pass. One target failing never aborts the others.
@@ -554,9 +1007,9 @@ async function buildCommand(
     : undefined;
 
   if (interactive)
-    output(`\nConverting ${units.length} item(s) with ${model}…`, false);
+    output(`\nConverting ${generationUnits.length} item(s) with ${model}…`, false);
 
-  const planning = effective.direct.planning;
+  const planning = direct.planning;
   const requestOptions = {
     provider: providerName,
     model,
@@ -658,7 +1111,7 @@ async function buildCommand(
   let adaptivePlanNeeded: Set<ConversionUnit> | undefined;
   let planTriageRequests = 0;
   if (planningEnabledFor !== undefined && planning.adaptive) {
-    const eligible = units.filter(todoEnabled);
+    const eligible = generationUnits.filter(todoEnabled);
     if (eligible.length > 0) {
       if (interactive)
         spinner.label(`deciding which of ${eligible.length} task(s) need planning`);
@@ -689,12 +1142,26 @@ async function buildCommand(
   let generated: GeneratedConversionUnit[];
   try {
     generated = await generateConversionUnits(
-      units,
+      generationUnits,
       (unit, context) => {
+        const modelContext: UnitGenerationContext = effective.compiler.enabled
+          ? {
+              inline: context.inline,
+              ...(context.fileMemory
+                ? { fileMemory: context.fileMemory }
+                : {}),
+              ...(context.rejectedDraft
+                ? { rejectedDraft: context.rejectedDraft }
+                : {}),
+              ...(context.validationFailure
+                ? { validationFailure: context.validationFailure }
+                : {}),
+            }
+          : context;
         if (
-          (context.fileMemory?.length ?? 0) +
-            (context.projectMemory?.length ?? 0) +
-            (context.sessionMemory?.length ?? 0) >
+          (modelContext.fileMemory?.length ?? 0) +
+            (modelContext.projectMemory?.length ?? 0) +
+            (modelContext.sessionMemory?.length ?? 0) >
           contextCharBudget
         ) {
           throw new ContextSecurityError(
@@ -707,9 +1174,7 @@ async function buildCommand(
           language: unit.language ?? language,
           ...requestOptions,
           targetPath: unit.kind === "file" ? unit.outputPath! : unit.sourcePath,
-          ...(context.sessionMemory
-            ? { sessionMemory: context.sessionMemory }
-            : {}),
+          ...(effective.compiler.enabled ? { compilerMode: true } : {}),
           ...(!unit.ownsWholeFile && unit.insertionContext
             ? { insertionContext: unit.insertionContext }
             : {}),
@@ -719,29 +1184,40 @@ async function buildCommand(
           ...(!unit.ownsWholeFile && unit.surroundingSource
             ? { surroundingSource: unit.surroundingSource }
             : {}),
-          ...context,
+          ...modelContext,
           inline: unit.kind === "inline" && !unit.ownsWholeFile,
         }).then((code) => normalizeGeneratedUnitCode(unit, code));
       },
       {
         retries: 1,
         validate: validateGeneratedUnit,
-        classify: (unit, context) =>
-          classifyHumanTurn(
-            {
-              targetPath: unit.sourcePath,
-              instruction: unit.prompt,
-              ...(context.sessionMemory ? { sessionMemory: context.sessionMemory } : {}),
-              ...(unit.surroundingSource ? { surroundingSource: unit.surroundingSource } : {}),
-            },
-            {
-              ...requestOptions,
-              language: unit.language ?? language,
-              targetPath: unit.sourcePath,
-            },
-          ),
-        shouldClassify: (unit) => unit.kind === "inline",
-        projectMemory,
+        ...(effective.compiler.enabled
+          ? { sessionMemory: false }
+          : {
+              classify: (
+                unit: ConversionUnit,
+                context: UnitGenerationContext,
+              ) =>
+                classifyHumanTurn(
+                  {
+                    targetPath: unit.sourcePath,
+                    instruction: unit.prompt,
+                    ...(context.sessionMemory
+                      ? { sessionMemory: context.sessionMemory }
+                      : {}),
+                    ...(unit.surroundingSource
+                      ? { surroundingSource: unit.surroundingSource }
+                      : {}),
+                  },
+                  {
+                    ...requestOptions,
+                    language: unit.language ?? language,
+                    targetPath: unit.sourcePath,
+                  },
+                ),
+              shouldClassify: (unit: ConversionUnit) => unit.kind === "inline",
+              projectMemory,
+            }),
         contextCharBudget,
         maxCodingPasses: planning.enabled ? planning.maxCodingPassesPerUnit : 1,
         ...(planningEnabledFor !== undefined
@@ -765,7 +1241,13 @@ async function buildCommand(
     return 5;
   }
 
-  generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+  for (const [unit, replay] of replayedUnits) {
+    generated.push({ unit, code: replay.code });
+    if (!effective.compiler.enabled)
+      projectMemory.remember(unit, replay.code);
+  }
+  if (!effective.compiler.enabled)
+    generated = withholdIncompleteRelatedTargets(generated, projectMemory);
 
   // Deterministic cross-file reference checking over complete candidate
   // files. One bounded repair is allowed for findings that prove generated
@@ -804,7 +1286,7 @@ async function buildCommand(
 
   let referenceFindings: ReferenceFinding[] = [];
   let referenceRepairRequests = 0;
-  if (effective.direct.crossFileChecks) {
+  if (direct.crossFileChecks) {
     if (interactive) spinner.label("cross-checking generated references");
     referenceFindings = await crossCheckGeneratedReferences();
     const repairableByPath = new Map<string, ReferenceFinding[]>();
@@ -914,7 +1396,8 @@ async function buildCommand(
         item.code = "";
       }
     }
-    generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+    if (!effective.compiler.enabled)
+      generated = withholdIncompleteRelatedTargets(generated, projectMemory);
     if (interactive) {
       for (const finding of referenceFindings) {
         spinner.note(
@@ -927,7 +1410,7 @@ async function buildCommand(
   // bounded audit -> target repair -> verification cycle over generated groups.
   let integrationAuditRequests = 0;
   let integrationRepairRequests = 0;
-  if (effective.direct.reconcileIntegrations) {
+  if (direct.reconcileIntegrations) {
     try {
       const onIntegrationProgress = interactive
         ? (event: IntegrationProgress): void => {
@@ -1033,6 +1516,9 @@ async function buildCommand(
     const staged = await validateCandidateProject(root, generated, {
       maxRepairAttemptsPerUnit: 1,
       contextCharBudget: effective.privacy.maxContextTokens * 4,
+      ...(effective.compiler.enabled
+        ? { allowExistingTargets: lockedTargets }
+        : {}),
       repair: (request) =>
         generateRepairCode(
           {
@@ -1073,7 +1559,8 @@ async function buildCommand(
   }
   spinner.stop();
 
-  generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+  if (!effective.compiler.enabled)
+    generated = withholdIncompleteRelatedTargets(generated, projectMemory);
 
   // Apply bottom-to-top so replacing a later marker cannot invalidate an
   // earlier marker's range.
@@ -1086,7 +1573,28 @@ async function buildCommand(
   });
   const written: string[] = [];
   const skipped: Array<{ source: string; reason: string }> = [];
-  const wholeFiles = ordered.filter((item) => item.unit.kind === "file");
+  const replayedUnitSet = new Set(replayedUnits.keys());
+  const replayApplications = [...replayedUnits]
+    .filter(([unit, replay]) =>
+      unit.kind === "file" && replay.needsWrite
+    )
+    .map(([unit, replay]) => ({ unit, code: replay.code }));
+  if (replayApplications.length > 0) {
+    try {
+      written.push(...await applyWholeFileBatch(root, replayApplications, {
+        overwrite: lockedTargets,
+      }));
+    } catch (applyError) {
+      const reason =
+        applyError instanceof Error ? applyError.message : String(applyError);
+      for (const { unit } of replayApplications) {
+        skipped.push({ source: unit.sourcePath, reason });
+      }
+    }
+  }
+  const wholeFiles = ordered.filter(
+    (item) => item.unit.kind === "file" && !replayedUnitSet.has(item.unit),
+  );
   const incompleteWholeFiles = wholeFiles.filter(
     (item) => item.contextOnly !== true && (item.error !== undefined || item.code.trim().length === 0),
   );
@@ -1108,7 +1616,9 @@ async function buildCommand(
   );
   if (applicableWholeFiles.length > 0) {
     try {
-      const paths = await applyWholeFileBatch(root, applicableWholeFiles);
+      const paths = await applyWholeFileBatch(root, applicableWholeFiles, {
+        overwrite: lockedTargets,
+      });
       written.push(...paths);
       if (!cli.json) {
         for (const item of applicableWholeFiles)
@@ -1135,7 +1645,9 @@ async function buildCommand(
       });
   }
 
-  const inline = ordered.filter((item) => item.unit.kind === "inline");
+  const inline = ordered.filter(
+    (item) => item.unit.kind === "inline",
+  );
   for (const item of inline) {
     if (item.contextOnly === true) continue;
     if (item.error !== undefined)
@@ -1172,6 +1684,55 @@ async function buildCommand(
       }
     }
   }
+  const compilerWarnings: string[] = [];
+  if (effective.compiler.enabled && effective.compiler.lockfile) {
+    const nextLock: CompilerLockfileV1 = {
+      schemaVersion: 1,
+      units: { ...(compilerLock?.units ?? {}) },
+    };
+    for (const unit of generationUnits) {
+      const target =
+        unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+      if (!written.includes(target)) continue;
+      const key = compileKeys.get(unit);
+      if (key === undefined) continue;
+      const generatedItem = generated.find((item) => item.unit === unit);
+      if (
+        generatedItem === undefined
+        || generatedItem.contextOnly === true
+        || generatedItem.error !== undefined
+        || generatedItem.code.trim().length === 0
+      ) {
+        continue;
+      }
+      try {
+        const content = unit.kind === "inline"
+          ? generatedItem.code
+          : await readFile(resolve(root, target), "utf8");
+        await writeCompilerArtifact(key, Buffer.from(content, "utf8"));
+        nextLock.units[compileUnitId(unit)] = {
+          compileKey: key,
+          outputHash: sha256Text(content),
+          targetPath: target,
+        };
+      } catch (error) {
+        compilerWarnings.push(
+          `could not cache ${target}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    try {
+      await writeCompilerLockfile(root, nextLock);
+    } catch (error) {
+      compilerWarnings.push(
+        `could not update the compiler lockfile: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
   const seconds = Math.round((Date.now() - started) / 1000);
   const todoRequests = planningOutcomes.reduce(
     (total, outcome) => total + outcome.todoRequests,
@@ -1195,6 +1756,21 @@ async function buildCommand(
         engine: "simple",
         written,
         skipped,
+        ...(effective.compiler.enabled
+          ? {
+              compiler: {
+                enabled: true,
+                semanticRequests: compileGate?.semanticRequests ?? 0,
+              },
+              replayed: [
+                ...new Set(
+                  [...replayedUnits.values()].map(({ target }) => target),
+                ),
+              ],
+              diagnostics: compileGate?.diagnostics ?? [],
+              compilerWarnings,
+            }
+          : {}),
         blueprintRequests,
         classificationRequests,
         ...(planning.adaptive ? { planTriageRequests } : {}),
@@ -1212,7 +1788,7 @@ async function buildCommand(
               })),
             }
           : {}),
-        ...(effective.direct.crossFileChecks
+        ...(direct.crossFileChecks
           ? {
               referenceFindings: referenceFindings.map((finding) => ({
                 code: finding.code,
@@ -1222,7 +1798,7 @@ async function buildCommand(
               })),
             }
           : {}),
-        ...(effective.direct.reconcileIntegrations
+        ...(direct.reconcileIntegrations
           ? {
               integrationAuditRequests,
               integrationRepairRequests,
@@ -1253,6 +1829,7 @@ async function buildCommand(
       `\nDone in ${seconds}s. ${written.length} written${skipped.length > 0 ? `, ${skipped.length} skipped` : ""}${planned}${integrations}${repairs}.`,
       false,
     );
+    for (const warning of compilerWarnings) output(`  ! ${warning}`, false);
     for (const outcome of refinementsRejected) {
       const target =
         outcome.unit.kind === "file"
@@ -1282,11 +1859,20 @@ export async function runHumanToCodeCli(argv: string[]): Promise<number> {
   }
   // Keep machine-readable output valid while giving the normal conversion
   // command its terminal wordmark.
-  if (!cli.json && !cli.init) console.log(`${BANNER}\n`);
+  const command = cli.positionals[0];
+  if (!cli.json && !cli.init && command !== "migrate-config") {
+    console.log(`${BANNER}\n`);
+  }
   try {
     if (cli.init) {
       // This codeblock runs when the user passes the init flag for example `npx human-to-code . --init`
-      return initConfig(projectRoot(cli, cli.positionals[0] ?? "."));
+      return initConfig(projectRoot(cli, cli.positionals[0] ?? "."), cli);
+    }
+    if (command === "migrate-config") {
+      return migrateConfigCommand(
+        projectRoot(cli, cli.positionals[1] ?? "."),
+        cli,
+      );
     }
     return await buildCommand(cli, cli.positionals[0]);
   } catch (error) {

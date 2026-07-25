@@ -15,6 +15,13 @@ that source bytes have not changed, and validates generated candidates before
 writing them. Whole-file outputs use a rollback-protected batch. Inline changes
 use exact stale-byte checks and per-marker isolation.
 
+Compiler mode commits only compile identities, target paths, and hashes to
+`human-to-code.lock.json`; hashes are not secrets. Generated artifact bytes stay
+in the private platform cache and are secret-scanned before every cache write.
+Compiler vocabulary values are validated as bounded inert data and are never
+interpreted as instructions. A locked rebuild may overwrite only the target
+owned by the matching unit entry, not an arbitrary existing file.
+
 The direct converter does not run project code, builds, tests, package managers,
 or implicit downloaders. TypeScript and opted-in JavaScript receive static
 compiler checks. Other supported languages receive deterministic structural

@@ -1493,10 +1493,25 @@ html[data-theme="dark"] .qs-visual > img {
     grayscale(.3) saturate(.74) contrast(1.03)
     drop-shadow(-8px -8px 14px var(--bubble-hi))
     drop-shadow(10px 12px 22px var(--bubble-lo));
+  opacity: .78;
 }
-html[data-theme="dark"] .qs-visual > img { filter: grayscale(.32) saturate(.7) contrast(1.05) brightness(.94)
+
+/* Dark carries the illustrations' own palette badly: the cream and white
+   garments sit near #fff against a near-black page, so the cut-outs read as
+   bright stickers. `luminosity` keeps each figure's shading but takes the hue
+   from the coral wash behind it, which is what actually ties them to the
+   theme; the lower opacity then settles them behind the copy. Source
+   desaturation is pointless here (the blend already discards source colour),
+   so dark only tunes brightness and contrast.
+   Light keeps normal blending on purpose: luminosity over the white page
+   flattens the editor art in each illustration to a muddy grey. */
+html[data-theme="dark"] .qs-visual > img {
+  filter: brightness(.72) contrast(1.1)
     drop-shadow(-8px -8px 14px var(--bubble-hi))
-    drop-shadow(10px 12px 22px var(--bubble-lo)); }
+    drop-shadow(10px 12px 22px var(--bubble-lo));
+  mix-blend-mode: luminosity;
+  opacity: .6;
+}
 
 /* ---- the copyable command ----
    Was a dark maroon gradient slab with a hatch overlay, an inner well

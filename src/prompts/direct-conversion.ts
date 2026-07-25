@@ -35,9 +35,130 @@ function promptPath(path: string): string {
   return /^[A-Za-z0-9_./@+-]+$/u.test(path) ? path : JSON.stringify(path);
 }
 
+function requestedHtmlId(instruction: string): string | undefined {
+  return instruction.match(
+    /\bid\s*=\s*["'`]([^"'`\n]{1,100})["'`]/iu,
+  )?.[1] ?? instruction.match(
+    /\bwith\s+(?:an?\s+)?id\s+(?:named\s+)?([A-Za-z][\w:.-]{0,99})\b/iu,
+  )?.[1];
+}
+
+/**
+ * Lowers common human/pseudocode notation before it reaches the model.
+ * Keeping this deterministic makes the model translate an already-normalized
+ * specification instead of asking it to decide how target-language syntax maps.
+ */
+export function lowerInstructionForTarget(
+  languageLabel: string,
+  instruction: string,
+): string {
+  let lowered = instruction;
+  if (/\bTypeScript\b/iu.test(languageLabel)) {
+    lowered = lowered
+      .replace(/\bnonnegative\s+integers\b/giu, "nonnegative numbers")
+      .replace(/\bnonnegative\s+integer\b/giu, "nonnegative number")
+      .replace(/\bintegers\b/giu, "numbers")
+      .replace(/\binteger\b/giu, "number")
+      .replace(/\b(?:floats?|doubles?)\b/giu, "number");
+  }
+  if (/\bHTML\b/iu.test(languageLabel) && /\bmain\s+landmark\b/iu.test(lowered)) {
+    const requestedId = requestedHtmlId(lowered);
+    if (requestedId !== undefined) {
+      lowered = lowered.replace(
+        /\bmain\s+landmark\s+with\s+(?:an?\s+)?id\s+(?:named\s+)?[A-Za-z][\w:.-]{0,99}\b|\bmain\s+landmark\s+with\s+id\s*=\s*(?:"[^"\n]+"|'[^'\n]+'|`[^`\n]+`)/giu,
+        `literal <main id=${JSON.stringify(requestedId)}> element`,
+      );
+    }
+    lowered = lowered.replace(/\bmain\s+landmark\b/giu, "literal <main> element");
+  }
+  if (/\bRust\b/iu.test(languageLabel)) {
+    lowered = lowered
+      .replace(
+        /\bimplement\s+and\s+(?:publish|export)\s+(?:a\s+)?function\b/giu,
+        "implement a public `pub fn` function",
+      )
+      .replace(
+        /\b(?:publish|export)\s+(?:a\s+)?function\b/giu,
+        "implement a public `pub fn` function",
+      );
+  }
+  return lowered;
+}
+
+function targetLanguageTranslationHint(
+  languageLabel: string,
+  instruction: string,
+): string | undefined {
+  const hints: string[] = [];
+  if (
+    /\bTypeScript\b/iu.test(languageLabel)
+    && /\b(?:nonnegative\s+integer|integers?|floats?|doubles?)\b/iu.test(instruction)
+  ) {
+    hints.push([
+      "The Current task has been deterministically lowered to native TypeScript numeric notation.",
+      "Use `number` in annotations and preserve sign or whole-value constraints through the algorithm or explicit validation when requested.",
+    ].join(" "));
+  }
+  if (
+    /\bJavaScript\b/iu.test(languageLabel)
+    && /\b(?:nonnegative\s+integer|integers?|floats?|doubles?|booleans?|strings?)\b/iu.test(instruction)
+  ) {
+    hints.push(
+      "Pseudocode type names are constraints only. Emit plain JavaScript without TypeScript-style type annotations.",
+    );
+  }
+  if (
+    /\b(?:JavaScript|TypeScript)\b/iu.test(languageLabel)
+    && /\b(?:export|exported|exporting)\b/iu.test(instruction)
+    && !/\b(?:do\s+not|don't|without)\s+(?:an?\s+)?export\b/iu.test(instruction)
+  ) {
+    hints.push(
+      `The output must contain a real ${languageLabel} export such as \`export function name(...) { ... }\`; a plain declaration is not exported.`,
+    );
+  }
+  if (
+    /\bHTML\b/iu.test(languageLabel)
+    && /\bmain\s+landmark\b/iu.test(instruction)
+  ) {
+    const requestedId = requestedHtmlId(instruction);
+    hints.push(
+      requestedId === undefined
+        ? "The output must contain a literal `<main>` element; `<body>` is not a main landmark."
+        : `The output must contain a literal \`<main id=${JSON.stringify(requestedId)}>\` element; putting that id on \`<body>\` does not satisfy the main-landmark requirement.`,
+    );
+  }
+  if (
+    /\bRust\b/iu.test(languageLabel)
+    && /\b(?:function|fn)\b/iu.test(instruction)
+    && /\b(?:pub|public|publish|export)\b/iu.test(instruction)
+  ) {
+    hints.push(
+      "The requested Rust function must use a literal `pub fn` declaration.",
+    );
+  }
+  if (
+    /\bRust\b/iu.test(languageLabel)
+    && /\bbinary[_ -]?search\b/iu.test(instruction)
+    && !/\bnon[- ]empty\b/iu.test(instruction)
+  ) {
+    hints.push(
+      "Binary search must handle an empty slice without subtracting 1 from zero; use half-open bounds or guard `values.is_empty()` first.",
+    );
+  }
+  return hints.length === 0 ? undefined : hints.join(" ");
+}
+
 /** Model-facing instructions for the direct conversion agent. */
 export function buildDirectConversionPrompt(input: DirectConversionPromptInput): PromptMessages {
   const target = input.targetPath === undefined ? "the requested target" : promptPath(input.targetPath);
+  const loweredInstruction = lowerInstructionForTarget(
+    input.languageLabel,
+    input.instruction,
+  );
+  const translationHint = targetLanguageTranslationHint(
+    input.languageLabel,
+    input.instruction,
+  );
   const inlineScope = input.insertionContext === "jsx-child"
     ? "Output one valid JSX expression. The existing JSX braces around <CURRENT_MARKER> stay in the file, so do not add another outer pair of braces. Do not output CSS, a function body, or a complete component."
     : input.insertionContext === "css-declarations"
@@ -82,6 +203,7 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
       ...(input.rejectedDraft ? [
         `${(input.blueprint ? 1 : 0) + (input.todos ? 1 : 0) + (input.currentDraft ? 1 : 0) + 10}. REJECTED_DRAFT failed a deterministic gate. Correct the exact VALIDATION_FAILURE and return a replacement for the same target and marker. Do not repeat the rejected draft.`,
       ] : []),
+      `TRANSLATION RULE — If the task contains pseudocode, prose algorithms, challenge statements, or user-invented syntax, treat them only as behavioral specifications. Translate them completely into valid ${input.languageLabel}; never copy source notation that is invalid in ${input.languageLabel}. Pseudocode type phrases describe constraints rather than literal type names; map them to native ${input.languageLabel} types. Preserve explicit requirements such as export/public visibility.`,
       "",
       "Before answering, silently verify: correct target scope; required companion links/imports; exact relative paths; contract-compatible names; valid syntax; code-only output.",
     ].join("\n"),
@@ -105,8 +227,16 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
         ? ["<TODO_LIST>", input.todos, "</TODO_LIST>", ""]
         : []),
       input.inline ? "Current @human instruction:" : "Current task:",
-      input.instruction,
+      loweredInstruction,
       "",
+      ...(translationHint
+        ? [
+            "<TARGET_LANGUAGE_TRANSLATION>",
+            translationHint,
+            "</TARGET_LANGUAGE_TRANSLATION>",
+            "",
+          ]
+        : []),
       ...(input.currentDraft
         ? [
             "<CURRENT_DRAFT>",
@@ -126,6 +256,13 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
             "<VALIDATION_FAILURE>",
             input.validationFailure ?? "The candidate was rejected.",
             "</VALIDATION_FAILURE>",
+            "",
+          ]
+        : []),
+      ...(input.validationFailure
+        ? [
+            `MANDATORY CORRECTION: ${input.validationFailure}`,
+            "Do not return the rejected draft unchanged. The replacement must fix every listed violation.",
             "",
           ]
         : []),

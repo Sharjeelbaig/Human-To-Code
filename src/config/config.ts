@@ -159,6 +159,23 @@ export interface DirectConfigV1 {
   planning: DirectPlanningConfigV1;
 }
 
+export type UnderspecifiedPolicy = "error" | "warn";
+
+export interface CompilerConfigV1 {
+  /** Master switch. False preserves the pre-compiler-mode behavior. */
+  enabled: boolean;
+  /** Whether unresolved facets block generation or are emitted as warnings. */
+  onUnderspecified: UnderspecifiedPolicy;
+  /** Opt-in model-backed diagnostics for requests outside the static rule table. */
+  semanticDiagnostics: boolean;
+  /** Read and write `human-to-code.lock.json` in the project root. */
+  lockfile: boolean;
+  /** Reuse matching cached artifacts instead of issuing generation requests. */
+  replayFromLock: boolean;
+  /** Project vocabulary whose keys count as explicit facet values. */
+  vocabulary: Record<string, string>;
+}
+
 export interface WorkspaceOverrideV1 {
   root: string;
   provider?: ProviderConfigV1;
@@ -181,6 +198,7 @@ export interface ConfigV1 extends Omit<Config, "provider"> {
   sandbox: SandboxConfigV1;
   budgets: BudgetConfigV1;
   direct: DirectConfigV1;
+  compiler: CompilerConfigV1;
 }
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -263,6 +281,16 @@ const DEFAULT_CONFIG_VALUE: ConfigV1 = {
       maxCodingPassesPerUnit: 2,
     },
   },
+  compiler: {
+    // Compiler mode is opt-in for backward compatibility. Its inert sub-options
+    // default on so enabling the master switch activates the complete contract.
+    enabled: false,
+    onUnderspecified: "error",
+    semanticDiagnostics: false,
+    lockfile: true,
+    replayFromLock: true,
+    vocabulary: {},
+  },
 };
 
 /** Frozen defaults. Callers receive a deep clone, never this object. */
@@ -307,6 +335,7 @@ function assertKnownKeys(
 
 const CREDENTIAL_KEY_SUFFIXES = [
   "apikey",
+  "apitoken",
   "accesstoken",
   "authtoken",
   "bearertoken",
@@ -958,6 +987,86 @@ function validateDirect(raw: unknown, path: string): DirectConfigPatch {
   return result;
 }
 
+function validateCompiler(
+  raw: unknown,
+  path: string,
+): Partial<CompilerConfigV1> {
+  const value = expectObject(raw, path);
+  assertKnownKeys(
+    value,
+    [
+      "enabled",
+      "onUnderspecified",
+      "semanticDiagnostics",
+      "lockfile",
+      "replayFromLock",
+      "vocabulary",
+    ],
+    path,
+  );
+  const result: Partial<CompilerConfigV1> = {};
+  for (
+    const key of [
+      "enabled",
+      "semanticDiagnostics",
+      "lockfile",
+      "replayFromLock",
+    ] as const
+  ) {
+    if (value[key] !== undefined) {
+      result[key] = expectBoolean(value[key], `${path}.${key}`);
+    }
+  }
+  if (value.onUnderspecified !== undefined) {
+    if (
+      value.onUnderspecified !== "error"
+      && value.onUnderspecified !== "warn"
+    ) {
+      throw new ConfigError(
+        `\`${path}.onUnderspecified\` must be error or warn.`,
+      );
+    }
+    result.onUnderspecified = value.onUnderspecified;
+  }
+  if (value.vocabulary !== undefined) {
+    const vocabulary = expectObject(value.vocabulary, `${path}.vocabulary`);
+    const entries = Object.entries(vocabulary);
+    if (entries.length > 200) {
+      throw new ConfigError(
+        `\`${path}.vocabulary\` must contain at most 200 entries.`,
+      );
+    }
+    const normalized: Record<string, string> = {};
+    for (const [key, rawValue] of entries) {
+      const itemPath = `${path}.vocabulary.${key}`;
+      if (
+        key !== key.trim()
+        || key.length === 0
+        || key.length > 128
+        || key.includes("\0")
+      ) {
+        throw new ConfigError(
+          `Vocabulary key \`${itemPath}\` must be a non-empty trimmed string of at most 128 characters without NUL bytes.`,
+        );
+      }
+      if (
+        typeof rawValue !== "string"
+        || rawValue !== rawValue.trim()
+        || rawValue.length === 0
+        || rawValue.length > 128
+        || rawValue.includes("\0")
+      ) {
+        throw new ConfigError(
+          `\`${itemPath}\` must be a non-empty trimmed string of at most 128 characters without NUL bytes.`,
+        );
+      }
+      normalized[key] = rawValue;
+    }
+    result.vocabulary = normalized;
+  }
+  return result;
+}
+
 function validateWorkspace(raw: unknown, index: number): WorkspaceOverrideV1 {
   const path = `workspaces[${index}]`;
   const value = expectObject(raw, path);
@@ -1001,6 +1110,7 @@ export function validateConfig(raw: unknown): ConfigV1 {
       "sandbox",
       "budgets",
       "direct",
+      "compiler",
     ],
     "",
   );
@@ -1131,6 +1241,12 @@ export function validateConfig(raw: unknown): ConfigV1 {
       ...config.direct,
       ...direct,
       planning: { ...config.direct.planning, ...direct.planning },
+    };
+  }
+  if (raw.compiler !== undefined) {
+    config.compiler = {
+      ...config.compiler,
+      ...validateCompiler(raw.compiler, "compiler"),
     };
   }
 

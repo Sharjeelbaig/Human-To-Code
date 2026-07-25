@@ -10,20 +10,25 @@ The folder names describe those responsibilities directly.
 2. `src/config/` loads configuration and finds `.human` sources.
 3. `src/tools/discovery/` turns files and inline `@human` comments into
    conversion units.
-4. `src/memory/` builds safe, bounded FileMemory and ProjectMemory for each
-   unit.
-5. `src/workflows/` plans and sequences generation, repair, and integration
-   work.
-6. `src/llms/` sends structured requests through the selected model provider.
-7. `src/tools/validation/` and `src/tools/security/` reject unsafe or invalid
+4. `src/tools/compiler/` rejects unresolved facets or finds a matching locked
+   artifact before any generation request.
+5. Normal mode uses `src/memory/` to build bounded FileMemory and ProjectMemory;
+   compiler mode retains only unit-local inline FileMemory/source context.
+6. `src/workflows/` runs the normal planning/integration pipeline or the
+   isolated compiler code-generation path.
+7. `src/llms/` sends structured requests through the selected model provider.
+8. `src/tools/validation/` and `src/tools/security/` reject unsafe or invalid
    candidates.
-8. `src/tools/file-ops/` applies an accepted candidate with stale-write and
+9. `src/tools/file-ops/` applies an accepted candidate with stale-write and
    rollback protection.
+10. Compiler mode secret-scans and caches accepted bytes, then atomically
+    updates `human-to-code.lock.json`.
 
-For example, `npx human-to-code . --yes` starts in `cli.ts`, discovers a marker
-with `tools/discovery`, gives its provider a prompt assembled by a workflow,
-validates the returned code, and finally uses `tools/file-ops` to replace the
-marker.
+For example, `npx human-to-code . --yes` starts in `cli.ts`, discovers a marker,
+assembles a project-aware normal-mode prompt, validates the returned code, and
+uses `tools/file-ops` to replace the marker. With `--compiler`, the same unit is
+front-end checked and then compiled in isolation; a matching lock entry bypasses
+the provider entirely.
 
 ## Folder responsibilities
 
@@ -63,6 +68,8 @@ Capabilities a workflow calls:
 - `analysis/` recognizes ecosystems and validation commands without executing
   project code.
 - `discovery/` finds conversion units, parses markers, and infers languages.
+- `compiler/` diagnoses unresolved request facets, hashes complete compile
+  inputs, validates lockfiles, and stores bounded content-addressed artifacts.
 - `validation/` performs syntax, compiler, reference, integration, and sandbox
   checks.
 - `security/` scans secrets and pins outbound HTTP destinations.

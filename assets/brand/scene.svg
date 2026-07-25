@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700">
+<style>@keyframes anim-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}@keyframes anim-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}@keyframes anim-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}@keyframes anim-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-10px) rotate(-5deg)}75%{transform:translateX(10px) rotate(5deg)}}@keyframes anim-typewriter-reveal{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}@keyframes anim-text-rise{0%{transform:translateY(18px) scale(.98);opacity:0;filter:blur(10px)}60%{opacity:1}100%{transform:translateY(0) scale(1);opacity:1;filter:blur(0)}}@keyframes anim-text-flicker{0%,18%,22%,25%,53%,57%,100%{opacity:1;filter:drop-shadow(0 0 6px currentColor)}20%,24%,55%{opacity:.28;filter:none}}@keyframes anim-text-tracking{0%{letter-spacing:.42em;opacity:0}45%{opacity:.65}100%{letter-spacing:0;opacity:1}}
+@keyframes tl-anim-svg-ruhk3qfq { 0.00% { transform: translate(587.5857564583625px, 340.85896485243956px) rotate(0deg) scale(0.9718637293545023) translate(-64px, -64px); opacity: 1;  } 100.00% { transform: translate(587.5857564583625px, 340.85896485243956px) rotate(0deg) scale(4.822714046329221) translate(-64px, -64px); opacity: 1; animation-timing-function: linear; } }
+
+/* custom_animations.css */
+
+@keyframes pulse-expand {
+  0% { transform: scale(1); opacity: 1; }
+  60% { transform: scale(2.2); opacity: 0.6; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+.pulse-expand {
+  animation: pulse-expand 1.5s ease-out infinite;
+}
+
+@keyframes smooth-zoom {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+.smooth-zoom {
+  animation: smooth-zoom 3s ease-in-out infinite;
+}</style>
+<defs><filter id="filter_svg-ruhk3qfq" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB"><feDropShadow in="SourceGraphic" dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.4" result="drop_svg-ruhk3qfq" /></filter></defs>
+<g data-name="logo-mark-dark" style="animation: tl-anim-svg-ruhk3qfq 5s linear infinite alternate;" opacity="1" transform="translate(587.5857564583625 340.85896485243956) rotate(0) scale(0.9718637293545023) translate(-64 -64)" filter="url(#filter_svg-ruhk3qfq)"><g style="transform-origin:64px 64px;animation:anim-pulse 2s ease-in-out infinite ">
+  <title id="title">human-to-code logo mark for dark backgrounds</title>
+  <desc id="desc">Opposing warm-white code chevrons joined by a coral prompt cursor.</desc>
+  <path d="M51 25 17 64l34 39" fill="none" stroke="#f7f4ef" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m77 25 34 39-34 39" fill="none" stroke="#f7f4ef" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="58" y="45" width="12" height="38" rx="6" fill="#ff5f3c"/>
+</g></g>
+</svg>

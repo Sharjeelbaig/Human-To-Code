@@ -32,6 +32,12 @@ import {
   type DirectRepairRelatedFile,
 } from "../prompts/direct-repair.ts";
 import {
+  buildCompilerDiagnosticsPrompt,
+  parseCompilerDiagnostics,
+  type CompilerDiagnosticPromptItem,
+  type SemanticDiagnostic,
+} from "../prompts/compiler-diagnostics.ts";
+import {
   attachModelSkills,
   loadSelectedModelSkills,
   type SkillSelectionInput,
@@ -112,7 +118,7 @@ export async function generateCode(instruction: string, options: GenerateOptions
     : extension === ".jsx"
       ? "JavaScript with JSX"
       : profile.label;
-  const prompt = await withSkills(buildDirectConversionPrompt({
+  const basePrompt = buildDirectConversionPrompt({
     languageLabel,
     ...(options.targetPath ? { targetPath: options.targetPath } : {}),
     instruction,
@@ -129,20 +135,23 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.unaddressedTodos ? { unaddressedTodos: options.unaddressedTodos } : {}),
     ...(options.rejectedDraft ? { rejectedDraft: options.rejectedDraft } : {}),
     ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
-  }), {
-    phase: "coding",
-    languages: [options.language, languageLabel],
-    mode: options.inline ? "inline" : "file",
-    insertionContexts: options.insertionContext ? [options.insertionContext] : [],
-    targetPaths: options.targetPath ? [options.targetPath] : [],
-    instructions: [instruction],
-    evidence: [
-      options.projectMemory ?? "",
-      options.blueprint ?? "",
-      options.todos ?? "",
-      options.validationFailure ?? "",
-    ],
   });
+  const prompt = options.compilerMode
+    ? basePrompt
+    : await withSkills(basePrompt, {
+        phase: "coding",
+        languages: [options.language, languageLabel],
+        mode: options.inline ? "inline" : "file",
+        insertionContexts: options.insertionContext ? [options.insertionContext] : [],
+        targetPaths: options.targetPath ? [options.targetPath] : [],
+        instructions: [instruction],
+        evidence: [
+          options.projectMemory ?? "",
+          options.blueprint ?? "",
+          options.todos ?? "",
+          options.validationFailure ?? "",
+        ],
+      });
   return requestChatCompletion(prompt, options);
 }
 
@@ -161,6 +170,18 @@ export async function classifyPlanningNeed(
     options,
   );
   return parseDirectPlanClassification(raw, items.length);
+}
+
+/** Ask the opt-in semantic layer only for additional unresolved decisions. */
+export async function generateSpecDiagnostics(
+  items: readonly CompilerDiagnosticPromptItem[],
+  options: GenerateOptions,
+): Promise<SemanticDiagnostic[]> {
+  const raw = await requestChatCompletion(
+    buildCompilerDiagnosticsPrompt(items),
+    options,
+  );
+  return parseCompilerDiagnostics(raw, items.length);
 }
 
 /** Decide whether one marker is conversation/context or an actual source edit. */

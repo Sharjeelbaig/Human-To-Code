@@ -158,6 +158,11 @@ test("coverage finds the artifacts a todo promised, per file syntax", () => {
   assert.deepEqual(unaddressedRequirements(list.todos, coverage), [
     "T2: Responsive breakpoints. (expected selector: media)",
   ]);
+  assert.deepEqual(
+    todoCoverage(list.todos, "index.html", "<main></main>").unaddressed,
+    ["T1", "T2"],
+    "missing hyphenated names must be reported instead of producing an invalid regular expression",
+  );
 });
 
 test("coverage is satisfied once the missing artifact is present", () => {

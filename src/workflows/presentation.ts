@@ -4,6 +4,7 @@
  */
 import { languageProfile } from "../tools/discovery/languages.ts";
 import { potentialIntegrationRequests } from "../tools/validation/integration-validation.ts";
+import type { SpecDiagnostic } from "../tools/compiler/spec-diagnostics.ts";
 import { planClassificationRequestCount } from "./adaptive-planning.ts";
 import { unitOwnsCompleteFile, type ConversionUnit } from "./types.ts";
 
@@ -97,7 +98,11 @@ export function renderReceipt(
   provider: string,
   model: string,
   configuredLanguages: string | readonly string[],
-  options: { reconcileIntegrations?: boolean; planning?: PlanningDisclosureOptions } = {},
+  options: {
+    reconcileIntegrations?: boolean;
+    planning?: PlanningDisclosureOptions;
+    compiler?: { enabled: boolean; onUnderspecified: "error" | "warn" };
+  } = {},
 ): string {
   const configured = typeof configuredLanguages === "string"
     ? [configuredLanguages]
@@ -129,8 +134,14 @@ export function renderReceipt(
     ? `  Additional: cross-file reconciliation may issue up to ${conditional.integrationAuditUpTo} bounded audit request${conditional.integrationAuditUpTo === 1 ? "" : "s"} and ${conditional.integrationRepairUpTo} target-repair request${conditional.integrationRepairUpTo === 1 ? "" : "s"}; only ProjectMemory-evidenced generated relationships are audited.`
     : undefined;
   const planning = options.planning;
-  const planned = planning === undefined ? undefined : plannedRequestCounts(units, planning);
-  const multiPass = planning?.enabled === true;
+  const basePlanned = planning === undefined
+    ? undefined
+    : plannedRequestCounts(units, planning);
+  const planned = options.compiler?.enabled && basePlanned !== undefined
+    ? { ...basePlanned, classification: 0 }
+    : basePlanned;
+  const multiPass =
+    options.compiler?.enabled !== true && planning?.enabled === true;
   const adaptivePlanning = multiPass && planning?.adaptive === true;
   const plannedTotal = planned === undefined
     ? units.length
@@ -157,12 +168,19 @@ export function renderReceipt(
     `  ${selected.length > 1 ? "Languages:" : "Language :"} ${rendered}`,
     `  Provider : ${provider}`,
     `  Model    : ${model}`,
-    `  Engine   : ${multiPass
+    `  Engine   : ${options.compiler?.enabled
+      ? "compiler (isolated unit codegen, deterministic validation, lock replay)"
+      : multiPass
       ? "direct (inline turn classification, shared contract, per-target todo, then coding; bounded cross-file repair may add requests)"
       : (planned?.classification ?? 0) > 0
         ? "direct (inline turn classification, then coding; bounded cross-file repair may add requests)"
         : "direct (one model request per prompt; bounded cross-file repair may add requests)"}`,
-    `  Context  : compact current/projected ProjectMemory (target-specific, bounded)`,
+    `  Context  : ${options.compiler?.enabled
+      ? "unit-local instruction and required inline file context"
+      : "compact current/projected ProjectMemory (target-specific, bounded)"}`,
+    ...(options.compiler?.enabled
+      ? [`  Compiler : on (${options.compiler.onUnderspecified === "error" ? "underspecified requests block the run" : "underspecified requests warn"})`]
+      : []),
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
     ...(adaptiveDisclaimer ? [adaptiveDisclaimer] : []),
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
@@ -174,7 +192,9 @@ export function renderReceipt(
   ];
   if (units.length === 0) lines.push("  No .human files or @human markers were found.");
   else {
-    lines.push(units.some((unit) => unit.kind === "inline")
+    lines.push(options.compiler?.enabled
+      ? "  The following compilation units will be processed:"
+      : units.some((unit) => unit.kind === "inline")
       ? "  The following will be processed (context turns are retained; edit turns are generated):"
       : "  The following will be generated:");
     for (const unit of units) lines.push(`    • ${unit.describe}`);
@@ -182,9 +202,41 @@ export function renderReceipt(
   return `${lines.join("\n")}\n`;
 }
 
+/** Human-readable natural-language compile errors. */
+export function renderCompileErrors(
+  diagnostics: readonly SpecDiagnostic[],
+): string {
+  const lines: string[] = [];
+  for (const diagnostic of diagnostics) {
+    lines.push(
+      `${diagnostic.sourcePath}:${diagnostic.line ?? 1}  ${diagnostic.code} (${diagnostic.rule})`,
+      `  ${diagnostic.message}`,
+      "",
+      "  Answer these in the request itself:",
+    );
+    for (const facet of diagnostic.facets) {
+      lines.push(
+        `    ${facet.id.padEnd(16)}- ${facet.question} (for example ${JSON.stringify(facet.example)})`,
+      );
+    }
+    lines.push("");
+  }
+  const count = diagnostics.length;
+  lines.push(
+    `${count} compile error${count === 1 ? "" : "s"}. Nothing was generated, no files were written.`,
+    'Set "compiler": { "onUnderspecified": "warn" } to generate anyway, or',
+    'set "compiler": { "enabled": false } to turn compiler mode off.',
+  );
+  return lines.join("\n");
+}
+
 export function stripCodeFence(output: string): string {
   const trimmed = output.trim();
-  const fences = [...trimmed.matchAll(/```(?:[\w.+-]+)?[ \t]*\r?\n([\s\S]*?)\r?\n?```/gu)];
+  const fences = [
+    ...trimmed.matchAll(
+      /^```(?:[\w.+-]+)?[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gmu,
+    ),
+  ];
   if (fences.length > 1) {
     throw new ModelOutputError("Model returned multiple fenced code blocks; refusing an ambiguous replacement.");
   }

@@ -4,3 +4,4 @@ export * from "./validation/index.ts";
 export * from "./analysis/index.ts";
 export * from "./security/index.ts";
 export * from "./file-ops/index.ts";
+export * from "./compiler/index.ts";

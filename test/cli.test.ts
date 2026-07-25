@@ -125,6 +125,337 @@ test("default convert flow discovers HTML and CSS single-line and multiline inli
   }
 });
 
+test("compiler mode blocks an underspecified request before any provider request or write", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-gate-"));
+  try {
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      compiler: { enabled: true },
+    }));
+    await put(root, "styles.css", "/* @human add a gradient */\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 3, result.stderr || result.stdout);
+    const response = JSON.parse(result.stdout) as {
+      status: string;
+      diagnostics: Array<{ rule: string; facets: Array<{ id: string }> }>;
+    };
+    assert.equal(response.status, "NEEDS_SPECIFICATION");
+    assert.equal(response.diagnostics[0]?.rule, "gradient");
+    assert.deepEqual(
+      response.diagnostics[0]?.facets.map((facet) => facet.id),
+      ["colors", "direction", "target"],
+    );
+    assert.equal(
+      await readFile(join(root, "styles.css"), "utf8"),
+      "/* @human add a gradient */\n",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("compiler replay preserves first bytes and makes zero requests on the second run", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-replay-"));
+  const cache = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-cache-"));
+  let requests = 0;
+  const server = createServer((incoming, outgoing) => {
+    incoming.resume();
+    incoming.on("end", () => {
+      requests += 1;
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({
+        message: {
+          content: `export const generatedValue = ${requests};`,
+        },
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      provider: {
+        name: "ollama",
+        model: "changing-fixture",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: {
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: { enabled: false },
+      },
+      compiler: {
+        enabled: true,
+        semanticDiagnostics: false,
+      },
+    }));
+    await put(root, "value.human", "Export a constant named generatedValue.\n");
+
+    const first = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: cache },
+    );
+    assert.equal(first.code, 0, first.stderr || first.stdout);
+    assert.equal(requests, 1);
+    const firstBytes = await readFile(join(root, "value.ts"), "utf8");
+    assert.match(firstBytes, /= 1;/u);
+
+    const second = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: cache },
+    );
+    assert.equal(second.code, 0, second.stderr || second.stdout);
+    const response = JSON.parse(second.stdout) as {
+      replayed: string[];
+      codingRequests: number;
+    };
+    assert.deepEqual(response.replayed, ["value.ts"]);
+    assert.equal(response.codingRequests, 0);
+    assert.equal(requests, 1);
+    assert.equal(await readFile(join(root, "value.ts"), "utf8"), firstBytes);
+
+    await put(
+      root,
+      "value.human",
+      "Export a constant named generatedValue with the updated implementation.\n",
+    );
+    const rebuilt = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: cache },
+    );
+    assert.equal(rebuilt.code, 0, rebuilt.stderr || rebuilt.stdout);
+    assert.equal(requests, 2);
+    assert.match(await readFile(join(root, "value.ts"), "utf8"), /= 2;/u);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
+    await rm(root, { recursive: true, force: true });
+    await rm(cache, { recursive: true, force: true });
+  }
+});
+
+test("matching target and lock stay up to date when the external artifact cache is empty", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-cold-cache-"));
+  const firstCache = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-cache-"));
+  const emptyCache = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-empty-cache-"));
+  let requests = 0;
+  const server = createServer((incoming, outgoing) => {
+    incoming.resume();
+    incoming.on("end", () => {
+      requests += 1;
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({
+        message: {
+          content: `export const generatedValue = ${requests};`,
+        },
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      provider: {
+        name: "ollama",
+        model: "changing-fixture",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: {
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: { enabled: false },
+      },
+      compiler: { enabled: true },
+    }));
+    await put(root, "value.human", "Export a constant named generatedValue.\n");
+
+    const first = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: firstCache },
+    );
+    assert.equal(first.code, 0, first.stderr || first.stdout);
+    assert.equal(requests, 1);
+    const firstBytes = await readFile(join(root, "value.ts"), "utf8");
+
+    const repeated = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: emptyCache },
+    );
+    assert.equal(repeated.code, 0, repeated.stderr || repeated.stdout);
+    const response = JSON.parse(repeated.stdout) as {
+      replayed: string[];
+      codingRequests: number;
+    };
+    assert.deepEqual(response.replayed, ["value.ts"]);
+    assert.equal(response.codingRequests, 0);
+    assert.equal(requests, 1);
+    assert.equal(await readFile(join(root, "value.ts"), "utf8"), firstBytes);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
+    await rm(root, { recursive: true, force: true });
+    await rm(firstCache, { recursive: true, force: true });
+    await rm(emptyCache, { recursive: true, force: true });
+  }
+});
+
+test("restoring identical inline markers replays cached snippets with zero requests", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-inline-replay-"));
+  const cache = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-inline-cache-"));
+  let classificationRequests = 0;
+  let codingRequests = 0;
+  const original = [
+    "/* @human Declare const one = 1. */",
+    "/* @human Declare const two = 2. */",
+    "",
+  ].join(" ");
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk) => { body += chunk; });
+    incoming.on("end", () => {
+      const request = JSON.parse(body) as {
+        messages?: Array<{ role?: string; content?: string }>;
+      };
+      const system = request.messages?.find((message) =>
+        message.role === "system"
+      )?.content ?? "";
+      const user = request.messages?.find((message) =>
+        message.role === "user"
+      )?.content ?? "";
+      let content: string;
+      if (system.includes("Classify one @human")) {
+        classificationRequests += 1;
+        content = '{"action":"edit"}';
+      } else {
+        codingRequests += 1;
+        const currentInstruction =
+          user.match(/Current @human instruction:\n([^\n]+)/u)?.[1] ?? "";
+        content = currentInstruction.includes("const one")
+          ? "const one = 1;"
+          : "const two = 2;";
+      }
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ message: { content } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      language: "javascript",
+      languages: ["javascript"],
+      provider: {
+        name: "ollama",
+        model: "changing-fixture",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: {
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: { enabled: false },
+      },
+      compiler: { enabled: true },
+    }));
+    await put(root, "app.js", original);
+
+    const receipt = await cli([root, "--dry-run"]);
+    assert.equal(receipt.code, 0, receipt.stderr || receipt.stdout);
+    assert.match(receipt.stdout, /Engine\s+: compiler \(isolated unit codegen/u);
+    assert.match(receipt.stdout, /unit-local instruction and required inline file context/u);
+    assert.doesNotMatch(receipt.stdout, /turn classification|ProjectMemory/u);
+
+    const first = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: cache },
+    );
+    assert.equal(first.code, 0, first.stderr || first.stdout);
+    assert.equal(
+      classificationRequests,
+      0,
+      "compiler mode treats every @human marker as source instead of asking an agent classifier",
+    );
+    assert.equal(codingRequests, 2);
+    const firstBytes = await readFile(join(root, "app.js"), "utf8");
+    assert.match(firstBytes, /const one = 1;/u);
+    assert.match(firstBytes, /const two = 2;/u);
+
+    await put(root, "app.js", original);
+    const second = await cli(
+      [root, "--yes", "--json"],
+      { HUMAN_TO_CODE_CACHE: cache },
+    );
+    assert.equal(second.code, 0, second.stderr || second.stdout);
+    const response = JSON.parse(second.stdout) as {
+      replayed: string[];
+      classificationRequests: number;
+      codingRequests: number;
+    };
+    assert.deepEqual(response.replayed, ["app.js"]);
+    assert.equal(response.classificationRequests, 0);
+    assert.equal(response.codingRequests, 0);
+    assert.equal(classificationRequests, 0);
+    assert.equal(codingRequests, 2);
+    assert.equal(await readFile(join(root, "app.js"), "utf8"), firstBytes);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
+    await rm(root, { recursive: true, force: true });
+    await rm(cache, { recursive: true, force: true });
+  }
+});
+
+test("--init stays compiler-off in non-interactive mode and migrate-config upgrades legacy JSON", async () => {
+  const initRoot = await mkdtemp(join(tmpdir(), "h2c-cli-init-compiler-"));
+  const migrateRoot = await mkdtemp(join(tmpdir(), "h2c-cli-migrate-compiler-"));
+  try {
+    const initialized = await cli(["--init", initRoot]);
+    assert.equal(initialized.code, 0, initialized.stderr || initialized.stdout);
+    const initialConfig = JSON.parse(
+      await readFile(join(initRoot, "human-to-code.config.json"), "utf8"),
+    ) as { compiler: { enabled: boolean } };
+    assert.equal(initialConfig.compiler.enabled, false);
+
+    await put(migrateRoot, "human-to-code.config.json", JSON.stringify({
+      language: "javascript",
+      filesToIgnore: ["vendor"],
+      allowNonHumanFiles: false,
+      provider: { name: "ollama", model: "fixture" },
+    }));
+    const migrated = await cli([
+      "migrate-config",
+      migrateRoot,
+      "--compiler",
+      "--json",
+    ]);
+    assert.equal(migrated.code, 0, migrated.stderr || migrated.stdout);
+    const migratedConfig = JSON.parse(
+      await readFile(join(migrateRoot, "human-to-code.config.json"), "utf8"),
+    ) as {
+      schemaVersion: number;
+      compiler: { enabled: boolean };
+    };
+    assert.equal(migratedConfig.schemaVersion, 1);
+    assert.equal(migratedConfig.compiler.enabled, true);
+  } finally {
+    await rm(initRoot, { recursive: true, force: true });
+    await rm(migrateRoot, { recursive: true, force: true });
+  }
+});
+
 test("unreachable cross-file CSS receives one bounded repair before atomic write", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-selector-repair-"));
   const server = createServer((incoming, outgoing) => {

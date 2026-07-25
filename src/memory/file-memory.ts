@@ -224,7 +224,9 @@ export async function generateConversionUnits(
           );
         }
         const sessionBudget = Math.max(0, contextCharBudget - (renderedMemory?.length ?? 0));
-        const renderedSessionMemory = renderSessionMemory(sessionTurns, sessionBudget);
+        const renderedSessionMemory = options.sessionMemory === false
+          ? undefined
+          : renderSessionMemory(sessionTurns, sessionBudget);
         const remaining = Math.max(
           0,
           contextCharBudget - (renderedMemory?.length ?? 0) - (renderedSessionMemory?.length ?? 0),

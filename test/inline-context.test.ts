@@ -150,6 +150,37 @@ test("a selector cannot be inserted into a CSS declaration body", async () => {
   }
 });
 
+test("inline normalization removes only trailing code already after the marker", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-inline-trailing-source-"));
+  try {
+    await put(root, "clamp.js", [
+      "export function clamp(value, min, max) {",
+      "  /* @human If value is less than min, return min. */ /* @human If value is greater than max, return max. */",
+      "  return value;",
+      "}",
+      "",
+    ].join("\n"));
+    const units = (await discoverDirectUnits(root, ["javascript"])).units;
+    assert.equal(units.length, 2);
+    assert.equal(
+      normalizeGeneratedUnitCode(
+        units[0]!,
+        ["if (value < min) {", "  return min;", "}", "return value;"].join("\n"),
+      ),
+      ["if (value < min) {", "  return min;", "}"].join("\n"),
+    );
+    assert.equal(
+      normalizeGeneratedUnitCode(
+        units[1]!,
+        ["if (value > max) {", "  return max;", "}", "return value;"].join("\n"),
+      ),
+      ["if (value > max) {", "  return max;", "}"].join("\n"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("complete candidates combine markers and one atomic write applies them", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-inline-batch-"));
   try {

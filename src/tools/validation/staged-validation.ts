@@ -53,6 +53,8 @@ export interface StagedValidationOptions {
   contextCharBudget?: number;
   /** Shared project memory, refreshed when a repair changes a candidate. */
   projectMemory?: ProjectMemoryProvider;
+  /** Existing whole-file targets proven to be owned by a compiler lock entry. */
+  allowExistingTargets?: ReadonlySet<string>;
   onProgress?: (event: StagedValidationProgress) => void;
 }
 
@@ -121,7 +123,9 @@ export async function validateCandidateProject(
   const maxRepairAttempts = Math.max(0, options.maxRepairAttemptsPerUnit ?? 1);
   const contextCharBudget = options.contextCharBudget ?? DEFAULT_CONTEXT_CHAR_BUDGET;
 
-  const initialOverlay = await buildCandidateOverlay(root, results);
+  const initialOverlay = await buildCandidateOverlay(root, results, {
+    allowExistingTargets: options.allowExistingTargets,
+  });
   applyOverlayExclusions(results, initialOverlay, options);
   if (initialOverlay.files.size === 0) {
     return { results, validated: false, repairRequests: 0 };
@@ -145,7 +149,9 @@ export async function validateCandidateProject(
   };
 
   for (let pass = 1; pass <= maxPasses; pass += 1) {
-    const overlay = await buildCandidateOverlay(root, results);
+    const overlay = await buildCandidateOverlay(root, results, {
+      allowExistingTargets: options.allowExistingTargets,
+    });
     applyOverlayExclusions(results, overlay, options);
     if (overlay.files.size === 0) break;
     options.onProgress?.({ kind: "project-validate", files: overlay.files.size, pass });

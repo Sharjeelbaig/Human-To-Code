@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 520" width="1280" height="520" role="img" aria-labelledby="togetherTitle togetherDesc">
+  <title id="togetherTitle">What holds a Human-to-Code run together</title>
+  <desc id="togetherDesc">Each human-language unit stays in its own lane. FileMemory, ProjectMemory, and selected model skills ground generation for that exact target. Candidate guards, combined JavaScript and TypeScript validation, cross-language reconciliation, and rollback-safe writes prove and apply the result. A failed unit is skipped without stopping successful siblings.</desc>
+
+  <defs>
+    <linearGradient id="togetherSurface" x1="0" y1="0" x2="1280" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171015"/>
+      <stop offset=".52" stop-color="#0d0d11"/>
+      <stop offset="1" stop-color="#2a0d10"/>
+    </linearGradient>
+    <radialGradient id="togetherGlow" cx="0" cy="0" r="1" gradientTransform="translate(655 250) rotate(90) scale(300 420)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff5f3c" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#ff5f3c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="togetherCore" x1="438" y1="156" x2="820" y2="382" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff5f3c" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#ff8a5c" stop-opacity=".05"/>
+    </linearGradient>
+    <marker id="togetherArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1 l8 4 l-8 4" fill="none" stroke="#ff8a5c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .sans  { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      .mono  { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .16em; }
+      .title { font-size: 24px; font-weight: 600; fill: #f7f4ef; }
+      .name  { font-size: 17px; font-weight: 600; fill: #f7f4ef; }
+      .sub   { font-size: 13.5px; fill: #8b8792; }
+      .tiny  { font-size: 12.5px; fill: #aaa6b0; }
+      .code  { font-size: 14px; fill: #c9c5cf; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="520" rx="28" fill="url(#togetherSurface)"/>
+  <rect width="1280" height="520" rx="28" fill="url(#togetherGlow)"/>
+
+  <text class="sans eyebrow" x="48" y="56" fill="#ff8a5c">ONE RUN, THREE SYSTEMS</text>
+  <text class="sans title" x="48" y="90">Isolation keeps work local. Memory grounds it. Guards prove it.</text>
+
+  <!-- Stage labels -->
+  <g class="sans eyebrow">
+    <text x="52" y="136" fill="#8fd6a8">01  ISOLATE</text>
+    <text x="438" y="136" fill="#ff8a5c">02  GROUND</text>
+    <text x="852" y="136" fill="#ff8a5c">03  PROVE + WRITE</text>
+  </g>
+
+  <!-- Stage 1: independent units -->
+  <g>
+    <rect x="48" y="156" width="330" height="226" rx="18" fill="#ffffff" fill-opacity=".035" stroke="#ffffff" stroke-opacity=".08"/>
+
+    <rect x="72" y="180" width="282" height="48" rx="10" fill="#ffffff" fill-opacity=".04" stroke="#8fd6a8" stroke-opacity=".32"/>
+    <circle cx="92" cy="204" r="5" fill="#8fd6a8"/>
+    <text class="mono code" x="108" y="209">@human  add health route</text>
+
+    <rect x="72" y="242" width="282" height="48" rx="10" fill="#ffffff" fill-opacity=".04" stroke="#ff5f3c" stroke-opacity=".32"/>
+    <circle cx="92" cy="266" r="5" fill="#ff5f3c"/>
+    <text class="mono code" x="108" y="271">@human  redeclare User</text>
+
+    <rect x="72" y="304" width="282" height="48" rx="10" fill="#ffffff" fill-opacity=".04" stroke="#8fd6a8" stroke-opacity=".32"/>
+    <circle cx="92" cy="328" r="5" fill="#8fd6a8"/>
+    <text class="mono code" x="108" y="333">styles.human  →  styles.css</text>
+
+    <path d="M92 228 V242 M92 290 V304" stroke="#ffffff" stroke-opacity=".12" stroke-width="2" stroke-dasharray="3 5"/>
+    <text class="sans sub" x="213" y="370" text-anchor="middle">each unit owns one lane</text>
+  </g>
+
+  <!-- Connector into the target-scoped core -->
+  <path d="M388 269 H424" fill="none" stroke="#ff8a5c" stroke-opacity=".72" stroke-width="2.2" marker-end="url(#togetherArrow)"/>
+
+  <!-- Stage 2: context core -->
+  <g>
+    <rect x="438" y="156" width="354" height="226" rx="18" fill="url(#togetherCore)" stroke="#ff5f3c" stroke-opacity=".34"/>
+
+    <rect x="462" y="180" width="306" height="52" rx="11" fill="#09090c" fill-opacity=".72" stroke="#ffffff" stroke-opacity=".09"/>
+    <g transform="translate(480 194)" fill="none" stroke="#ff8a5c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 1 h16 l5 5 v20 h-21 z"/>
+      <path d="M17 1 v6 h5"/>
+      <path d="M6 13 h11 M6 18 h11"/>
+    </g>
+    <text class="sans name" x="516" y="202">FileMemory</text>
+    <text class="sans sub" x="516" y="221">symbols already in this file</text>
+
+    <rect x="462" y="244" width="306" height="52" rx="11" fill="#09090c" fill-opacity=".72" stroke="#ffffff" stroke-opacity=".09"/>
+    <g transform="translate(480 258)" fill="none" stroke="#ff8a5c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M2 12 h20 M12 2 c4 4 4 16 0 20 M12 2 c-4 4 -4 16 0 20"/>
+    </g>
+    <text class="sans name" x="516" y="266">ProjectMemory</text>
+    <text class="sans sub" x="516" y="285">the relevant tree + contracts</text>
+
+    <rect x="462" y="308" width="306" height="52" rx="11" fill="#09090c" fill-opacity=".72" stroke="#ffffff" stroke-opacity=".09"/>
+    <g transform="translate(480 322)" fill="none" stroke="#ff8a5c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1 l3 7 l8 1 l-6 5 l2 8 l-7 -4 l-7 4 l2 -8 l-6 -5 l8 -1 z"/>
+    </g>
+    <text class="sans name" x="516" y="330">Selected skills</text>
+    <text class="sans sub" x="516" y="349">only guidance this target needs</text>
+
+    <rect x="606" y="144" width="154" height="25" rx="12.5" fill="#ff5f3c"/>
+    <text class="sans" x="683" y="161" text-anchor="middle" fill="#171015" font-size="12.5" font-weight="800" letter-spacing=".02em">TARGET-SCOPED</text>
+  </g>
+
+  <!-- Connector into deterministic gates -->
+  <path d="M802 269 H838" fill="none" stroke="#ff8a5c" stroke-opacity=".72" stroke-width="2.2" marker-end="url(#togetherArrow)"/>
+
+  <!-- Stage 3: gates and write -->
+  <g>
+    <rect x="852" y="156" width="380" height="226" rx="18" fill="#ffffff" fill-opacity=".035" stroke="#ffffff" stroke-opacity=".08"/>
+
+    <rect x="876" y="180" width="158" height="66" rx="11" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".09"/>
+    <path d="M896 207 l7 7 l13 -16" fill="none" stroke="#8fd6a8" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="sans name" x="928" y="205">Candidate</text>
+    <text class="sans sub" x="892" y="232">local guards</text>
+
+    <rect x="1050" y="180" width="158" height="66" rx="11" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".09"/>
+    <path d="M1066 203 h18 M1066 211 h18 M1066 219 h12" stroke="#8fd6a8" stroke-width="2" stroke-linecap="round"/>
+    <text class="sans name" x="1098" y="205">Combined</text>
+    <text class="sans sub" x="1066" y="232">JS / TS validation</text>
+
+    <path d="M1036 213 H1044" stroke="#ff8a5c" stroke-opacity=".7" stroke-width="2" marker-end="url(#togetherArrow)"/>
+
+    <rect x="876" y="270" width="158" height="66" rx="11" fill="#ffffff" fill-opacity=".04" stroke="#ffffff" stroke-opacity=".09"/>
+    <g transform="translate(895 288)" fill="none" stroke="#8fd6a8" stroke-width="1.8" stroke-linecap="round">
+      <path d="M1 6 h22 M1 18 h22"/>
+      <path d="M18 2 l5 4 l-5 4 M6 14 l-5 4 l5 4"/>
+    </g>
+    <text class="sans name" x="928" y="295">Reconcile</text>
+    <text class="sans sub" x="892" y="322">cross-language links</text>
+
+    <rect x="1050" y="270" width="158" height="66" rx="11" fill="#ff5f3c" fill-opacity=".13" stroke="#ff5f3c" stroke-opacity=".48"/>
+    <g transform="translate(1066 288)" fill="none" stroke="#ff8a5c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2 h20 v22 h-20 z"/>
+      <path d="M6 2 v7 h12 v-7 M7 17 h10"/>
+    </g>
+    <text class="sans name" x="1098" y="295">Write</text>
+    <text class="sans sub" x="1066" y="322">rollback-safe batch</text>
+
+    <path d="M1129 252 V263" stroke="#ff8a5c" stroke-opacity=".7" stroke-width="2" marker-end="url(#togetherArrow)"/>
+  </g>
+
+  <!-- Honest outcomes / readable output -->
+  <g>
+    <rect x="48" y="402" width="1184" height="86" rx="15" fill="#050507" fill-opacity=".5" stroke="#ffffff" stroke-opacity=".07"/>
+    <text class="sans eyebrow" x="72" y="438" fill="#8b8792">READABLE OUTPUT</text>
+
+    <circle cx="258" cy="432" r="5" fill="#8fd6a8"/>
+    <text class="mono code" x="272" y="437">✓ api.human → api.ts</text>
+
+    <circle cx="510" cy="432" r="5" fill="#ff5f3c"/>
+    <text class="mono code" x="524" y="437">⊘ app.ts: redeclaration blocked</text>
+
+    <circle cx="826" cy="432" r="5" fill="#8fd6a8"/>
+    <text class="mono code" x="840" y="437">✓ styles.human → styles.css</text>
+
+    <text class="sans tiny" x="640" y="470" text-anchor="middle">one failed lane stops here—not everywhere</text>
+  </g>
+</svg>

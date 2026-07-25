@@ -83,5 +83,6 @@ export * from "./tools/discovery/discovery.ts";
 export * from "./tools/discovery/declarations.ts";
 export * from "./tools/validation/index.ts";
 export * from "./tools/file-ops/index.ts";
+export * from "./tools/compiler/index.ts";
 export * from "./prompts/index.ts";
 export * from "./skills/index.ts";

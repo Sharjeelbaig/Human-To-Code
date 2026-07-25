@@ -191,6 +191,24 @@ test("issue 04: surrounding prose is discarded when exactly one fenced block exi
     () => stripCodeFence("```ts\nconst a = 1;\n```\n```ts\nconst b = 2;\n```"),
     (error: unknown) => error instanceof ModelOutputError && /multiple fenced/u.test(error.message),
   );
+  assert.equal(
+    stripCodeFence([
+      "```rust",
+      "/// # Example",
+      "/// ```",
+      "/// assert_eq!(answer(), 42);",
+      "/// ```",
+      "pub fn answer() -> i32 { 42 }",
+      "```",
+    ].join("\n")),
+    [
+      "/// # Example",
+      "/// ```",
+      "/// assert_eq!(answer(), 42);",
+      "/// ```",
+      "pub fn answer() -> i32 { 42 }",
+    ].join("\n"),
+  );
 });
 
 test("issue 05: invalid TypeScript candidates fail before application", async () => {
@@ -211,6 +229,113 @@ test("issue 05: invalid TypeScript candidates fail before application", async ()
       (error: unknown) => error instanceof DirectCandidateValidationError && /syntax validation/u.test(error.message),
     );
     await validateGeneratedUnit(unit, "const valid: number = 1;");
+    await validateGeneratedUnit(
+      {
+        ...unit,
+        sourcePath: "documented.human",
+        outputPath: "documented.rs",
+        prompt: "Publish function answer returning 42.",
+      },
+      [
+        "/// # Example",
+        "/// ```",
+        "/// assert_eq!(answer(), 42);",
+        "/// ```",
+        "pub fn answer() -> i32 { 42 }",
+      ].join("\n"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("explicit source contracts fail closed before model output is accepted", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-explicit-contracts-"));
+  try {
+    const wholeFile = (
+      sourcePath: string,
+      outputPath: string,
+      prompt: string,
+    ): ConversionUnit => ({
+      kind: "file",
+      sourcePath,
+      absoluteSource: join(root, sourcePath),
+      outputPath,
+      prompt,
+      describe: `${sourcePath} -> ${outputPath}`,
+    });
+
+    await assert.rejects(
+      () => validateGeneratedUnit(
+        wholeFile("solution.human", "solution.js", "Export function solve."),
+        "function solve() { return 1; }",
+      ),
+      /explicitly requires an export/u,
+    );
+    await assert.rejects(
+      () => validateGeneratedUnit(
+        wholeFile("page.human", "page.html", 'Create a main landmark with id="app".'),
+        '<body id="app"></body>',
+      ),
+      /main landmark/u,
+    );
+    await assert.rejects(
+      () => validateGeneratedUnit(
+        wholeFile(
+          "natural-id.human",
+          "natural-id.html",
+          "Create a main landmark with id app.",
+        ),
+        "<main></main>",
+      ),
+      /requires id="app"/u,
+    );
+    await assert.rejects(
+      () => validateGeneratedUnit(
+        wholeFile(
+          "search.human",
+          "search.rs",
+          "Publish function binary_search for a sorted slice.",
+        ),
+        "fn binary_search(values: &[i32]) { let right = values.len() - 1; }",
+      ),
+      /public Rust function/u,
+    );
+    await assert.rejects(
+      () => validateGeneratedUnit(
+        wholeFile(
+          "search.human",
+          "search.rs",
+          "Implement binary_search for a sorted slice.",
+        ),
+        "fn binary_search(values: &[i32]) { let right = values.len() - 1; }",
+      ),
+      /can underflow/u,
+    );
+    await assert.rejects(
+      () => validateGeneratedUnit(
+        wholeFile("solution.human", "solution.js", "Export function solve using a Map."),
+        "const { Map } = require('some-module');\nexport function solve() { return new Map(); }",
+      ),
+      /built-in JavaScript global/u,
+    );
+
+    await validateGeneratedUnit(
+      wholeFile("solution.human", "solution.js", "Export function solve."),
+      "export function solve() { return 1; }",
+    );
+    await validateGeneratedUnit(
+      wholeFile("page.human", "page.html", 'Create a main landmark with id="app".'),
+      '<main id="app"></main>',
+    );
+    await validateGeneratedUnit(
+      wholeFile(
+        "search.human",
+        "search.rs",
+        "Publish function binary_search for a sorted slice.",
+      ),
+      "pub fn binary_search(values: &[i32]) { if values.is_empty() { return; } }",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

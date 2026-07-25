@@ -24,6 +24,96 @@ interface CandidateSyntaxDiagnostic {
   message: string;
 }
 
+function requestsExport(prompt: string): boolean {
+  return !/\b(?:do\s+not|don't|without)\s+(?:an?\s+)?export\b/iu.test(prompt)
+    && /\b(?:export|exported|exporting)\b/iu.test(prompt);
+}
+
+function requestedHtmlId(prompt: string): string | undefined {
+  return prompt.match(
+    /\bid\s*=\s*["'`]([^"'`\n]{1,100})["'`]/iu,
+  )?.[1] ?? prompt.match(
+    /\bwith\s+(?:an?\s+)?id\s+(?:named\s+)?([A-Za-z][\w:.-]{0,99})\b/iu,
+  )?.[1];
+}
+
+function validateExplicitRequirements(
+  unit: ConversionUnit,
+  code: string,
+  sourcePath: string,
+): void {
+  const extension = extname(sourcePath).toLowerCase();
+  const violations: string[] = [];
+  if (
+    TYPESCRIPT_EXTENSIONS.has(extension)
+    && requestsExport(unit.prompt)
+    && !/\bexport\s+(?:default\s+)?(?:async\s+)?(?:class|const|enum|function|interface|let|type|var|\{)|\bmodule\.exports\b|\bexports\.[A-Za-z_$]/u
+      .test(code)
+  ) {
+    violations.push(
+      "The instruction explicitly requires an export, but the candidate exposes none; add a real language-level export.",
+    );
+  }
+  if (
+    TYPESCRIPT_EXTENSIONS.has(extension)
+    && /\b(?:import\s*\{[^}]*\b(?:Map|Promise|Set)\b[^}]*\}\s*from|const\s*\{[^}]*\b(?:Map|Promise|Set)\b[^}]*\}\s*=\s*require\s*\()/u
+      .test(code)
+  ) {
+    violations.push(
+      "The candidate imports a built-in JavaScript global; remove that import and use the global directly.",
+    );
+  }
+  if (extension === ".rs") {
+    const requestsPublicFunction =
+      /\b(?:function|fn)\b/iu.test(unit.prompt)
+      && /\b(?:pub|public|publish|export)\b/iu.test(unit.prompt);
+    if (
+      requestsPublicFunction
+      && !/\bpub(?:\s*\([^)]*\))?\s+(?:async\s+)?fn\b/u.test(code)
+    ) {
+      violations.push(
+        "The instruction requires a public Rust function; prefix the requested function declaration with `pub` so the candidate contains `pub fn`.",
+      );
+    }
+    if (
+      /\.len\(\)\s*-\s*1\b/u.test(code)
+      && !/\.is_empty\(\)/u.test(code)
+      && !/\bnon[- ]empty\b/iu.test(unit.prompt)
+    ) {
+      violations.push(
+        "Subtracting 1 from `.len()` can underflow for empty input; guard the empty case before subtraction or use half-open bounds.",
+      );
+    }
+  }
+  if (extension === ".html" || extension === ".htm") {
+    if (
+      /\bmain\s+landmark\b/iu.test(unit.prompt)
+      && !/<main\b/iu.test(code)
+    ) {
+      violations.push(
+        "The instruction requires a main landmark; add an actual `<main>` element because `<body>` is not a main landmark.",
+      );
+    }
+    const requestedId = requestedHtmlId(unit.prompt);
+    if (requestedId !== undefined) {
+      const candidateIds = new Set(
+        [...code.matchAll(/\bid\s*=\s*["']([^"'\n]{1,100})["']/giu)]
+          .map((match) => match[1]),
+      );
+      if (!candidateIds.has(requestedId)) {
+        violations.push(
+          `The instruction requires id=${JSON.stringify(requestedId)}, but the candidate does not contain it.`,
+        );
+      }
+    }
+  }
+  if (violations.length > 0) {
+    throw new DirectCandidateValidationError(
+      `${sourcePath}: candidate violates explicit requirements: ${violations.join(" ")}`,
+    );
+  }
+}
+
 function newlyIntroducedDiagnostic(
   baseline: readonly CandidateSyntaxDiagnostic[],
   candidate: readonly CandidateSyntaxDiagnostic[],
@@ -173,12 +263,58 @@ function normalizedCssHeader(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
 }
 
-/** Unwrap the common exact-current-rule repetition without guessing at other output. */
+function normalizedCodeLines(value: string): string {
+  return value
+    .split(/\r?\n/gu)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join("\n");
+}
+
+/**
+ * Models sometimes finish an inline replacement by copying a statement that
+ * already follows the marker. Remove only an exact, non-empty trailing line
+ * sequence evidenced after the marker, while always retaining real generated
+ * code before it.
+ */
+function stripRepeatedTrailingSource(
+  unit: ConversionUnit,
+  code: string,
+): string {
+  if (unit.kind !== "inline" || !unit.surroundingSource) return code;
+  const marker = "<CURRENT_MARKER>";
+  const markerIndex = unit.surroundingSource.indexOf(marker);
+  if (markerIndex < 0) return code;
+  const trailing = normalizedCodeLines(
+    unit.surroundingSource.slice(markerIndex + marker.length),
+  );
+  const lines = code.trim().split(/\r?\n/gu);
+  for (let start = 1; start < lines.length; start += 1) {
+    const suffix = normalizedCodeLines(lines.slice(start).join("\n"));
+    if (
+      /[A-Za-z0-9_$]/u.test(suffix)
+      && trailing.includes(suffix)
+    ) {
+      return lines.slice(0, start).join("\n").trimEnd();
+    }
+  }
+  return code;
+}
+
+/** Remove exact surrounding-code repetition without guessing at new behavior. */
 export function normalizeGeneratedUnitCode(unit: ConversionUnit, code: string): string {
-  if (unit.insertionContext !== "css-declarations" || !unit.insertionOwner) return code;
-  const match = code.trim().match(/^([^{}]+)\{([\s\S]*)\}\s*$/u);
-  if (!match || normalizedCssHeader(match[1]!) !== normalizedCssHeader(unit.insertionOwner)) return code;
-  return match[2]!.trim();
+  let normalized = stripRepeatedTrailingSource(unit, code);
+  if (unit.insertionContext !== "css-declarations" || !unit.insertionOwner)
+    return normalized;
+  const match = normalized.trim().match(/^([^{}]+)\{([\s\S]*)\}\s*$/u);
+  if (
+    !match
+    || normalizedCssHeader(match[1]!)
+      !== normalizedCssHeader(unit.insertionOwner)
+  )
+    return normalized;
+  normalized = match[2]!.trim();
+  return normalized;
 }
 
 async function sourceAndCandidateForUnit(
@@ -227,10 +363,11 @@ export async function candidateTextsForGenerated(
 /** Validate the complete candidate file before any direct-agent write occurs. */
 export async function validateGeneratedUnit(unit: ConversionUnit, code: string): Promise<void> {
   if (code.trim().length === 0) throw new DirectCandidateValidationError(`${unit.sourcePath}: model returned no code.`);
-  if (/```/u.test(code)) {
+  if (/^```/mu.test(code)) {
     throw new DirectCandidateValidationError(`${unit.sourcePath}: model formatting remained in generated source.`);
   }
   const sourcePath = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+  validateExplicitRequirements(unit, code, sourcePath);
   if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);
   if (UNBALANCED_TEXT_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;
   const { baseline, candidate } = await sourceAndCandidateForUnit(unit, code);
