@@ -268,13 +268,17 @@ export async function generateConversionUnits(
         const todos = plannedTodos;
         const todoBlock = todos === undefined ? undefined : renderTodoList(todos.todos);
 
-        const rawCode = await generator(unit, {
+        const generationContext: UnitGenerationContext = {
           ...baseContext,
           ...(todoBlock ? { todos: todoBlock } : {}),
           ...(rejectedDraft ? { rejectedDraft } : {}),
           ...(validationFailure ? { validationFailure } : {}),
-        });
-        codingRequests += 1;
+        };
+        const loweredCode = await options.lower?.(unit, generationContext);
+        const rawCode = loweredCode === undefined
+          ? await generator(unit, generationContext)
+          : loweredCode;
+        if (loweredCode === undefined) codingRequests += 1;
         code = memory && renderedMemory ? memory.normalizeReplacement(rawCode) : rawCode;
         await options.validate?.(unit, code);
 

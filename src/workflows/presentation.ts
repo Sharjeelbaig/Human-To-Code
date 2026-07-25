@@ -148,6 +148,8 @@ export function renderReceipt(
     : planned.classification + planned.planClassification + planned.blueprint + planned.todo + planned.coding;
   const requestBreakdown = planned === undefined
     ? `${units.length} planned`
+    : options.compiler?.enabled
+      ? `up to ${plannedTotal} model request${plannedTotal === 1 ? "" : "s"} (deterministic language rules may compile units locally with no model request)`
     : !multiPass
       ? `${plannedTotal} planned`
       : `${plannedTotal} planned (`

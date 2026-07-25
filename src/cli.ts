@@ -50,6 +50,7 @@ import {
   classifyUnitsNeedingPlanning,
   normalizeGeneratedUnitCode,
   normalizeCompilerGeneratedUnitCode,
+  compileInstructionWithLanguageRules,
   conditionalRequestAllowance,
   plannedRequestCounts,
   discoverDirectUnits,
@@ -1202,6 +1203,9 @@ async function buildCommand(
       },
       {
         retries: 1,
+        ...(effective.compiler.enabled
+          ? { lower: (unit: ConversionUnit) => compileInstructionWithLanguageRules(unit) }
+          : {}),
         validate: validateGeneratedUnit,
         ...(effective.compiler.enabled
           ? { sessionMemory: false }

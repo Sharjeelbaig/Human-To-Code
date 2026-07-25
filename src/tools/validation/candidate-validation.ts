@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import ts from "typescript";
 import { replaceInlineMarker } from "../file-ops/replacement.ts";
+import { compileInstructionWithLanguageRules } from "../compiler/language-rules.ts";
 import type { ConversionUnit, GeneratedConversionUnit } from "../../workflows/types.ts";
 
 export class DirectCandidateValidationError extends Error {
@@ -404,6 +405,8 @@ export function normalizeCompilerGeneratedUnitCode(
   unit: ConversionUnit,
   code: string,
 ): string {
+  const ruleCompiled = compileInstructionWithLanguageRules(unit);
+  if (ruleCompiled !== undefined) return ruleCompiled;
   const normalized = normalizeGeneratedUnitCode(unit, code);
   const wrapper = generatedFunctionWrapper(normalized);
   if (!wrapper) return normalized;

@@ -129,6 +129,14 @@ export interface GenerateUnitsOptions {
   /** Extra generation attempts when a unit trips the FileMemory guard or the provider errors. */
   retries?: number;
   onProgress?: (event: ConversionProgress) => void;
+  /**
+   * Compiler-only deterministic lowering. A returned fragment bypasses the
+   * provider; undefined delegates the unit to ordinary model generation.
+   */
+  lower?: (
+    unit: ConversionUnit,
+    context: UnitGenerationContext,
+  ) => string | undefined | Promise<string | undefined>;
   /** Fail-closed candidate check run before a unit is remembered or applied. */
   validate?: (unit: ConversionUnit, code: string) => Promise<void>;
   /** Model-backed semantic boundary between context-only and source-edit turns. */
