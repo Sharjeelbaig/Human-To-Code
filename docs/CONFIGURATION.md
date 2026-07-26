@@ -135,7 +135,7 @@ failed remote attempt keeps its conservative charge.
 | `maxOutputTokens` | integer | `120000` | `1`-`1000000`. |
 | `maxRequests` | integer | `60` | `1`-`100`. Raised from 12 because multi-pass planning issues a shared-contract request plus a todo and a coding request per target. The converter discloses its request count rather than gating on this value. |
 | `maxRepairs` | integer | `2` | `0`-`2`. |
-| `timeoutMs` | integer | `900000` | `1000`-`86400000`. |
+| `timeoutMs` | integer | `900000` | `1000`-`86400000`. Ceiling for **one** provider request, not for the run as a whole. A request that passes it is aborted and its target is skipped, so an endpoint that accepts a connection and then stalls can never hang the command. A run with many targets can still spend this budget once per target. |
 
 ## `direct`
 

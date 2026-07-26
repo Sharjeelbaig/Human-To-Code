@@ -2,8 +2,9 @@
  * Writes accepted direct-mode code to the working tree — but only after the
  * stale-input checks pass, and with rollback protection for whole batches.
  */
-import { readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, open, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
+import { randomUUID } from "node:crypto";
 import { replaceInlineMarker } from "../file-ops/replacement.ts";
 import type { ConversionUnit } from "../../workflows/types.ts";
 
@@ -22,6 +23,36 @@ export interface WholeFileApplication {
 export interface InlineFileApplication {
   unit: ConversionUnit;
   code: string;
+}
+
+/**
+ * Replace an existing file's contents so the change is all-or-nothing.
+ *
+ * A plain write truncates the target before writing it, so an interrupt — Ctrl-C
+ * during generation, a full disk, a killed process — could leave source the user
+ * wrote empty or half-written. Writing a sibling temporary, flushing it, and
+ * renaming it over the target means an observer only ever sees the old contents
+ * or the new ones, and any failure leaves the original untouched. The existing
+ * permission bits are carried across so replacing a file never changes its mode.
+ */
+async function replaceFileAtomic(target: string, content: string): Promise<void> {
+  const temporary = `${target}.${randomUUID()}.tmp`;
+  try {
+    const mode = await stat(target)
+      .then((info) => info.mode & 0o777)
+      .catch(() => undefined);
+    const handle = await open(temporary, "wx");
+    try {
+      await handle.writeFile(content, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    if (mode !== undefined) await chmod(temporary, mode);
+    await rename(temporary, target);
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
 }
 
 function wholeFileTarget(absoluteRoot: string, unit: ConversionUnit): string {
@@ -66,7 +97,8 @@ export async function applyWholeFileBatch(
             throw error;
           },
         );
-        await writeFile(target, expected, { flag: previous === undefined ? "wx" : "w" });
+        if (previous === undefined) await writeFile(target, expected, { flag: "wx" });
+        else await replaceFileAtomic(target, expected);
         applied.push({ target, expected, ...(previous !== undefined ? { previous } : {}) });
       } else {
         try {
@@ -89,7 +121,7 @@ export async function applyWholeFileBatch(
           continue;
         }
         if (previous === undefined) await unlink(target);
-        else await writeFile(target, previous);
+        else await replaceFileAtomic(target, previous);
       } catch (rollbackError) {
         rollbackFailures.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
       }
@@ -130,7 +162,7 @@ export async function applyUnit(root: string, unit: ConversionUnit, code: string
       `${unit.sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  await writeFile(unit.absoluteSource, replaced);
+  await replaceFileAtomic(unit.absoluteSource, replaced);
   return unit.sourcePath;
 }
 
@@ -153,7 +185,7 @@ export async function applyInlineFileBatch(applications: readonly InlineFileAppl
       `${first.sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  await writeFile(first.absoluteSource, content);
+  await replaceFileAtomic(first.absoluteSource, content);
   return first.sourcePath;
 }
 

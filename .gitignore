@@ -9,3 +9,6 @@ prompt.txt
 .playwright-cli/
 
 issues/
+
+# Written by `npm run stress`; the corpus itself is tracked, its output is not.
+test/stress/last-report.json

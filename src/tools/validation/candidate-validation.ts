@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import ts from "typescript";
 import { replaceInlineMarker } from "../file-ops/replacement.ts";
+import { MARKER_SCANNED_EXTENSIONS } from "../discovery/discovery.ts";
+import { extractInlineMarkers } from "../discovery/marker-parser.ts";
 import { compileInstructionWithLanguageRules } from "../compiler/language-rules.ts";
 import type { ConversionUnit, GeneratedConversionUnit } from "../../workflows/types.ts";
 
@@ -465,6 +467,26 @@ export async function candidateTextsForGenerated(
   return candidates;
 }
 
+/**
+ * Refuse generated code that carries a live `@human` marker.
+ *
+ * Discovery would read such a marker as a fresh instruction on the next run, so
+ * writing one lets model output enqueue work for the following invocation and
+ * makes repeated runs non-idempotent. The same lexical extractor discovery uses
+ * decides this, so marker-shaped text inside a string or a nested comment — the
+ * only kind discovery ignores — is still allowed through.
+ */
+function validateNoLiveMarker(code: string, sourcePath: string): void {
+  if (!MARKER_SCANNED_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;
+  const markers = extractInlineMarkers(code, sourcePath);
+  if (markers.length === 0) return;
+  throw new DirectCandidateValidationError(
+    `${sourcePath}: generated code contains a live @human marker (${JSON.stringify(
+      markers[0]!.prompt.slice(0, 80),
+    )}), which a later run would execute as a new instruction.`,
+  );
+}
+
 /** Validate the complete candidate file before any direct-agent write occurs. */
 export async function validateGeneratedUnit(unit: ConversionUnit, code: string): Promise<void> {
   if (code.trim().length === 0) throw new DirectCandidateValidationError(`${unit.sourcePath}: model returned no code.`);
@@ -472,6 +494,7 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
     throw new DirectCandidateValidationError(`${unit.sourcePath}: model formatting remained in generated source.`);
   }
   const sourcePath = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+  validateNoLiveMarker(code, sourcePath);
   validateExplicitRequirements(unit, code, sourcePath);
   if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);
   if (UNBALANCED_TEXT_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;

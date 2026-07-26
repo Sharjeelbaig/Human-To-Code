@@ -43,32 +43,177 @@ import {
   type SkillSelectionInput,
 } from "../skills/index.ts";
 import { languageProfile } from "../tools/discovery/languages.ts";
-import { stripCodeFence } from "./presentation.ts";
+import { ModelOutputError, stripCodeFence } from "./presentation.ts";
 import type { GenerateOptions } from "./types.ts";
+
+/**
+ * Hard ceiling on one provider response, independent of configuration. A
+ * cooperating endpoint never approaches this; a broken or hostile one would
+ * otherwise be free to stream until the process runs out of memory.
+ */
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+/** Bytes of an error body quoted back in a diagnostic. */
+const MAX_ERROR_DETAIL_BYTES = 2048;
+
+/**
+ * Applied when no run budget reaches this layer. Every request must be bounded:
+ * an endpoint that accepts a connection and then stalls used to hang the CLI
+ * with no way out but Ctrl-C.
+ */
+const DEFAULT_REQUEST_TIMEOUT_MS = 900_000;
+const MIN_REQUEST_TIMEOUT_MS = 1_000;
+
+function requestTimeoutMs(options: GenerateOptions): number {
+  const configured = options.timeoutMs;
+  if (configured === undefined || !Number.isFinite(configured)) {
+    return DEFAULT_REQUEST_TIMEOUT_MS;
+  }
+  return Math.max(MIN_REQUEST_TIMEOUT_MS, Math.floor(configured));
+}
+
+/**
+ * Read a response body with a byte ceiling, refusing the declared length before
+ * transferring anything when the endpoint is honest about an oversized body.
+ */
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  const declared = response.headers.get("content-length");
+  if (declared !== null && /^\d+$/u.test(declared) && Number(declared) > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error(
+      `Provider response declared ${declared} bytes, above the ${maxBytes}-byte ceiling.`,
+    );
+  }
+  if (response.body === null) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        throw new Error(`Provider response exceeded the ${maxBytes}-byte ceiling.`);
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return text + decoder.decode();
+}
+
+interface ChatRequest {
+  url: string;
+  label: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+
+/**
+ * POST one chat request under a timeout and a response-size ceiling, and return
+ * the decoded JSON body. Cancellation from the caller and expiry of the budget
+ * both abort the in-flight request, including its body stream.
+ */
+async function postChat(request: ChatRequest, options: GenerateOptions): Promise<unknown> {
+  const timeoutMs = requestTimeoutMs(options);
+  const controller = new AbortController();
+  const expiry = new Error(
+    `${request.label} request exceeded the ${timeoutMs}ms budget (budgets.timeoutMs).`,
+  );
+  const timer = setTimeout(() => controller.abort(expiry), timeoutMs);
+  const forwardAbort = (): void => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", forwardAbort, { once: true });
+  try {
+    let response: Response;
+    try {
+      response = await fetch(request.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...request.headers },
+        body: JSON.stringify(request.body),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      // An aborted fetch reports the abort reason, which carries the useful
+      // message; a genuine network failure does not.
+      if (controller.signal.aborted) throw controller.signal.reason ?? error;
+      throw new Error(
+        `${request.label} request could not reach the provider: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (!response.ok) {
+      const detail = await readBoundedText(response, MAX_ERROR_DETAIL_BYTES).catch(() => "");
+      throw new Error(
+        `${request.label} request failed: ${response.status}${detail ? ` ${detail}` : ""}`,
+      );
+    }
+    const text = await readBoundedText(response, MAX_RESPONSE_BYTES);
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error(`${request.label} returned a response body that is not JSON.`);
+    }
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Extract assistant text from a decoded chat response.
+ *
+ * Absent content becomes the empty string so the caller's own "model returned
+ * no code" gate reports it, but content of the wrong *type* is refused here:
+ * letting a number or object through produced an internal `TypeError` instead of
+ * a diagnosis.
+ */
+function assistantText(value: unknown, label: string): string {
+  const root = record(value);
+  if (root === undefined) {
+    throw new ModelOutputError(`${label} returned a response that is not an object.`);
+  }
+  if (typeof root.error === "string" && root.error.length > 0) {
+    throw new Error(`${label} reported an error: ${root.error.slice(0, 500)}`);
+  }
+  const choice = Array.isArray(root.choices) ? record(root.choices[0]) : undefined;
+  const message = record(root.message) ?? record(choice?.message);
+  const content = message?.content;
+  if (content === undefined || content === null) return "";
+  if (typeof content !== "string") {
+    throw new ModelOutputError(
+      `${label} returned assistant content of type ${typeof content} instead of text.`,
+    );
+  }
+  return content;
+}
 
 /** One plain chat completion through OpenAI-compatible chat or Ollama. */
 async function requestChatCompletion(prompt: PromptMessages, options: GenerateOptions): Promise<string> {
+  const messages = [
+    { role: "system", content: prompt.system },
+    { role: "user", content: prompt.user },
+  ];
+
   if (options.provider === "openai") {
     const base = options.baseUrl ?? "https://api.openai.com/v1";
-    const response = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
+    const data = await postChat(
+      {
+        url: `${base}/chat/completions`,
+        label: "OpenAI",
+        headers: options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {},
+        body: { model: options.model, messages, temperature: 0 },
       },
-      body: JSON.stringify({
-        model: options.model,
-        messages: [
-          { role: "system", content: prompt.system },
-          { role: "user", content: prompt.user },
-        ],
-        temperature: 0,
-      }),
-      signal: options.signal,
-    });
-    if (!response.ok) throw new Error(`OpenAI request failed: ${response.status} ${await response.text()}`);
-    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    return stripCodeFence(data.choices?.[0]?.message?.content ?? "");
+      options,
+    );
+    return stripCodeFence(assistantText(data, "OpenAI"));
   }
 
   // Everything below speaks Ollama's wire format. Reaching it with a provider
@@ -81,31 +226,29 @@ async function requestChatCompletion(prompt: PromptMessages, options: GenerateOp
   }
 
   const base = options.baseUrl ?? "http://localhost:11434";
-  const response = await fetch(`${base.replace(/\/api\/?$/u, "")}/api/chat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      model: options.model,
-      stream: false,
-      options: options.compilerMode
-        ? {
-            temperature: 0,
-            seed: 0,
-            top_k: 1,
-            top_p: 1,
-            repeat_penalty: 1,
-          }
-        : { temperature: 0 },
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user },
-      ],
-    }),
-    signal: options.signal,
-  });
-  if (!response.ok) throw new Error(`Ollama request failed: ${response.status} ${await response.text()}`);
-  const data = (await response.json()) as { message?: { content?: string } };
-  return stripCodeFence(data.message?.content ?? "");
+  const data = await postChat(
+    {
+      url: `${base.replace(/\/api\/?$/u, "")}/api/chat`,
+      label: "Ollama",
+      headers: {},
+      body: {
+        model: options.model,
+        stream: false,
+        options: options.compilerMode
+          ? {
+              temperature: 0,
+              seed: 0,
+              top_k: 1,
+              top_p: 1,
+              repeat_penalty: 1,
+            }
+          : { temperature: 0 },
+        messages,
+      },
+    },
+    options,
+  );
+  return stripCodeFence(assistantText(data, "Ollama"));
 }
 
 /**

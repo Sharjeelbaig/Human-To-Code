@@ -455,6 +455,20 @@ function isLoopbackProviderHost(hostname: string): boolean {
   );
 }
 
+/**
+ * Fail fast on a provider configuration this release cannot honor.
+ *
+ * Building the adapter *is* the check: its constructor is what rejects an
+ * endpoint missing the credential binding it requires, and a remote provider
+ * that declares no pricing would leave `budgets.maxCostUsd` with nothing to
+ * measure against. The instance is deliberately not retained — direct conversion
+ * reaches the endpoint through `generation-client` — but a configuration that
+ * could not produce one is refused here instead of at the first request.
+ */
+function assertProviderConfigurationUsable(config: ConfigV1): void {
+  providerFor(config);
+}
+
 function providerFor(config: ConfigV1): ProviderAdapter {
   const remote =
     config.provider.name === "openai" ||
@@ -648,6 +662,9 @@ async function buildCommand(
     providerName === "openai"
       ? process.env[effective.provider.apiKeyEnv ?? "OPENAI_API_KEY"]
       : undefined;
+  // The configured budget bounds every individual provider request, so a stalled
+  // endpoint ends the run with a diagnostic instead of hanging the terminal.
+  const timeoutMs = effective.budgets.timeoutMs;
   const localProvider =
     providerName === "ollama"
     && (
@@ -683,6 +700,7 @@ async function buildCommand(
                   language,
                   ...(baseUrl ? { baseUrl } : {}),
                   ...(apiKey ? { apiKey } : {}),
+                  timeoutMs,
                 },
               );
               return semantic.map((diagnostic) => {
@@ -975,6 +993,10 @@ async function buildCommand(
       "Direct conversion would send change instructions and possibly source context to a remote provider. Review the provider and set privacy.remoteProviderConsent to true first.",
     );
   }
+  // Refuse a provider configuration this release cannot honor before any request
+  // goes out. Reached only once generation is actually about to happen, so
+  // `--dry-run` and `--explain-spec` still describe a run they would not attempt.
+  assertProviderConfigurationUsable(effective);
 
   // Default engine: deterministic per-target generation, optionally preceded by
   // a shared planning pass. One target failing never aborts the others.
@@ -1024,6 +1046,7 @@ async function buildCommand(
     model,
     ...(baseUrl ? { baseUrl } : {}),
     ...(apiKey ? { apiKey } : {}),
+    timeoutMs,
   };
   // One shared planning request, before any file is generated. Each target is
   // generated in isolation afterwards, so this is the only chance for them to
@@ -1401,6 +1424,7 @@ async function buildCommand(
             ...(effective.compiler.enabled ? { compilerMode: true } : {}),
             ...(baseUrl ? { baseUrl } : {}),
             ...(apiKey ? { apiKey } : {}),
+            timeoutMs,
           },
         );
         item.code = effective.compiler.enabled
@@ -1482,6 +1506,7 @@ async function buildCommand(
               model,
               ...(baseUrl ? { baseUrl } : {}),
               ...(apiKey ? { apiKey } : {}),
+              timeoutMs,
             },
           ),
         repair: (request) =>
@@ -1503,6 +1528,7 @@ async function buildCommand(
               targetPath: request.targetPath,
               ...(baseUrl ? { baseUrl } : {}),
               ...(apiKey ? { apiKey } : {}),
+              timeoutMs,
             },
           ),
         projectMemory,
@@ -1576,6 +1602,7 @@ async function buildCommand(
             ...(effective.compiler.enabled ? { compilerMode: true } : {}),
             ...(baseUrl ? { baseUrl } : {}),
             ...(apiKey ? { apiKey } : {}),
+            timeoutMs,
           },
         ).then((code) => effective.compiler.enabled
           ? normalizeCompilerGeneratedUnitCode(request.unit, code)
@@ -1711,14 +1738,14 @@ async function buildCommand(
       written.push(path);
       if (!cli.json)
         for (const item of applications)
-          output(`  yes ${describeUnit(item.unit)}`, false);
+          output(`  ✓ ${describeUnit(item.unit)}`, false);
     } catch (applyError) {
       const reason =
         applyError instanceof Error ? applyError.message : String(applyError);
       for (const item of applications) {
         skipped.push({ source: item.unit.sourcePath, reason });
         if (!cli.json)
-          output(`  no skipped ${describeUnit(item.unit)}: ${reason}`, false);
+          output(`  ⊘ skipped ${describeUnit(item.unit)}: ${reason}`, false);
       }
     }
   }

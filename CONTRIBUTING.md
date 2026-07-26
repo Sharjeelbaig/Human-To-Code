@@ -12,7 +12,14 @@ npm run build
 npm test
 npm run typecheck
 npm run package:check
+npm run stress
 ```
+
+`npm run stress` is the 450-scenario stability corpus (see
+[Development checks](Readme.md#development-checks)). Run it before sending a
+change to transport, validation, or file application — it spawns the real CLI
+against a deliberately hostile endpoint and is what catches hangs, internal
+errors, and half-written files.
 
 The command users depend on is:
 

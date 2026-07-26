@@ -1,6 +1,6 @@
 {
   "name": "human-to-code",
-  "version": "0.1.52",
+  "version": "1.0.0",
   "description": "Turn plain-language .human files and @human markers into code.",
   "author": "Sharjeel Baig",
   "homepage": "https://github.com/Sharjeelbaig/Human-To-Code#readme",
@@ -47,6 +47,7 @@
     "dev": "node src/cli.ts",
     "start": "node dist/cli.js",
     "test": "node --test test/*.test.ts",
+    "stress": "npm run build && node test/stress/run.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "package:check": "npm run build && node test/package-smoke.mjs",
     "prepack": "npm run clean && npm run build"

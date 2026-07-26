@@ -8,7 +8,8 @@
  * frozen package data — never read from the analyzed repository, which is
  * untrusted — and the shipped registry is intentionally EMPTY until a real
  * benchmark corpus has actually run. With no evidence, nothing is certified and
- * VERIFIED stays unreachable, exactly as the preview requires.
+ * VERIFIED stays unreachable. That is independent of the package version: 1.0
+ * freezes the interfaces, not the quality of generated code.
  */
 
 import type { Ecosystem } from "../tools/analysis/analyzer-types.ts";
@@ -240,7 +241,7 @@ export function evaluateProviderCertification(
 /**
  * Shipped, host-owned certification evidence. Deliberately EMPTY: no
  * 25-task-per-ecosystem, three-run, 95% benchmark has been executed and
- * archived for this preview, so no provider/model/profile is certified and
+ * archived for this release, so no provider/model/profile is certified and
  * VERIFIED remains unreachable. Adding a real, scored corpus here — and nowhere
  * else — is the only way to make a profile certifiable.
  */

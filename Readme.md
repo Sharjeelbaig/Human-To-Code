@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/human-to-code"><img alt="npm version" src="https://img.shields.io/npm/v/human-to-code?color=ff5f3c&label=npm"></a>
-  <a href="#release-status"><img alt="status: preview" src="https://img.shields.io/badge/status-preview-orange"></a>
+  <a href="#release-status"><img alt="status: stable" src="https://img.shields.io/badge/status-stable-brightgreen"></a>
   <a href="https://github.com/Sharjeelbaig/Human-To-Code/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/Sharjeelbaig/Human-To-Code/actions/workflows/ci.yml/badge.svg"></a>
   <a href="#development-checks"><img alt="node 24 or newer" src="https://img.shields.io/badge/node-24%2B-brightgreen"></a>
   <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
@@ -542,6 +542,24 @@ provider this context only goes out after you enable
 
 ### Budget semantics
 
+> **Which of this applies to `npx human-to-code .`** — Read this first, because
+> two request paths exist and they do not enforce the same things.
+>
+> The default direct conversion described in [Generation engine](#generation-engine)
+> talks to your endpoint through a deliberately small client. What it guarantees
+> is: **every request is bounded by `budgets.timeoutMs`** and abandoned if the
+> endpoint stalls, **a response above 16 MiB is refused** rather than buffered,
+> **the configured model string is sent verbatim**, a provider with no adapter in
+> this release is refused, and a remote endpoint is refused outright unless
+> `privacy.remoteProviderConsent` is set *and* `provider.pricing` is declared.
+>
+> What it does **not** do: reserve spend per request against `maxCostUsd`, gate on
+> cumulative token counts, or pin the socket to a pre-vetted DNS answer. Those are
+> properties of the adapter transport, and the paragraphs below describe *that*
+> path. For a remote endpoint, treat `maxCostUsd` as a declaration of intent and
+> keep your provider-side spend limits switched on — they are what actually caps
+> your bill.
+
 Request count, input and output tokens, repair count, and elapsed time are
 cumulative hard gates. Before anything hits the network the host pessimistically
 charges a tokenizer-independent input upper bound plus the entire requested
@@ -718,8 +736,13 @@ followed by an unpinned lookup later. The adapter never silently switches
 provider or model. Custom endpoints follow the same complete-preview,
 no-dynamic-context rule as official Ollama Cloud.
 
+URL and private-network validation above runs at config load, so it applies to
+every run. Socket-level pinning to the vetted DNS answer is a property of the
+adapter transport specifically, and the default direct conversion does not use
+it — see the note under [Budget semantics](#budget-semantics).
+
 The config schema still accepts the alpha provider names `anthropic`, `grok`, and
-`gemini` so older configs keep loading, but this preview only ships adapters for
+`gemini` so older configs keep loading, but this release only ships adapters for
 `openai` and `ollama`. Selecting one of the others stops the run with a
 configuration error before any request is made.
 
@@ -745,23 +768,52 @@ npm run typecheck
 npm test
 npm run build
 npm run package:check
+npm run stress
 ```
 
 `package:check` builds a tarball, installs it into a clean temporary project,
 imports the public entry point, and invokes the installed CLI.
 
+`stress` runs a 450-scenario corpus — 350 non-compiler-mode, 100 compiler-mode —
+that spawns the built CLI against a scripted endpoint standing in for Ollama. It
+crosses realistic conversion fixtures with the ways a real endpoint misbehaves:
+stalling, resetting mid-body, returning HTTP errors, prose instead of code,
+truncated output, oversized bodies, non-text content, and echoed `@human`
+markers. It asserts stability rather than code quality — that the command always
+terminates, only ever exits with a documented code, never reports an internal
+error, never destroys the request it was given, leaves no temporary files, and
+never writes a marker that would re-trigger on the next run. Narrow it while
+working on one area:
+
+```bash
+node test/stress/run.mjs --mode compiler --filter ts-lru --concurrency 4
+```
+
 ## Release status
 
-human-to-code is a **preview**. It is published from `main`, versioned `0.1.x`,
-and useful today, but the surface is still moving.
+human-to-code is **stable at `1.0.0`** and follows
+[semantic versioning](https://semver.org/spec/v2.0.0.html): the CLI contract, the
+exported API, and the config schema do not break within a major version.
 
-| Area                                                    | State                                                                                                            |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `npx human-to-code .` and the `.human` / `@human` model | Stable in practice. This is what the tests and docs cover                                                        |
-| Config schema v1                                        | Stable. Additive changes only, and unknown keys stay a hard error                                                |
-| Public API from `human-to-code`                         | Unstable. Exports may be reorganized between `0.1.x` releases                                                    |
-| `openai` and `ollama` adapters                          | Working. `anthropic`, `grok`, and `gemini` load from config but are refused at run time                          |
-| Generated code                                          | Never claimed as verified. Static and structural checks are not proof of runtime correctness, so review the diff |
+`1.0.0` is a promise about **interfaces**, not about the quality of generated
+code. Those are separate claims, and only the first one is being made.
+
+| Area                                                    | State                                                                                                             |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `npx human-to-code .` and the `.human` / `@human` model | **Stable.** Flags, exit codes, and marker grammar are covered by the tests and will not break within `1.x`         |
+| Config schema v1                                        | **Stable.** Additive changes only, and unknown keys stay a hard error                                              |
+| Public API from `human-to-code`                         | **Stable.** Exports follow semantic versioning; removals or renames require a major release                        |
+| `openai` and `ollama` adapters                          | Working. `anthropic`, `grok`, and `gemini` load from config but are refused before any request                     |
+| Generated code                                          | **Not verified, and not claimed to be.** Static and structural checks are not proof of runtime correctness — review the diff |
+| Generation certification                                | **Not done.** Every ecosystem sits at the `preview` tier and the `VERIFIED` run status is unreachable by construction |
+
+The last two rows are deliberate. Certification would mean a scored benchmark of
+25 tasks per ecosystem, run three times each, passing at 95% in a sandbox that
+actually executes the result. No such corpus has been run, none ships in the
+package, and a release gate ([test/release-gate.test.ts](test/release-gate.test.ts))
+fails the build if anything starts claiming otherwise. What *is* tested is
+stability: 341 unit tests plus a 450-scenario stress corpus that drives the real
+CLI against a deliberately hostile endpoint.
 
 Node **24 or newer** is required.
 

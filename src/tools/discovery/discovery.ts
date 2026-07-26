@@ -14,11 +14,19 @@ import { extractInlineMarkers } from "./marker-parser.ts";
 import type { HumanFileExtensionConfig } from "../../core/types.ts";
 import type { ConversionUnit, DirectDiscoveryResult } from "../../workflows/types.ts";
 
-const SCANNED_EXTENSIONS = new Set([
+/**
+ * Extensions searched for inline `@human` markers. Exported because it is also
+ * the exact test for whether text written into a file would be picked up as an
+ * instruction by a later run: pre-write validation refuses to emit a live marker
+ * into any file this set covers.
+ */
+export const MARKER_SCANNED_EXTENSIONS: ReadonlySet<string> = new Set([
   ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs",
   ".html", ".htm", ".css",
   ".py", ".rs", ".go", ".java", ".rb", ".cs", ".cpp", ".cc", ".c", ".h", ".hpp",
 ]);
+
+const SCANNED_EXTENSIONS = MARKER_SCANNED_EXTENSIONS;
 
 const DEFAULT_IGNORES = new Set([
   "node_modules", ".git", "dist", "build", ".next", "target", ".venv", "venv",

@@ -27,6 +27,27 @@ jobs:
       - run: npm run package:check
       - run: npm audit --audit-level=high
 
+  # The stress corpus drives the built CLI as a subprocess against a scripted
+  # endpoint. One Linux runner is enough: it exercises transport, validation, and
+  # exit-code behavior, none of which is platform-specific, and it uses POSIX file
+  # modes and symlinks that Windows runners cannot express faithfully.
+  stress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run stress
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: human-to-code-stress-report
+          path: test/stress/last-report.json
+          if-no-files-found: warn
+
   supply-chain:
     runs-on: ubuntu-latest
     steps:

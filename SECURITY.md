@@ -13,7 +13,12 @@ The converter does not follow symlinks during discovery. It excludes ignored and
 protected paths, scans model-bound context for credential-shaped values, checks
 that source bytes have not changed, and validates generated candidates before
 writing them. Whole-file outputs use a rollback-protected batch. Inline changes
-use exact stale-byte checks and per-marker isolation.
+use exact stale-byte checks and per-marker isolation. Replacing an existing file
+is atomic — a flushed sibling temporary renamed over the target, carrying the
+original permission bits — so an interrupted or failed run leaves your source
+either untouched or fully replaced, never truncated. A candidate that would write
+a live `@human` marker back into source is refused, so model output cannot queue
+instructions for a later run.
 
 Compiler mode commits only compile identities, target paths, and hashes to
 `human-to-code.lock.json`; hashes are not secrets. Generated artifact bytes stay

@@ -222,6 +222,11 @@ export interface GenerateOptions {
   rejectedDraft?: string;
   /** Exact deterministic reason the previous candidate was rejected. */
   validationFailure?: string;
+  /**
+   * Ceiling for one provider request, from `budgets.timeoutMs`. Omitting it
+   * falls back to the package default; a request is never unbounded.
+   */
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
