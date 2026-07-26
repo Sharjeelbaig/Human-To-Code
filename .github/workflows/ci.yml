@@ -41,7 +41,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run stress
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: human-to-code-stress-report
@@ -59,7 +59,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit signatures
       - run: npm sbom --sbom-format cyclonedx > sbom.cdx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: human-to-code-sbom
           path: sbom.cdx.json
