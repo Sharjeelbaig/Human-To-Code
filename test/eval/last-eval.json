@@ -1,0 +1,23 @@
+{
+  "summary": [
+    {
+      "model": "gemma3:270m",
+      "runs": 1,
+      "written": 0,
+      "typechecks": 0,
+      "behaves": 0
+    }
+  ],
+  "results": [
+    {
+      "model": "gemma3:270m",
+      "task": "body-only-multiply",
+      "run": 1,
+      "written": false,
+      "typechecks": false,
+      "behaves": false,
+      "durationMs": 26356,
+      "detail": "target still holds a marker or is empty"
+    }
+  ]
+}

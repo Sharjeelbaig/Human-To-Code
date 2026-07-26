@@ -297,6 +297,39 @@ test("one failed marker withholds its file and evidenced companion targets", () 
   assert.equal(result[0]!.code, "");
 });
 
+test("one failed marker withholds successful siblings in the same target without project relations", () => {
+  const first: ConversionUnit = {
+    kind: "inline",
+    sourcePath: "router.py",
+    absoluteSource: "/tmp/router.py",
+    prompt: "build command",
+    describe: "first",
+  };
+  const second: ConversionUnit = {
+    kind: "inline",
+    sourcePath: "router.py",
+    absoluteSource: "/tmp/router.py",
+    prompt: "handle error",
+    describe: "second",
+  };
+  const independent: ConversionUnit = {
+    kind: "inline",
+    sourcePath: "health.py",
+    absoluteSource: "/tmp/health.py",
+    prompt: "return status",
+    describe: "independent",
+  };
+  const result = withholdIncompleteRelatedTargets([
+    { unit: first, code: "command = build_command()" },
+    { unit: second, code: "", error: "invalid syntax" },
+    { unit: independent, code: "return {'status': 'ok'}" },
+  ]);
+  assert.match(result[0]!.error ?? "", /related conversion group was withheld/u);
+  assert.equal(result[0]!.code, "");
+  assert.equal(result[2]!.error, undefined);
+  assert.notEqual(result[2]!.code, "");
+});
+
 test("a deterministic retry receives the rejected draft and validator diagnostic", async () => {
   const unit: ConversionUnit = {
     kind: "file",

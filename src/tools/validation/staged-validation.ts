@@ -1,8 +1,9 @@
 /**
- * Staged, project-aware validation for multi-file JS/TS direct conversions.
- * All successfully generated units enter an in-memory candidate overlay; the
- * TypeScript and explicitly opted-in JavaScript are compiled with the
- * TypeScript Compiler API and compared against the unchanged baseline.
+ * Staged, project-aware validation for direct conversions. Complete Python
+ * candidates are parsed first. Successfully generated JS/TS units then enter
+ * an in-memory candidate overlay; TypeScript and explicitly opted-in
+ * JavaScript are compiled with the TypeScript Compiler API and compared
+ * against the unchanged baseline.
  * Dependency-connected groups that
  * introduce new diagnostics are repaired within a bounded budget or rejected
  * whole, and only units proven independent of every failure are applied.
@@ -11,9 +12,14 @@
  * or sandboxed here, and passing it is never presented as `VERIFIED`.
  */
 import { ContextSecurityError, scanSecrets } from "../../memory/context.ts";
+import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { buildCandidateOverlay, overlayPathKey, type CandidateOverlay } from "./candidate-overlay.ts";
-import { validateGeneratedUnit } from "./candidate-validation.ts";
+import {
+  candidateTextsForGenerated,
+  validateCandidateFileSyntax,
+  validateGeneratedUnit,
+} from "./candidate-validation.ts";
 import { attributeDiagnostics, buildOverlayDependencyGroups } from "./dependency-graph.ts";
 import {
   collectProjectDiagnostics,
@@ -72,6 +78,36 @@ export interface StagedValidationOutcome {
 const MAX_DIAGNOSTICS_PER_REQUEST = 20;
 const MAX_DIAGNOSTIC_MESSAGE_LENGTH = 400;
 const DEFAULT_CONTEXT_CHAR_BUDGET = 48_000;
+
+async function rejectInvalidCombinedPythonCandidates(
+  root: string,
+  results: GeneratedConversionUnit[],
+  options: StagedValidationOptions,
+): Promise<void> {
+  const candidates = await candidateTextsForGenerated(results);
+  for (const [path, content] of candidates) {
+    if (extname(path).toLowerCase() !== ".py") continue;
+    const contributors = results.filter((item) =>
+      item.contextOnly !== true
+      && item.error === undefined
+      && (item.unit.kind === "file" ? item.unit.outputPath : item.unit.sourcePath) === path);
+    if (contributors.length === 0) continue;
+    const inline = contributors[0]!.unit.kind === "inline";
+    const baseline = inline
+      ? await readFile(contributors[0]!.unit.absoluteSource, "utf8")
+      : await readFile(resolve(root, path), "utf8").catch(() => undefined);
+    try {
+      await validateCandidateFileSyntax(path, content, baseline);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      for (const item of contributors) {
+        item.error = `combined Python candidate was withheld: ${reason}`;
+        item.code = "";
+        options.onProgress?.({ kind: "reject", unit: item.unit, reason: item.error });
+      }
+    }
+  }
+}
 
 /** Strip control characters so compiler output stays plain, single-line data. */
 function sanitizeDiagnostic(diagnostic: ProjectDiagnostic): ProjectDiagnostic {
@@ -139,8 +175,8 @@ function inlineRepairOrder(
 
 /**
  * Validate the combined candidate project before anything is written and
- * return per-unit accept/reject results. Units that do not produce JS/TS are
- * passed through unchanged and keep their per-unit validation level.
+ * return per-unit accept/reject results. Python receives combined syntax
+ * validation; other units that do not produce JS/TS keep their per-unit level.
  */
 export async function validateCandidateProject(
   root: string,
@@ -151,6 +187,7 @@ export async function validateCandidateProject(
   const maxRepairAttempts = Math.max(0, options.maxRepairAttemptsPerUnit ?? 1);
   const contextCharBudget = options.contextCharBudget ?? DEFAULT_CONTEXT_CHAR_BUDGET;
 
+  await rejectInvalidCombinedPythonCandidates(root, results, options);
   const initialOverlay = await buildCandidateOverlay(root, results, {
     allowExistingTargets: options.allowExistingTargets,
   });

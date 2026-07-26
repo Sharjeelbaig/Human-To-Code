@@ -1309,8 +1309,10 @@ async function buildCommand(
     if (!effective.compiler.enabled)
       projectMemory.remember(unit, replay.code);
   }
-  if (!effective.compiler.enabled)
-    generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+  generated = withholdIncompleteRelatedTargets(
+    generated,
+    effective.compiler.enabled ? undefined : projectMemory,
+  );
 
   // Deterministic cross-file reference checking over complete candidate
   // files. One bounded repair is allowed for findings that prove generated
@@ -1463,8 +1465,10 @@ async function buildCommand(
         item.code = "";
       }
     }
-    if (!effective.compiler.enabled)
-      generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+    generated = withholdIncompleteRelatedTargets(
+      generated,
+      effective.compiler.enabled ? undefined : projectMemory,
+    );
     if (interactive) {
       for (const finding of referenceFindings) {
         spinner.note(
@@ -1633,8 +1637,10 @@ async function buildCommand(
   }
   spinner.stop();
 
-  if (!effective.compiler.enabled)
-    generated = withholdIncompleteRelatedTargets(generated, projectMemory);
+  generated = withholdIncompleteRelatedTargets(
+    generated,
+    effective.compiler.enabled ? undefined : projectMemory,
+  );
 
   // Apply bottom-to-top so replacing a later marker cannot invalidate an
   // earlier marker's range.

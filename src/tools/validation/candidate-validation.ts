@@ -1,4 +1,5 @@
 /** Pre-write direct-candidate syntax checks; this is not semantic or sandbox verification. */
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import ts from "typescript";
@@ -16,6 +17,21 @@ export class DirectCandidateValidationError extends Error {
 }
 
 const TYPESCRIPT_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
+const PYTHON_SYNTAX_TIMEOUT_MS = 5_000;
+const MAX_PYTHON_DIAGNOSTIC_BYTES = 64 * 1024;
+const PYTHON_SYNTAX_SCRIPT = [
+  "import ast, json, sys",
+  "source = sys.stdin.read()",
+  "try:",
+  "    ast.parse(source, filename='<candidate>', mode='exec', type_comments=True)",
+  "except (SyntaxError, ValueError, TypeError) as error:",
+  "    print(json.dumps({",
+  "        'kind': type(error).__name__,",
+  "        'message': getattr(error, 'msg', str(error)),",
+  "        'line': getattr(error, 'lineno', None),",
+  "        'column': getattr(error, 'offset', None),",
+  "    }))",
+].join("\n");
 
 // Delimiter balancing misreads prose-bearing markup: apostrophes in HTML text
 // and unquoted `url(https://…)` in CSS are legal but read as unterminated
@@ -25,6 +41,125 @@ const UNBALANCED_TEXT_EXTENSIONS = new Set([".html", ".htm", ".css", ".svg", ".m
 interface CandidateSyntaxDiagnostic {
   key: string;
   message: string;
+}
+
+interface PythonSyntaxPayload {
+  kind?: unknown;
+  message?: unknown;
+  line?: unknown;
+  column?: unknown;
+}
+
+interface PythonCommand {
+  executable: string;
+  args: string[];
+}
+
+let resolvedPythonCommand: Promise<PythonCommand | undefined> | undefined;
+
+function pythonCommandCandidates(): PythonCommand[] {
+  return process.platform === "win32"
+    ? [
+        { executable: "py", args: ["-3"] },
+        { executable: "python3", args: [] },
+        { executable: "python", args: [] },
+      ]
+    : [
+        { executable: "python3", args: [] },
+        { executable: "python", args: [] },
+      ];
+}
+
+function runPythonParser(
+  command: PythonCommand,
+  source: string,
+): Promise<{ available: boolean; output: string }> {
+  return new Promise((resolveResult) => {
+    const child = spawn(command.executable, [...command.args, "-X", "utf8", "-c", PYTHON_SYNTAX_SCRIPT], {
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const output: Buffer[] = [];
+    let outputBytes = 0;
+    let settled = false;
+    const finish = (result: { available: boolean; output: string }): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolveResult(result);
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish({ available: false, output: "" });
+    }, PYTHON_SYNTAX_TIMEOUT_MS);
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (outputBytes >= MAX_PYTHON_DIAGNOSTIC_BYTES) return;
+      const remaining = MAX_PYTHON_DIAGNOSTIC_BYTES - outputBytes;
+      const bounded = chunk.subarray(0, remaining);
+      output.push(bounded);
+      outputBytes += bounded.length;
+    });
+    child.on("error", () => finish({ available: false, output: "" }));
+    child.on("close", (code) => {
+      finish({
+        available: code === 0,
+        output: code === 0 ? Buffer.concat(output).toString("utf8").trim() : "",
+      });
+    });
+    child.stdin.on("error", () => undefined);
+    child.stdin.end(source);
+  });
+}
+
+async function pythonCommand(): Promise<PythonCommand | undefined> {
+  resolvedPythonCommand ??= (async () => {
+    for (const candidate of pythonCommandCandidates()) {
+      const probe = await runPythonParser(candidate, "");
+      if (probe.available) return candidate;
+    }
+    return undefined;
+  })();
+  return resolvedPythonCommand;
+}
+
+async function pythonSyntaxDiagnostics(text: string): Promise<CandidateSyntaxDiagnostic[]> {
+  const command = await pythonCommand();
+  if (command === undefined) {
+    return [{
+      key: "python:parser-unavailable",
+      message: "no Python 3 parser is available on PATH",
+    }];
+  }
+  const parsed = await runPythonParser(command, text);
+  if (!parsed.available) {
+    return [{
+      key: "python:parser-failed",
+      message: "the Python 3 parser did not complete successfully",
+    }];
+  }
+  if (parsed.output.length === 0) return [];
+  let payload: PythonSyntaxPayload;
+  try {
+    payload = JSON.parse(parsed.output) as PythonSyntaxPayload;
+  } catch {
+    return [{
+      key: "python:parser-output",
+      message: "the Python parser returned an unreadable syntax diagnostic",
+    }];
+  }
+  const kind = typeof payload.kind === "string" ? payload.kind : "SyntaxError";
+  const message = typeof payload.message === "string" ? payload.message : "invalid syntax";
+  const line = typeof payload.line === "number" ? payload.line : undefined;
+  const column = typeof payload.column === "number" ? payload.column : undefined;
+  const location = line === undefined
+    ? ""
+    : ` at line ${line}${column === undefined ? "" : `, column ${column}`}`;
+  return [{
+    // Location is deliberately omitted from the comparison key. An accepted
+    // multiline replacement can shift an unchanged baseline diagnostic.
+    key: `python:${kind}:${message}`,
+    message: `${kind}: ${message}${location}`,
+  }];
 }
 
 function requestsExport(prompt: string): boolean {
@@ -257,6 +392,44 @@ function typeScriptSyntaxDiagnostics(text: string, sourcePath: string): Candidat
       const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, " ");
       return { key: `${diagnostic.code}:${message}`, message };
     });
+}
+
+/**
+ * Validate a complete source candidate without importing or executing it.
+ * Python uses its real parser so indentation and grammar are covered; other
+ * supported text languages retain the conservative delimiter parser.
+ */
+export async function validateCandidateFileSyntax(
+  sourcePath: string,
+  candidate: string,
+  baseline?: string,
+): Promise<void> {
+  const extension = extname(sourcePath).toLowerCase();
+  if (UNBALANCED_TEXT_EXTENSIONS.has(extension)) return;
+  const syntaxDiagnostics = async (text: string): Promise<CandidateSyntaxDiagnostic[]> => {
+    if (TYPESCRIPT_EXTENSIONS.has(extension)) {
+      return typeScriptSyntaxDiagnostics(text, sourcePath);
+    }
+    if (extension === ".py") return pythonSyntaxDiagnostics(text);
+    return balancedSyntaxDiagnostics(text, sourcePath);
+  };
+  const baselineDiagnostics = baseline === undefined
+    ? []
+    : await syntaxDiagnostics(baseline);
+  const candidateDiagnostics = await syntaxDiagnostics(candidate);
+  const parserFailure = candidateDiagnostics.find((diagnostic) =>
+    diagnostic.key.startsWith("python:parser-"));
+  if (parserFailure) {
+    throw new DirectCandidateValidationError(
+      `${sourcePath}: generated candidate could not be syntax-validated: ${parserFailure.message}.`,
+    );
+  }
+  const introduced = newlyIntroducedDiagnostic(baselineDiagnostics, candidateDiagnostics);
+  if (introduced) {
+    throw new DirectCandidateValidationError(
+      `${sourcePath}: generated candidate failed syntax validation: ${introduced.message}.`,
+    );
+  }
 }
 
 function validateCssReplacement(unit: ConversionUnit, code: string): void {
@@ -559,21 +732,6 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
   validateLanguageRuleExpectation(unit, code, sourcePath);
   validateExplicitRequirements(unit, code, sourcePath);
   if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);
-  if (UNBALANCED_TEXT_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;
   const { baseline, candidate } = await sourceAndCandidateForUnit(unit, code);
-  const typescript = TYPESCRIPT_EXTENSIONS.has(extname(sourcePath).toLowerCase());
-  const baselineDiagnostics = baseline === undefined
-    ? []
-    : typescript
-      ? typeScriptSyntaxDiagnostics(baseline, sourcePath)
-      : balancedSyntaxDiagnostics(baseline, sourcePath);
-  const candidateDiagnostics = typescript
-    ? typeScriptSyntaxDiagnostics(candidate, sourcePath)
-    : balancedSyntaxDiagnostics(candidate, sourcePath);
-  const introduced = newlyIntroducedDiagnostic(baselineDiagnostics, candidateDiagnostics);
-  if (introduced) {
-    throw new DirectCandidateValidationError(
-      `${sourcePath}: generated candidate failed syntax validation: ${introduced.message}.`,
-    );
-  }
+  await validateCandidateFileSyntax(sourcePath, candidate, baseline);
 }

@@ -476,6 +476,39 @@ test("issue 08: multiline inline replacements preserve the marker indentation", 
   }
 });
 
+test("Python candidates are checked with the real parser before write", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-python-syntax-"));
+  const path = join(root, "router.py");
+  try {
+    await writeFile(path, [
+      "def register():",
+      "    # @human call the use case and translate duplicate errors",
+      "    raise NotImplementedError",
+      "",
+    ].join("\n"));
+    const unit = (await discoverDirectUnits(root, "python")).units[0]!;
+    await assert.rejects(
+      () => validateGeneratedUnit(unit, [
+        "try:",
+        "        result = use_case()",
+        "      except DuplicateError as error:",
+        "        raise RuntimeError(str(error))",
+      ].join("\n")),
+      (error: unknown) =>
+        error instanceof DirectCandidateValidationError
+        && /(?:IndentationError|unindent|indent)/iu.test(error.message),
+    );
+    await validateGeneratedUnit(unit, [
+      "try:",
+      "    result = use_case()",
+      "except DuplicateError as error:",
+      "    raise RuntimeError(str(error))",
+    ].join("\n"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("issue 09: regex literal structure does not truncate FileMemory declarations", () => {
   const entries = extractStaticFileMemory("example.ts", [
     "const repeated = /a{2}/;",

@@ -439,7 +439,7 @@ test("a stale inline marker excludes every inline unit of that file fail-closed"
   }
 });
 
-test("non-JS/TS units bypass combined program validation unchanged", async () => {
+test("valid Python candidates bypass JS/TS program validation unchanged", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-staged-python-"));
   try {
     const outcome = await validateCandidateProject(root, [
@@ -447,6 +447,23 @@ test("non-JS/TS units bypass combined program validation unchanged", async () =>
     ]);
     assert.equal(outcome.validated, false);
     assert.equal(outcome.results[0]?.error, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("combined Python candidates with invalid grammar are withheld before write", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-python-invalid-"));
+  try {
+    const outcome = await validateCandidateProject(root, [
+      {
+        unit: fileUnit(root, "router.human", "router.py"),
+        code: "def register():\n    try:\n        run()\n      except RuntimeError:\n        recover()",
+      },
+    ]);
+    assert.equal(outcome.validated, false);
+    assert.equal(outcome.results[0]?.code, "");
+    assert.match(outcome.results[0]?.error ?? "", /combined Python candidate.*(?:IndentationError|unindent|indent)/iu);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
