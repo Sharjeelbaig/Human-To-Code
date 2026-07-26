@@ -40,6 +40,7 @@ import {
 import {
   attachModelSkills,
   loadSelectedModelSkills,
+  type ModelSkill,
   type SkillSelectionInput,
 } from "../skills/index.ts";
 import { languageProfile } from "../tools/discovery/languages.ts";
@@ -260,6 +261,38 @@ async function withSkills(prompt: PromptMessages, input: SkillSelectionInput): P
   return attachModelSkills(prompt, await loadSelectedModelSkills(input));
 }
 
+/**
+ * Resolve the exact package-owned guidance used for one coding request. Compiler
+ * replay keys call the same helper, so changing a selected skill invalidates
+ * cached bytes instead of replaying output generated under older guidance.
+ */
+export async function loadCodingModelSkills(
+  instruction: string,
+  options: GenerateOptions,
+): Promise<ModelSkill[]> {
+  const profile = languageProfile(options.language);
+  const extension = options.targetPath?.match(/\.[^.]+$/u)?.[0]?.toLowerCase();
+  const languageLabel = extension === ".tsx"
+    ? "TypeScript with JSX (TSX)"
+    : extension === ".jsx"
+      ? "JavaScript with JSX"
+      : profile.label;
+  return loadSelectedModelSkills({
+    phase: "coding",
+    languages: [options.language, languageLabel],
+    mode: options.inline ? "inline" : "file",
+    insertionContexts: options.insertionContext ? [options.insertionContext] : [],
+    targetPaths: options.targetPath ? [options.targetPath] : [],
+    instructions: [instruction],
+    evidence: [
+      options.projectMemory ?? "",
+      options.blueprint ?? "",
+      options.todos ?? "",
+      options.validationFailure ?? "",
+    ],
+  });
+}
+
 /** Send one direct-conversion request to OpenAI-compatible chat or Ollama. */
 export async function generateCode(instruction: string, options: GenerateOptions): Promise<string> {
   const profile = languageProfile(options.language);
@@ -288,22 +321,14 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
     ...(options.compilerMode ? { compilerMode: true } : {}),
   });
-  const prompt = options.compilerMode
-    ? basePrompt
-    : await withSkills(basePrompt, {
-        phase: "coding",
-        languages: [options.language, languageLabel],
-        mode: options.inline ? "inline" : "file",
-        insertionContexts: options.insertionContext ? [options.insertionContext] : [],
-        targetPaths: options.targetPath ? [options.targetPath] : [],
-        instructions: [instruction],
-        evidence: [
-          options.projectMemory ?? "",
-          options.blueprint ?? "",
-          options.todos ?? "",
-          options.validationFailure ?? "",
-        ],
-      });
+  // Every request reasons through the model, so the src/skills guidance is
+  // attached in compiler mode too — that is exactly when a small model most
+  // needs it. Compiler determinism comes from the lockfile/replay cache and the
+  // fixed sampling options above, not from withholding guidance.
+  const prompt = attachModelSkills(
+    basePrompt,
+    await loadCodingModelSkills(instruction, options),
+  );
   return requestChatCompletion(prompt, options);
 }
 

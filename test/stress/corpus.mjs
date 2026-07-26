@@ -305,6 +305,40 @@ const PROBLEMS = [
     fenceTag: "markdown",
     languages: ["markdown"],
   },
+  // Three markers in one file where each depends on the one before it: the
+  // parameter list, the body that uses those parameters, and the call site that
+  // relies on the resulting arity. One failure here must be reported as one root
+  // cause, not as three unrelated compiler errors.
+  {
+    id: "ts-interdependent-markers",
+    language: "typescript",
+    files: {
+      "index.ts": "function add(\n    //@human add the parameters x and y with number types\n) {\n    //@human add the logic of adding x and y\n}\n\n//@human console log the result of calling the add function with 1,2 parameters\n",
+    },
+    code: "x: number, y: number",
+    instructionEcho: "add the parameters that are x and y with number types",
+  },
+  // The same shape phrased differently. These must behave identically, which is
+  // exactly what a hand-written phrase whitelist failed to do.
+  {
+    id: "ts-interdependent-paraphrased",
+    language: "typescript",
+    files: {
+      "index.ts": "function add(\n    //@human add the parameters that are x and y with number types\n) {\n    //@human return the sum of x and y\n}\n\n//@human print add(1, 2)\n",
+    },
+    code: "x: number, y: number",
+    instructionEcho: "add the parameters which are x and y with number types",
+  },
+  {
+    id: "py-interdependent-markers",
+    language: "python",
+    files: {
+      "calc.py": "def add(\n    # @human add the parameters that are x and y with number types\n):\n    # @human return the sum of x and y\n",
+    },
+    code: "x: float, y: float",
+    fenceTag: "python",
+    instructionEcho: "add the parameters x and y",
+  },
   {
     id: "ts-mixed-marker-and-human",
     language: "typescript",
@@ -362,6 +396,7 @@ const BEHAVIOR_ORDER = [
   "html-in-ts",
   "deep-nest",
   "repeated-identical",
+  "instruction-echo",
   "classifier-not-json",
   "classifier-extra-field",
   "classifier-wrong-action",
@@ -444,6 +479,7 @@ function scenarioFor(problem, behavior, variant, compilerMode, index) {
     files: problem.files,
     ...(problem.chmod ? { chmod: problem.chmod } : {}),
     ...(problem.symlinks ? { symlinks: problem.symlinks } : {}),
+    ...(problem.instructionEcho ? { instructionEcho: problem.instructionEcho } : {}),
     code: problem.code,
     fenceTag: problem.fenceTag ?? "ts",
     config: deepMerge(baseConfig, variant.config),

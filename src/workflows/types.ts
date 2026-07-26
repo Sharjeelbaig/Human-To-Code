@@ -130,16 +130,17 @@ export interface GenerateUnitsOptions {
   retries?: number;
   onProgress?: (event: ConversionProgress) => void;
   /**
-   * Compiler-only deterministic lowering. A returned fragment bypasses the
-   * provider; undefined delegates the unit to ordinary model generation.
+   * Embedding-only compatibility hook. The bundled CLI never supplies it:
+   * built-in language rules validate model output and cannot bypass reasoning.
    */
   lower?: (
     unit: ConversionUnit,
     context: UnitGenerationContext,
   ) => string | undefined | Promise<string | undefined>;
   /**
-   * Conservative deterministic recovery after provider/validation failure.
-   * The recovered fragment must pass the same validator before it is accepted.
+   * Embedding-only compatibility hook after provider/validation failure. The
+   * bundled CLI retries the model and never recovers with built-in generated
+   * fragments.
    */
   recover?: (
     unit: ConversionUnit,
@@ -197,7 +198,7 @@ export interface GenerateOptions {
   apiKey?: string;
   /** Whether this request replaces one inline @human marker. */
   inline?: boolean;
-  /** Use the isolated compiler prompt path without agent skill injection. */
+  /** Use the isolated compiler prompt while retaining selected model skills. */
   compilerMode?: boolean;
   /** Earlier `@human` messages in this run, ordered and bounded. */
   sessionMemory?: string;

@@ -3,10 +3,6 @@
  * model output before it can ever become candidate code.
  */
 import { languageProfile } from "../tools/discovery/languages.ts";
-import {
-  compileInstructionWithLanguageRules,
-  prefersDeterministicLanguageRules,
-} from "../tools/compiler/language-rules.ts";
 import { potentialIntegrationRequests } from "../tools/validation/integration-validation.ts";
 import type { SpecDiagnostic } from "../tools/compiler/spec-diagnostics.ts";
 import { planClassificationRequestCount } from "./adaptive-planning.ts";
@@ -141,22 +137,11 @@ export function renderReceipt(
   const basePlanned = planning === undefined
     ? undefined
     : plannedRequestCounts(units, planning);
-  const directLocalUnits = options.compiler?.enabled !== true
-    && prefersDeterministicLanguageRules(model)
-    ? units.filter((unit) => compileInstructionWithLanguageRules(unit) !== undefined)
-    : [];
-  const directLocalInline = directLocalUnits.filter((unit) => unit.kind === "inline").length;
   const planned = basePlanned === undefined
     ? undefined
     : options.compiler?.enabled
       ? { ...basePlanned, classification: 0 }
-      : directLocalUnits.length > 0
-        ? {
-            ...basePlanned,
-            classification: Math.max(0, basePlanned.classification - directLocalInline),
-            coding: Math.max(0, basePlanned.coding - directLocalUnits.length),
-          }
-        : basePlanned;
+      : basePlanned;
   const multiPass =
     options.compiler?.enabled !== true && planning?.enabled === true;
   const adaptivePlanning = multiPass && planning?.adaptive === true;
@@ -166,7 +151,7 @@ export function renderReceipt(
   const requestBreakdown = planned === undefined
     ? `${units.length} planned`
     : options.compiler?.enabled
-      ? `up to ${plannedTotal} model request${plannedTotal === 1 ? "" : "s"} (deterministic language rules may compile units locally with no model request)`
+      ? `up to ${plannedTotal} model request${plannedTotal === 1 ? "" : "s"} (one coding request per unreplayed unit; lock replay may reduce this to zero)`
     : !multiPass
       ? `${plannedTotal} planned`
       : `${plannedTotal} planned (`
@@ -195,16 +180,13 @@ export function renderReceipt(
         ? "direct (inline turn classification, then coding; bounded cross-file repair may add requests)"
         : "direct (one model request per prompt; bounded cross-file repair may add requests)"}`,
     `  Context  : ${options.compiler?.enabled
-      ? "unit-local instruction and required inline file context"
+      ? "unit-local instruction, required inline file context, and selected model skills"
       : "compact current/projected ProjectMemory (target-specific, bounded)"}`,
     ...(options.compiler?.enabled
       ? [`  Compiler : on (${options.compiler.onUnderspecified === "error" ? "underspecified requests block the run" : "underspecified requests warn"})`]
       : []),
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
     ...(adaptiveDisclaimer ? [adaptiveDisclaimer] : []),
-    ...(directLocalUnits.length > 0
-      ? [`  Local rules: ${directLocalUnits.length} unambiguous target(s) compile locally; unmatched targets retain the normal direct-agent flow.`]
-      : []),
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
     ...(integrationDisclaimer ? [integrationDisclaimer] : []),
     ...(conditional !== undefined && conditional.compilerRepairUpTo > 0

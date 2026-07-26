@@ -106,6 +106,10 @@ const CODE_BEHAVIORS = {
   huge: () => `// ${"y".repeat(HUGE_BYTES)}\n`,
   "deep-nest": () => `const deep = ${"[".repeat(2000)}1${"]".repeat(2000)};\n`,
   "repeated-identical": (code) => code,
+  // What a sub-billion-parameter model actually does: hand the request back,
+  // lightly reworded, as a comment instead of implementing it.
+  "instruction-echo": (code, ctx) =>
+    `// @human ${ctx.instructionEcho ?? "restate of the original request"}\n`,
   "html-in-ts": () => "<!doctype html>\n<html><body>Not TypeScript</body></html>\n",
   "json-object": (code) => JSON.stringify({ code }),
   "leading-blank-lines": (code) => `\n\n\n${code}`,
@@ -289,6 +293,7 @@ export async function startMockModel(scenario) {
     const render = CODE_BEHAVIORS[behavior] ?? CODE_BEHAVIORS.ok;
     sendContent(response, render(scenario.code ?? "", {
       fenceTag: scenario.fenceTag ?? "ts",
+      ...(scenario.instructionEcho ? { instructionEcho: scenario.instructionEcho } : {}),
     }), scenario);
   }
 

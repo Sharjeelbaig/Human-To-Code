@@ -254,9 +254,8 @@ async function runScenario(scenario) {
     // `budgets.timeoutMs` bounds each provider request, so a fixture with many
     // targets legitimately spends it once per target before finishing.
     const targets = Object.keys(scenario.files).length;
-    const budget = scenario.behavior === "hang"
-      ? 20_000 + targets * 3_000
-      : 45_000;
+    const budget = Number(process.env.HUMAN_TO_CODE_STRESS_BUDGET_MS)
+      || (scenario.behavior === "hang" ? 20_000 + targets * 3_000 : 45_000);
     const run = await runCli(root, scenario.argv, budget);
     const files = await walk(root);
     const contents = {};

@@ -224,10 +224,29 @@ function selectorIdTokens(selector: string): string[] {
   return (selector.match(/#[A-Za-z0-9_-]+/gu) ?? []).map((entry) => entry.slice(1));
 }
 
+/**
+ * Longest prelude, declaration block, and nested selector this scan will read.
+ *
+ * The pattern below is greedy and, unbounded, retried every start position at
+ * every length: on a long line containing no brace at all it degraded to
+ * quadratic time, and a multi-megabyte candidate turned a conversion into an
+ * hours-long CPU spin. Real CSS is nowhere near these limits, and because
+ * reference findings are advisory rather than a gate, the worst consequence of a
+ * bound is a missed hint instead of a stalled run.
+ */
+const MAX_SELECTOR_CHARS = 200;
+const MAX_DECLARATION_BLOCK_CHARS = 2_000;
+
 function expandedNestedSelectors(content: string): string[] {
   const text = content.replace(/\/\*[\s\S]*?\*\//gu, " ");
+  // Nesting requires both a `&` and a block; without them there is nothing to
+  // expand and no reason to scan at all.
+  if (!text.includes("&") || !text.includes("{")) return [];
   const selectors: string[] = [];
-  const pattern = /([^{};]+)\{[^{}]*?(&[^{}]+)\{/gu;
+  const pattern = new RegExp(
+    String.raw`([^{};]{1,${MAX_SELECTOR_CHARS}})\{[^{}]{0,${MAX_DECLARATION_BLOCK_CHARS}}?(&[^{}]{1,${MAX_SELECTOR_CHARS}})\{`,
+    "gu",
+  );
   for (const match of text.matchAll(pattern)) {
     const parent = (match[1] ?? "").trim();
     const nested = (match[2] ?? "").trim();

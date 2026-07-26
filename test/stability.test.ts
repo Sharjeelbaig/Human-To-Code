@@ -158,6 +158,36 @@ test("generated code carrying a live @human marker is refused before any write",
   );
 });
 
+test("a model restating the instruction is diagnosed as that, not as a stray marker", async () => {
+  const unit = await unitFor("// @human add the parameters x and y with number types\n");
+  await assert.rejects(
+    // What a sub-billion-parameter model actually returns: the request, reworded.
+    validateGeneratedUnit(unit, "// @human add the parameters that are x and y with number types\n"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /restated the instruction as an @human comment/u);
+      assert.match(error.message, /too small for code generation/u);
+      return true;
+    },
+  );
+});
+
+test("a genuinely new instruction in generated code keeps the stray-marker wording", async () => {
+  const unit = await unitFor("// @human add a greeter\n");
+  await assert.rejects(
+    validateGeneratedUnit(
+      unit,
+      "export const greet = () => \"hi\";\n// @human now wire up the database connection pool\n",
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /contains a live @human marker/u);
+      assert.doesNotMatch(error.message, /restated the instruction/u);
+      return true;
+    },
+  );
+});
+
 test("marker-shaped text discovery would ignore is still allowed in generated code", async () => {
   const unit = await unitFor("// @human add a help string\n");
   // Inside a string literal, so a later run's lexical scan never sees a marker.

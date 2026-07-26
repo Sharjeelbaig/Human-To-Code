@@ -1,5 +1,5 @@
 /** Central model-facing prompt builders. Host policy remains in deterministic code. */
-export const PROMPT_VERSION = 6;
+export const PROMPT_VERSION = 7;
 
 export * from "./direct-blueprint.ts";
 export * from "./direct-conversion.ts";

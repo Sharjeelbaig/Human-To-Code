@@ -11,8 +11,8 @@
  * or sandboxed here, and passing it is never presented as `VERIFIED`.
  */
 import { ContextSecurityError, scanSecrets } from "../../memory/context.ts";
-import { extname } from "node:path";
-import { buildCandidateOverlay, type CandidateOverlay } from "./candidate-overlay.ts";
+import { extname, resolve } from "node:path";
+import { buildCandidateOverlay, overlayPathKey, type CandidateOverlay } from "./candidate-overlay.ts";
 import { validateGeneratedUnit } from "./candidate-validation.ts";
 import { attributeDiagnostics, buildOverlayDependencyGroups } from "./dependency-graph.ts";
 import {
@@ -259,14 +259,54 @@ export async function validateCandidateProject(
     if (repaired) continue;
 
     for (const [group, diagnostics] of groupDiagnostics) {
-      const reason = `combined project validation failed for this dependency group: ${describeDiagnostics(diagnostics)}`;
-      for (const key of groups.members.get(group) ?? []) {
+      const keys = groups.members.get(group) ?? [];
+      // A unit that already failed contributes nothing to the candidate, so the
+      // remaining diagnostics are usually consequences of that hole rather than
+      // independent problems. Naming the earlier failure stops one root cause
+      // from being reported as several unrelated compiler errors.
+      const blocker = earlierFailureInGroup(root, results, keys);
+      const reason = blocker === undefined
+        ? `combined project validation failed for this dependency group: ${describeDiagnostics(diagnostics)}`
+        // The blocker reports its own reason on its own line, so repeating that
+        // text here only buries the one new fact: which unit to fix first.
+        : `blocked by the earlier failure at ${describeUnitLocation(blocker.unit)} in the same dependency group — fix that first.`
+          + ` Diagnostics seen here: ${describeDiagnostics(diagnostics)}`;
+      for (const key of keys) {
         for (const unit of overlay.files.get(key)!.units) rejectUnit(unit, reason);
       }
     }
   }
 
   return { results, validated: true, repairRequests };
+}
+
+/** Where a unit lives, for a diagnostic a person has to act on. */
+function describeUnitLocation(unit: ConversionUnit): string {
+  const path = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+  return unit.line === undefined ? path : `${path}:${unit.line}`;
+}
+
+/** The overlay key a unit's candidate text belongs to. */
+function unitOverlayKey(root: string, unit: ConversionUnit): string {
+  return unit.kind === "file"
+    ? overlayPathKey(resolve(root, unit.outputPath!))
+    : overlayPathKey(unit.absoluteSource);
+}
+
+/**
+ * The first already-rejected unit belonging to one of these overlay keys, which
+ * is the failure the group's remaining diagnostics most likely descend from.
+ */
+function earlierFailureInGroup(
+  root: string,
+  results: readonly GeneratedConversionUnit[],
+  keys: readonly string[],
+): GeneratedConversionUnit | undefined {
+  const inGroup = new Set(keys);
+  return results.find((entry) =>
+    entry.error !== undefined
+    && entry.contextOnly !== true
+    && inGroup.has(unitOverlayKey(root, entry.unit)));
 }
 
 function applyOverlayExclusions(

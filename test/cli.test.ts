@@ -374,7 +374,10 @@ test("restoring identical inline markers replays cached snippets with zero reque
     const receipt = await cli([root, "--dry-run"]);
     assert.equal(receipt.code, 0, receipt.stderr || receipt.stdout);
     assert.match(receipt.stdout, /Engine\s+: compiler \(isolated unit codegen/u);
-    assert.match(receipt.stdout, /unit-local instruction and required inline file context/u);
+    assert.match(
+      receipt.stdout,
+      /unit-local instruction, required inline file context, and selected model skills/u,
+    );
     assert.doesNotMatch(receipt.stdout, /turn classification|ProjectMemory/u);
 
     const first = await cli(

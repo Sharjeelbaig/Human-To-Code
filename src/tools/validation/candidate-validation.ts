@@ -5,7 +5,7 @@ import ts from "typescript";
 import { replaceInlineMarker } from "../file-ops/replacement.ts";
 import { MARKER_SCANNED_EXTENSIONS } from "../discovery/discovery.ts";
 import { extractInlineMarkers } from "../discovery/marker-parser.ts";
-import { compileInstructionWithLanguageRules } from "../compiler/language-rules.ts";
+import { expectedCodeFromLanguageRules } from "../compiler/language-rules.ts";
 import type { ConversionUnit, GeneratedConversionUnit } from "../../workflows/types.ts";
 
 export class DirectCandidateValidationError extends Error {
@@ -115,6 +115,38 @@ function validateExplicitRequirements(
       `${sourcePath}: candidate violates explicit requirements: ${violations.join(" ")}`,
     );
   }
+}
+
+/**
+ * Compare only formatting-insensitive fragments. The rule layer is deliberately
+ * narrow: when it has a complete expectation, extra statements or changed
+ * operands are a contradiction rather than an alternative implementation.
+ * Semicolons are optional in several supported languages, so one trailing
+ * semicolon is not treated as a behavioral difference.
+ */
+function comparableRuleFragment(value: string): string {
+  return value
+    .trim()
+    .replace(/;\s*$/u, "")
+    .replace(/\s+/gu, "");
+}
+
+function validateLanguageRuleExpectation(
+  unit: ConversionUnit,
+  code: string,
+  sourcePath: string,
+): void {
+  const expected = expectedCodeFromLanguageRules(unit);
+  if (
+    expected === undefined
+    || comparableRuleFragment(code) === comparableRuleFragment(expected)
+  ) {
+    return;
+  }
+  throw new DirectCandidateValidationError(
+    `${sourcePath}: model output contradicts a deterministic structural check`
+    + ` for this instruction; expected a fragment equivalent to ${JSON.stringify(expected)}.`,
+  );
 }
 
 function newlyIntroducedDiagnostic(
@@ -407,8 +439,6 @@ export function normalizeCompilerGeneratedUnitCode(
   unit: ConversionUnit,
   code: string,
 ): string {
-  const ruleCompiled = compileInstructionWithLanguageRules(unit);
-  if (ruleCompiled !== undefined) return ruleCompiled;
   const normalized = normalizeGeneratedUnitCode(unit, code);
   const wrapper = generatedFunctionWrapper(normalized);
   if (!wrapper) return normalized;
@@ -476,13 +506,44 @@ export async function candidateTextsForGenerated(
  * decides this, so marker-shaped text inside a string or a nested comment — the
  * only kind discovery ignores — is still allowed through.
  */
-function validateNoLiveMarker(code: string, sourcePath: string): void {
+function comparableWords(value: string): string[] {
+  return value.toLowerCase().match(/[a-z0-9_$]+/gu) ?? [];
+}
+
+/**
+ * Whether the emitted marker is essentially the unit's own instruction handed
+ * back. Small models frequently restate the request as a comment instead of
+ * writing code, and that deserves a different diagnosis from a model inventing a
+ * genuinely new instruction — the first means "this model cannot do the task",
+ * the second means "the output would queue work for a later run".
+ */
+function restatesInstruction(markerPrompt: string, instruction: string): boolean {
+  const emitted = comparableWords(markerPrompt);
+  const asked = new Set(comparableWords(instruction));
+  if (emitted.length === 0 || asked.size === 0) return false;
+  const shared = emitted.filter((word) => asked.has(word)).length;
+  return shared / emitted.length >= 0.6;
+}
+
+function validateNoLiveMarker(
+  unit: ConversionUnit,
+  code: string,
+  sourcePath: string,
+): void {
   if (!MARKER_SCANNED_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;
   const markers = extractInlineMarkers(code, sourcePath);
   if (markers.length === 0) return;
+  const emitted = markers[0]!.prompt;
+  if (restatesInstruction(emitted, unit.prompt)) {
+    throw new DirectCandidateValidationError(
+      `${sourcePath}: the model restated the instruction as an @human comment instead of writing code`
+      + ` (returned ${JSON.stringify(emitted.slice(0, 80))}).`
+      + " This is what a model too small for code generation typically does; try a larger coding model.",
+    );
+  }
   throw new DirectCandidateValidationError(
     `${sourcePath}: generated code contains a live @human marker (${JSON.stringify(
-      markers[0]!.prompt.slice(0, 80),
+      emitted.slice(0, 80),
     )}), which a later run would execute as a new instruction.`,
   );
 }
@@ -494,7 +555,8 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
     throw new DirectCandidateValidationError(`${unit.sourcePath}: model formatting remained in generated source.`);
   }
   const sourcePath = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
-  validateNoLiveMarker(code, sourcePath);
+  validateNoLiveMarker(unit, code, sourcePath);
+  validateLanguageRuleExpectation(unit, code, sourcePath);
   validateExplicitRequirements(unit, code, sourcePath);
   if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);
   if (UNBALANCED_TEXT_EXTENSIONS.has(extname(sourcePath).toLowerCase())) return;

@@ -50,8 +50,7 @@ import {
   classifyUnitsNeedingPlanning,
   normalizeGeneratedUnitCode,
   normalizeCompilerGeneratedUnitCode,
-  compileInstructionWithLanguageRules,
-  prefersDeterministicLanguageRules,
+  isModelLikelyTooSmallForCode,
   conditionalRequestAllowance,
   plannedRequestCounts,
   discoverDirectUnits,
@@ -63,6 +62,7 @@ import {
   generateRepairCode,
   generateSpecDiagnostics,
   generateUnitTodos,
+  loadCodingModelSkills,
   hashCanonical,
   sha256Text,
   compileKey,
@@ -456,6 +456,24 @@ function isLoopbackProviderHost(hostname: string): boolean {
 }
 
 /**
+ * Warn when the configured model is too small to generate code reliably. Model
+ * size never changes routing: replayed units can still use cached bytes, but
+ * every unit requiring fresh output must be reasoned through by the provider.
+ */
+function modelCapabilityWarnings(
+  units: readonly ConversionUnit[],
+  model: string,
+): string[] {
+  if (!isModelLikelyTooSmallForCode(model) || units.length === 0) return [];
+  return [
+    `${model} is far too small to generate code reliably; all ${units.length} request(s) `
+    + "require model reasoning when fresh output is needed. "
+    + "Expect it to restate the instruction rather than implement it — use a coding model "
+    + "such as qwen2.5-coder:7b.",
+  ];
+}
+
+/**
  * Fail fast on a provider configuration this release cannot honor.
  *
  * Building the adapter *is* the check: its constructor is what rejects an
@@ -820,6 +838,8 @@ async function buildCommand(
       output(`  ! ${diagnostic.sourcePath}:${diagnostic.line ?? 1}: ${diagnostic.message}`, false);
     for (const warning of compileGate?.warnings ?? [])
       output(`  ! ${warning}`, false);
+    for (const warning of modelCapabilityWarnings(units, model))
+      output(`  ! ${warning}`, false);
   }
   if (units.length === 0) return 3;
   if (cli.dryRun) {
@@ -874,10 +894,22 @@ async function buildCommand(
           isolatedCompilation: true,
         }),
       ].join("\n");
+      const unitLanguage = unit.language ?? language;
+      const selectedSkills = await loadCodingModelSkills(unit.prompt, {
+        provider: providerName,
+        model,
+        language: unitLanguage,
+        targetPath: target,
+        compilerMode: true,
+        inline: unit.kind === "inline" && !unit.ownsWholeFile,
+        ...(!unit.ownsWholeFile && unit.insertionContext
+          ? { insertionContext: unit.insertionContext }
+          : {}),
+      });
       const key = compileKey({
         instruction: unit.prompt,
         targetPath: target,
-        language: unit.language ?? language,
+        language: unitLanguage,
         kind: unit.kind,
         resolvedFacets: resolvedFacetRecord(unit, {
           vocabulary: effective.compiler.vocabulary,
@@ -885,7 +917,7 @@ async function buildCommand(
         promptVersion: PROMPT_VERSION,
         provider: providerName,
         model,
-        skillsDigest: hashCanonical([]),
+        skillsDigest: hashCanonical(selectedSkills),
         renderedContextDigest: sha256Text(renderedContext),
       });
       compileKeys.set(unit, key);
@@ -1035,12 +1067,6 @@ async function buildCommand(
     output(`\nConverting ${generationUnits.length} item(s) with ${model}…`, false);
 
   const planning = direct.planning;
-  const preferLocalLanguageRules =
-    effective.compiler.enabled
-    || (
-      providerName === "ollama"
-      && prefersDeterministicLanguageRules(model)
-    );
   const requestOptions = {
     provider: providerName,
     model,
@@ -1209,14 +1235,7 @@ async function buildCommand(
           ...(effective.compiler.enabled ? { compilerMode: true } : {}),
           ...(!unit.ownsWholeFile && unit.insertionContext
             ? {
-                insertionContext:
-                  !effective.compiler.enabled
-                  && (
-                    unit.insertionContext === "parameter-list"
-                    || unit.insertionContext === "function-body"
-                  )
-                    ? "statement" as const
-                    : unit.insertionContext,
+                insertionContext: unit.insertionContext,
               }
             : {}),
           ...(!unit.ownsWholeFile && unit.insertionOwner
@@ -1233,12 +1252,6 @@ async function buildCommand(
       },
       {
         retries: 1,
-        ...(preferLocalLanguageRules
-          ? { lower: (unit: ConversionUnit) => compileInstructionWithLanguageRules(unit) }
-          : {}),
-        ...(!effective.compiler.enabled
-          ? { recover: (unit: ConversionUnit) => compileInstructionWithLanguageRules(unit) }
-          : {}),
         validate: validateGeneratedUnit,
         ...(effective.compiler.enabled
           ? { sessionMemory: false }
@@ -1265,11 +1278,7 @@ async function buildCommand(
                   },
                 ),
               shouldClassify: (unit: ConversionUnit) =>
-                unit.kind === "inline"
-                && !(
-                  preferLocalLanguageRules
-                  && compileInstructionWithLanguageRules(unit) !== undefined
-                ),
+                unit.kind === "inline",
               projectMemory,
             }),
         contextCharBudget,

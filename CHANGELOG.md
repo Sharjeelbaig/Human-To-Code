@@ -14,6 +14,70 @@ Structured entries start at `0.1.47`. Earlier history lives in the commit log:
 git log --oneline
 ```
 
+## [1.0.1]
+
+Architecture and stability release. Every item below was reported by, or found
+while investigating, a single real failure: three interdependent `@human`
+markers in one file where rewording one instruction turned a one-second success
+into three cascading failures.
+
+### Fixed
+
+- **Every fresh instruction now goes through model reasoning.** The compiler
+  previously used English regular expressions as a hidden code generator:
+  matching phrases skipped the configured model, while equivalent rewordings
+  and other human languages used it. The CLI no longer supplies deterministic
+  lowering or recovery callbacks. English-match, English-nonmatch, and
+  non-English instructions all take the model path; only lock/cache replay can
+  skip a fresh provider request.
+- **Language rules are validation-only.** For a narrow explicit fragment they
+  may derive an expected name/type/operator/call after generation and reject a
+  contradiction, but that expected fragment is never written as generated code.
+  Instructions are normalized (connective filler such as `that are`, `which
+  are`, `named`, `called`, `consisting of`, `both` is removed) so equivalent
+  English phrasings receive the same optional check. The validator also covers
+  reversed parameters, per-name annotations, noun/spelled/literal arithmetic,
+  and direct call syntax.
+- **Compiler coding requests retain selected model skills.** Isolated compiler
+  mode still omits ProjectMemory, session history, blueprints, and todos, but it
+  now carries the package-owned implementation guidance selected for the exact
+  language and grammar slot. The selected skill content is hashed into compiler
+  replay keys so changed guidance cannot reuse stale cached bytes.
+- **A pathological candidate no longer spins the CPU for hours.** The CSS nesting
+  scan used an unbounded greedy pattern
+  (`([^{};]+)\{[^{}]*?(&[^{}]+)\{`) that retried every start position at every
+  length. On a long line containing no brace this was quadratic: a 4 MiB
+  candidate extrapolated to roughly eight hours of pure CPU with no output and no
+  timeout, because a per-request budget cannot bound local work. Quantifiers are
+  now bounded and the scan exits early when there is nothing to expand — 4 MiB
+  went from unbounded to 244 ms.
+- **A model restating the instruction is diagnosed as exactly that.** Small models
+  commonly return the request back as a comment. That was reported as a generic
+  "generated code contains a live @human marker", which reads as though the tool
+  were rejecting the author's own instruction. It now says the model restated the
+  instruction instead of writing code, and names the likely cause.
+- **Cascading failures name their root cause.** When one unit fails, the units
+  that depend on it were each reported with raw compiler errors
+  (`Cannot find name 'x'`), turning one root cause into three unrelated-looking
+  failures. Dependent units now say which unit to fix first.
+- **A model too small to generate code is called out before the run.** Configuring
+  a sub-billion-parameter model now produces a warning that all fresh requests
+  require model reasoning, what that model is likely to do instead, and what to
+  use.
+
+### Added
+
+- `test/regex-safety.test.ts` extracts every regular expression in `src/` and
+  measures it against hostile input at two sizes, failing on superlinear growth.
+  It reproduces the CSS-nesting blow-up (16.5x across a 4x size step) and covers
+  the whole codebase rather than the one pattern that was found by hand.
+- `test/compiler-rule-paraphrases.test.ts` pins the deterministic instruction
+  validator: which phrasings yield a narrow expectation, which leave validation
+  to the general gates, and that equivalent phrasings produce identical
+  expectations in every language profile.
+- Stress corpus: interdependent-marker fixtures in TypeScript and Python, plus an
+  `instruction-echo` endpoint behavior reproducing what a tiny model returns.
+
 ## [1.0.0]
 
 First stable release. This release freezes the **interfaces**, not the quality of

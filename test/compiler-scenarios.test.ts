@@ -276,11 +276,10 @@ test("compiler mode is byte-deterministic across web, algorithm, pseudocode, and
     assert.equal(firstResult.integrationRepairRequests ?? 0, 0);
     assert.ok(
       compilerPrompts.every((prompt) =>
-        !/<PROJECT_MEMORY>|<SESSION_MEMORY>|<SELECTED_SKILLS>|<TODO_LIST>/u.test(
-          prompt,
-        )
+        /<SELECTED_SKILLS>/u.test(prompt)
+        && !/<PROJECT_MEMORY>|<SESSION_MEMORY>|<TODO_LIST>/u.test(prompt)
       ),
-      "compiler requests must contain only unit-local compilation evidence",
+      "compiler requests must include selected skills but no project/session/planning context",
     );
     assert.deepEqual([...firstResult.written].sort(), Object.keys(outputs).sort());
     assert.equal(requests, Object.keys(outputs).length);
