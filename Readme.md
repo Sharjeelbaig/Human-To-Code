@@ -193,10 +193,12 @@ Node.js 24 or newer is required.
   <img src="assets/run-pipeline.svg" alt="Discovery and the receipt make no provider requests. Your confirmation is the gate. After it the run plans, generates, validates and writes, with one bounded repair before a group is rejected" width="100%">
 </p>
 
-The host stays in control and the model only writes code. Each inline marker
-gets a small classification request, then edit turns get a plain code
-completion. Whole `.human` files go straight to coding. Nothing here needs
-tool-calling, so models that can only produce plain text still work.
+The host stays in control and the model only proposes code or requests bounded
+read-only evidence. Each inline marker gets a small classification request,
+then edit turns use a strict generated-code schema. Whole `.human` files go
+straight to coding. On loopback Ollama the model may call `request_context`
+before answering; tool use is optional, so a model can still finish without a
+tool call.
 
 ### What it picks up
 
@@ -547,30 +549,25 @@ provider this context only goes out after you enable
 ### Budget semantics
 
 > **Which of this applies to `npx human-to-code .`** — Read this first, because
-> two request paths exist and they do not enforce the same things.
+> auxiliary and coding requests do not yet enforce the same things.
 >
-> The default direct conversion described in [Generation engine](#generation-engine)
-> talks to your endpoint through a deliberately small client. What it guarantees
-> is: **every request is bounded by `budgets.timeoutMs`** and abandoned if the
-> endpoint stalls, **a response above 16 MiB is refused** rather than buffered,
-> **the configured model string is sent verbatim**, a provider with no adapter in
-> this release is refused, and a remote endpoint is refused outright unless
-> `privacy.remoteProviderConsent` is set *and* `provider.pricing` is declared.
+> Normal coding and every autonomous context follow-up use the certified
+> adapter path: strict structured output, pinned transport, pessimistic
+> pre-request reservation, and cumulative request/token/cost accounting.
 >
-> What it does **not** do: reserve spend per request against `maxCostUsd`, gate on
-> cumulative token counts, or pin the socket to a pre-vetted DNS answer. Those are
-> properties of the adapter transport, and the paragraphs below describe *that*
-> path. For a remote endpoint, treat `maxCostUsd` as a declaration of intent and
-> keep your provider-side spend limits switched on — they are what actually caps
-> your bill.
+> Classification, blueprint, todo, audit, and repair passes still use the
+> smaller chat client. They retain request timeout and 16 MiB response limits,
+> exact model routing, remote consent, and provider allowlisting, but do not yet
+> enter the cumulative adapter budget. Therefore `maxCostUsd` is not a complete
+> whole-run bill ceiling; keep provider-side spend limits enabled.
 
-Request count, input and output tokens, repair count, and elapsed time are
-cumulative hard gates. Before anything hits the network the host pessimistically
+For adapter-backed coding turns, request count, input and output tokens, cost,
+and elapsed time are cumulative hard gates. Before a coding or tool-follow-up
+request hits the network the host pessimistically
 charges a tokenizer-independent input upper bound plus the entire requested
-output allowance, and a repair request persists that checkpoint before it is
-sent. Usage the provider reports reconciles the reservation afterward, while a
-failed or interrupted request keeps the conservative charge. Context ranking uses
-an estimate and is a separate limit.
+output allowance. Usage the provider reports reconciles the reservation
+afterward, while a failed or interrupted request keeps the conservative charge.
+Context ranking uses an estimate and is a separate limit.
 
 Remote generation is blocked before the first request unless both
 `provider.pricing.inputUsdPerMillionTokens` and `outputUsdPerMillionTokens` are
@@ -605,9 +602,9 @@ reproducible weight pin.
 
 The OpenAI adapter uses the Responses API with strict JSON-schema output and the
 exact model ID you configured. The default credential variable is
-`OPENAI_API_KEY`. Because OpenAI is remote, compiler context tools are off: the
-provider receives only the manifest you previewed before consenting, and can't
-ask for another file.
+`OPENAI_API_KEY`. Because OpenAI is remote, dynamic project-context tools are
+off: the provider receives only the bounded context assembled before consent
+and cannot ask for another file.
 
 ```json
 {
@@ -658,10 +655,14 @@ To name an explicit local endpoint, acknowledge it:
 }
 ```
 
-Local Ollama receives the patch schema through its native `format` field, and the
-output is still parsed and schema-validated locally. Because the endpoint is
-verified loopback, it may use the bounded compiler context tool for up to eight
-extra evidence requests, and every one appears in the final manifest.
+Local Ollama receives the generated-code schema through its native `format`
+field, and the output is still parsed and schema-validated locally. In normal
+direct mode, a verified loopback model may make up to eight `request_context`
+calls across the whole run. The host exact-validates each call, confines it to
+an analyzed target workspace, applies ignored/excluded/protected-path policy,
+materializes secret-scanned bounded evidence, and records provenance in the
+final context-manifest summary. Compiler mode remains isolated and does not use
+dynamic context tools.
 
 ### Ollama Cloud
 

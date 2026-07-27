@@ -4,6 +4,7 @@ import {
   diagnoseUnits,
   type SpecDiagnostic,
 } from "../tools/compiler/spec-diagnostics.ts";
+import { diagnoseInstructionImports } from "../tools/compiler/import-diagnostics.ts";
 import type { ConversionUnit } from "./types.ts";
 
 export interface CompileGateResult {
@@ -46,7 +47,10 @@ export async function runCompileGate(
   compiler: CompilerConfigV1,
   hooks: CompileGateHooks = {},
 ): Promise<CompileGateResult> {
-  const local = diagnoseUnits(units, { vocabulary: compiler.vocabulary });
+  const local = [
+    ...diagnoseUnits(units, { vocabulary: compiler.vocabulary }),
+    ...diagnoseInstructionImports(units),
+  ];
   const semantic: SpecDiagnostic[] = [];
   const warnings: string[] = [];
   let semanticRequests = 0;
@@ -68,8 +72,12 @@ export async function runCompileGate(
   const diagnostics = stableDiagnostics([...local, ...semantic]);
   return {
     blocked:
-      compiler.onUnderspecified === "error"
-      && diagnostics.some((item) => item.severity === "error"),
+      diagnostics.some((item) =>
+        item.severity === "error"
+        && (
+          item.code === "E-IMPORT-UNRESOLVED"
+          || compiler.onUnderspecified === "error"
+        )),
     diagnostics,
     warnings,
     semanticRequests,

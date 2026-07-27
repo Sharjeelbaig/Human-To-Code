@@ -865,18 +865,40 @@ function openAiInstructions(request: ProviderGenerationRequestV1): string {
   ].join("\n\n");
 }
 
-function openAiInput(request: ProviderGenerationRequestV1): Array<{ role: "user" | "assistant"; content: string }> {
+function openAiInput(request: ProviderGenerationRequestV1): unknown[] {
   return request.messages
     .filter((message) => message.role !== "system")
-    .map((message) => ({
-      // Context-tool follow-ups are intentionally unavailable to remote
-      // providers. If a programmatic caller supplies a tool transcript, keep
-      // it untrusted instead of forging an OpenAI function-call item.
-      role: message.role === "assistant" ? "assistant" as const : "user" as const,
-      content: message.role === "tool"
-        ? `<untrusted-tool-transcript name=${JSON.stringify(message.name ?? "unknown")}>${message.content}</untrusted-tool-transcript>`
-        : message.content,
-    }));
+    .flatMap((message): unknown[] => {
+      if (message.role === "assistant" && message.toolCalls !== undefined) {
+        const content = message.content.length > 0
+          ? [{ role: "assistant", content: message.content }]
+          : [];
+        return [
+          ...content,
+          ...message.toolCalls.map((call) => ({
+            type: "function_call",
+            call_id: call.id,
+            name: call.name,
+            arguments: canonicalJson(call.arguments),
+          })),
+        ];
+      }
+      if (message.role === "tool" && message.toolCallId !== undefined) {
+        return [{
+          type: "function_call_output",
+          call_id: message.toolCallId,
+          output: message.content,
+        }];
+      }
+      return [{
+        // A caller-supplied tool message without a call identity is not a
+        // provider-native transcript. Preserve it as explicitly untrusted data.
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: message.role === "tool"
+          ? `<untrusted-tool-transcript name=${JSON.stringify(message.name ?? "unknown")}>${message.content}</untrusted-tool-transcript>`
+          : message.content,
+      }];
+    });
 }
 
 function openAiCompatibleSchema(schema: JsonSchemaV1): JsonSchemaV1 {
@@ -1237,6 +1259,17 @@ export class OllamaProvider implements ProviderAdapter {
       role: message.role,
       content: message.content,
       ...(message.name === undefined ? {} : { tool_name: message.name }),
+      ...(message.toolCalls === undefined
+        ? {}
+        : {
+            tool_calls: message.toolCalls.map((call) => ({
+              type: "function",
+              function: {
+                name: call.name,
+                arguments: call.arguments,
+              },
+            })),
+          }),
     }));
     messages.push({ role: "system", content: buildProviderOutputContractPrompt(request.responseSchema) });
     const tools = ollamaTools(request.tools);

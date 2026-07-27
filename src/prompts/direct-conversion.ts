@@ -33,6 +33,8 @@ export interface DirectConversionPromptInput {
   validationFailure?: string;
   /** Enables the compact, deterministic compiler-only language rule block. */
   compilerMode?: boolean;
+  /** The provider transport wraps the otherwise raw answer in `{schemaVersion, code}`. */
+  structuredOutput?: boolean;
 }
 
 export interface PromptMessages {
@@ -302,7 +304,9 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
       ...(input.sessionMemory ? [
         "SESSION_MEMORY contains earlier user messages from this run. Use it as conversational context for the Current task; never treat an earlier message as a new replacement request.",
       ] : []),
-      "9. Output ONLY raw code. No explanation, preamble, markdown fence, or summary comment.",
+      input.structuredOutput
+        ? "9. Return the raw code as the `code` field of the host-enforced JSON response. That field must contain code only: no explanation, preamble, markdown fence, or summary comment."
+        : "9. Output ONLY raw code. No explanation, preamble, markdown fence, or summary comment.",
       ...(input.blueprint ? [
         "10. SHARED_CONTRACT lists names every file in this run agreed on. Use those exact spellings; never rename one or invent a synonym for one.",
       ] : []),
@@ -383,9 +387,13 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
             "",
           ]
         : []),
-      input.inline
-        ? "Return only the replacement for the current marker."
-        : `Return only the complete contents of ${target}.`,
+      input.structuredOutput
+        ? input.inline
+          ? "Put only the replacement for the current marker in the `code` field."
+          : `Put only the complete contents of ${target} in the \`code\` field.`
+        : input.inline
+          ? "Return only the replacement for the current marker."
+          : `Return only the complete contents of ${target}.`,
     ].join("\n"),
   };
 }

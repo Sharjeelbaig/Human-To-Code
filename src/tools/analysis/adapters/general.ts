@@ -36,7 +36,7 @@ export function normalizeGeneralLanguage(raw: string): string {
  * workspace was recognized.
  */
 export function buildGeneralWorkspace(
-  context: AnalyzerContext,
+  _context: AnalyzerContext,
   language: string,
 ): WorkspaceProfileV1 {
   const normalizedLanguage = normalizeGeneralLanguage(language);

@@ -243,6 +243,65 @@ test("OpenAI keeps policy in instructions and preserves conversational trust rol
   ]);
 });
 
+test("OpenAI preserves native function-call and tool-result transcript identity", async () => {
+  let calledInit: RequestInit | undefined;
+  const provider = new OpenAIResponsesProvider(
+    { name: "openai", model: "requested-model", pricing: TEST_PRICING },
+    {
+      env: { OPENAI_API_KEY: "key" },
+      resolveHostname: PUBLIC_RESOLVER,
+      fetch: async (_url, init) => {
+        calledInit = init;
+        return response({
+          id: "tool-follow-up",
+          model: "requested-model",
+          status: "completed",
+          output_text: "{\"ok\":true}",
+          usage: { input_tokens: 2, output_tokens: 1 },
+        });
+      },
+    },
+  );
+  await provider.generate(request({
+    messages: [
+      { role: "system", content: "host policy" },
+      { role: "user", content: "ground this change" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "call-1",
+          name: "request_context",
+          arguments: { query: "SERVICE_NAME" },
+        }],
+      },
+      {
+        role: "tool",
+        name: "request_context",
+        toolCallId: "call-1",
+        content: "{\"evidence\":[]}",
+      },
+    ],
+  }));
+  const body = JSON.parse(String(calledInit?.body)) as {
+    input: Array<Record<string, unknown>>;
+  };
+  assert.deepEqual(body.input, [
+    { role: "user", content: "ground this change" },
+    {
+      type: "function_call",
+      call_id: "call-1",
+      name: "request_context",
+      arguments: "{\"query\":\"SERVICE_NAME\"}",
+    },
+    {
+      type: "function_call_output",
+      call_id: "call-1",
+      output: "{\"evidence\":[]}",
+    },
+  ]);
+});
+
 test("OpenAI custom endpoints require a separately named credential", () => {
   const config: ProviderConfigV1 = {
     name: "openai",
@@ -539,6 +598,43 @@ test("Ollama exposes compiler tools only as declared function schemas", async ()
     },
   ]);
   assert.equal(Object.hasOwn(body, "command"), false);
+});
+
+test("Ollama normalizes provider-native context tool calls", async () => {
+  const provider = new OllamaProvider(
+    { name: "ollama", model: "tool-model" },
+    {
+      resolveHostname: PUBLIC_RESOLVER,
+      fetch: async () =>
+        response({
+          model: "tool-model",
+          done: true,
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: "call-7",
+              type: "function",
+              function: {
+                name: "request_context",
+                arguments: { query: "SERVICE_NAME" },
+              },
+            }],
+          },
+          prompt_eval_count: 3,
+          eval_count: 2,
+        }),
+    },
+  );
+  const result = await provider.generate(request({ model: "tool-model" }));
+  assert.equal(result.finishReason, "tool_call");
+  assert.deepEqual(result.output, {
+    toolCalls: [{
+      id: "call-7",
+      name: "request_context",
+      arguments: { query: "SERVICE_NAME" },
+    }],
+  });
 });
 
 test("custom Ollama Cloud endpoint requires an explicit environment key name", () => {

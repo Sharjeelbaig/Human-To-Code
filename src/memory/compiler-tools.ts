@@ -29,6 +29,12 @@ export interface CompilerToolExecutorOptions {
   maximumRequests?: number;
   maximumFiles?: number;
   maximumFileBytes?: number;
+  /** Project-relative files/directories forbidden by operator privacy policy. */
+  excludedPaths?: readonly string[];
+  /** Path-segment names omitted from ordinary project context searches. */
+  ignoredNames?: readonly string[];
+  /** Restrict requests to workspaces targeted by the current run. */
+  allowedWorkspaceIds?: readonly string[];
   officialDocumentation?: (request: {
     workspace: WorkspaceProfileV1;
     dependency: string;
@@ -43,6 +49,14 @@ function toPosix(value: string): string {
 
 function below(path: string, root: string): boolean {
   return root === "." || path === root || path.startsWith(`${root}/`);
+}
+
+function normalizedPolicyPath(path: string): string {
+  return toPosix(path).replace(/^\.\//u, "").replace(/\/+$/u, "");
+}
+
+function inside(path: string, parent: string): boolean {
+  return path === parent || path.startsWith(`${parent}/`);
 }
 
 function knownWorkspacePaths(workspace: WorkspaceProfileV1): string[] {
@@ -92,6 +106,9 @@ export class CompilerToolExecutor {
   readonly #maximumFileBytes: number;
   readonly #canonicalRoot: Promise<string | undefined>;
   readonly #officialDocumentation: CompilerToolExecutorOptions["officialDocumentation"];
+  readonly #excludedPaths: readonly string[];
+  readonly #ignoredNames: ReadonlySet<string>;
+  readonly #allowedWorkspaceIds: ReadonlySet<string> | undefined;
 
   constructor(root: string, profile: ProjectProfileV1, options: CompilerToolExecutorOptions = {}) {
     this.#root = resolve(root);
@@ -100,16 +117,49 @@ export class CompilerToolExecutor {
     this.#maximumFiles = options.maximumFiles ?? MAX_INDEX_FILES;
     this.#maximumFileBytes = options.maximumFileBytes ?? MAX_INDEX_FILE_BYTES;
     this.#officialDocumentation = options.officialDocumentation;
+    this.#excludedPaths = [...new Set(
+      (options.excludedPaths ?? []).map(normalizedPolicyPath).filter(Boolean),
+    )].sort();
+    this.#ignoredNames = new Set(options.ignoredNames ?? []);
+    this.#allowedWorkspaceIds = options.allowedWorkspaceIds === undefined
+      ? undefined
+      : new Set(options.allowedWorkspaceIds);
     if (!Number.isSafeInteger(this.#maximumFiles) || this.#maximumFiles < 1 || this.#maximumFiles > MAX_INDEX_FILES) {
       throw new RangeError(`maximumFiles must be from 1 to ${MAX_INDEX_FILES}.`);
     }
     if (!Number.isSafeInteger(this.#maximumFileBytes) || this.#maximumFileBytes < 1 || this.#maximumFileBytes > MAX_INDEX_FILE_BYTES) {
       throw new RangeError(`maximumFileBytes must be from 1 to ${MAX_INDEX_FILE_BYTES}.`);
     }
+    if (
+      [...this.#ignoredNames].some((name) =>
+        typeof name !== "string" || name.length === 0 || name.includes("/") || name.includes("\\"))
+      || this.#excludedPaths.some((path) =>
+        path === "." || path.startsWith("/") || path.includes("\\") || path.split("/").includes(".."))
+      || (this.#allowedWorkspaceIds !== undefined
+        && [...this.#allowedWorkspaceIds].some((id) => typeof id !== "string" || id.length === 0))
+    ) {
+      throw new RangeError("Compiler context path policy is invalid.");
+    }
     this.session = new ContextRequestSession(options.maximumRequests ?? 8);
   }
 
-  async #regularText(path: string): Promise<{ text: string } | undefined> {
+  #policyAllows(path: string, allowIgnored: boolean): boolean {
+    const normalized = normalizedPolicyPath(path);
+    if (this.#excludedPaths.some((entry) => inside(normalized, entry))) {
+      return false;
+    }
+    return allowIgnored
+      || !normalized.split("/").some((part) => this.#ignoredNames.has(part));
+  }
+
+  #workspaceAllows(path: string, workspace: WorkspaceProfileV1): boolean {
+    return below(path, workspace.relativeRoot)
+      && ![...workspace.generatedRoots, ...workspace.protectedRoots]
+        .some((entry) => inside(path, entry));
+  }
+
+  async #regularText(path: string, allowIgnored = false): Promise<{ text: string } | undefined> {
+    if (!this.#policyAllows(path, allowIgnored)) return undefined;
     const canonicalRoot = await this.#canonicalRoot;
     if (!canonicalRoot) return undefined;
     return regularTextMetadata(this.#root, path, this.#maximumFileBytes, canonicalRoot);
@@ -117,7 +167,11 @@ export class CompilerToolExecutor {
 
   #workspace(request: ContextRequestV1): WorkspaceProfileV1 {
     const matches = this.#profile.workspaces.filter(
-      (workspace) => workspace.id === request.workspace || workspace.relativeRoot === request.workspace,
+      (workspace) =>
+        (this.#allowedWorkspaceIds === undefined
+          || this.#allowedWorkspaceIds.has(workspace.id))
+        && (workspace.id === request.workspace
+          || workspace.relativeRoot === request.workspace),
     );
     if (matches.length !== 1) {
       throw new CompilerToolError("UNKNOWN_WORKSPACE", "Context requests must identify exactly one analyzed workspace.");
@@ -136,7 +190,7 @@ export class CompilerToolExecutor {
 
   async #file(request: ContextRequestV1, workspace: WorkspaceProfileV1): Promise<ContextCandidateV1[]> {
     const path = request.path!;
-    if (!below(path, workspace.relativeRoot) || isProtectedContextPath(path)) {
+    if (!this.#workspaceAllows(path, workspace) || isProtectedContextPath(path)) {
       throw new CompilerToolError("OUT_OF_SCOPE", "Requested file is outside the target workspace or protected.");
     }
     const file = await this.#regularText(path);
@@ -165,10 +219,20 @@ export class CompilerToolExecutor {
   }
 
   async #workspaceFiles(workspace: WorkspaceProfileV1): Promise<string[]> {
-    const found = new Set(knownWorkspacePaths(workspace).filter((path) => SEARCHABLE_EXTENSIONS.test(path)));
+    const found = new Set(
+      knownWorkspacePaths(workspace).filter((path) =>
+        SEARCHABLE_EXTENSIONS.test(path)
+        && this.#workspaceAllows(path, workspace)
+        && this.#policyAllows(path, false)),
+    );
     const roots = [...new Set([...workspace.sourceRoots, ...workspace.testRoots])].sort();
     const visit = async (projectPath: string): Promise<void> => {
-      if (found.size >= this.#maximumFiles || isProtectedContextPath(projectPath) || !below(projectPath, workspace.relativeRoot)) return;
+      if (
+        found.size >= this.#maximumFiles
+        || isProtectedContextPath(projectPath)
+        || !this.#workspaceAllows(projectPath, workspace)
+        || !this.#policyAllows(projectPath, false)
+      ) return;
       const absolute = resolve(this.#root, ...projectPath.split("/"));
       const rel = relative(this.#root, absolute);
       if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return;
@@ -209,7 +273,7 @@ export class CompilerToolExecutor {
       for (const packageRoot of packageRoots) {
         if (results.length >= request.maxItems) break;
         const manifestPath = `${packageRoot}/package.json`;
-        const manifest = await this.#regularText(manifestPath);
+        const manifest = await this.#regularText(manifestPath, true);
         if (!manifest) continue;
         results.push(candidate(manifestPath, `Installed package metadata for ${name}: ${request.reason}`, undefined, "dependency"));
         try {
@@ -231,7 +295,7 @@ export class CompilerToolExecutor {
             if (results.length >= request.maxItems) break;
             if (typePath.includes("..") || isAbsolute(typePath)) continue;
             const full = `${packageRoot}/${typePath.replace(/^\.\//u, "")}`;
-            if (await this.#regularText(full)) {
+            if (await this.#regularText(full, true)) {
               results.push(candidate(full, `Installed declarations for ${name}: ${request.reason}`, undefined, "dependency"));
               hasInstalledApiEvidence = true;
             }
@@ -257,7 +321,7 @@ export class CompilerToolExecutor {
             `${site}/${module}.py`,
           ]) {
             if (results.length >= request.maxItems) break;
-            if (await this.#regularText(path)) {
+            if (await this.#regularText(path, true)) {
               results.push(candidate(path, `Installed Python API source/stubs for ${name}: ${request.reason}`, undefined, "dependency"));
               hasInstalledApiEvidence = true;
             }
@@ -275,7 +339,7 @@ export class CompilerToolExecutor {
         for (const relativePath of ["Cargo.toml", "src/lib.rs"]) {
           if (results.length >= request.maxItems) break;
           const path = `${vendorRoot}/${entry.name}/${relativePath}`;
-          if (await this.#regularText(path)) {
+          if (await this.#regularText(path, true)) {
             results.push(candidate(path, `Vendored crate evidence for ${name}: ${request.reason}`, undefined, "dependency"));
             if (relativePath === "src/lib.rs") hasInstalledApiEvidence = true;
           }
@@ -284,7 +348,7 @@ export class CompilerToolExecutor {
     }
     for (const path of [...workspace.manifests, ...workspace.lockfiles]) {
       if (results.length >= request.maxItems) break;
-      const file = await this.#regularText(path);
+      const file = await this.#regularText(path, true);
       if (!file) continue;
       const lines = file.text.split("\n");
       const index = lines.findIndex((line) => line.toLowerCase().includes(name.toLowerCase()));
@@ -316,7 +380,7 @@ export class CompilerToolExecutor {
     for (const diagnostic of diagnostics) {
       for (const path of diagnostic.paths) {
         if (results.length >= request.maxItems) return results;
-        if (!below(path, workspace.relativeRoot) || !(await this.#regularText(path))) continue;
+        if (!this.#workspaceAllows(path, workspace) || !(await this.#regularText(path))) continue;
         results.push(candidate(path, `Evidence for diagnostic ${diagnostic.code}: ${request.reason}`, undefined, "diagnostic"));
       }
     }

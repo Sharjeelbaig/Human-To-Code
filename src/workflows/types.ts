@@ -3,6 +3,12 @@
  * model generation, validation, presentation, and application all speak.
  */
 import type { StaticFileMemoryEntry } from "../memory/file-memory-extraction.ts";
+import type {
+  ProviderAdapter,
+  ProviderBudgetTracker,
+  ProviderToolCallV1,
+  ProviderToolDefinitionV1,
+} from "../llms/provider.ts";
 import type { UnitTodoList } from "./unit-todos.ts";
 
 export interface LanguageProfile {
@@ -188,6 +194,17 @@ export interface DirectDiscoveryResult {
   scannedPaths: string[];
 }
 
+export interface CodeAgentRuntime {
+  adapter: ProviderAdapter;
+  budget: ProviderBudgetTracker;
+  tools: readonly ProviderToolDefinitionV1[];
+  remainingToolCalls: () => number;
+  validateToolCall: (call: ProviderToolCallV1) => void;
+  executeTool: (call: ProviderToolCallV1) => Promise<unknown>;
+  maxOutputTokens: number;
+  contextSystemPrompt: string;
+}
+
 export interface GenerateOptions {
   language: string;
   provider: string;
@@ -229,6 +246,8 @@ export interface GenerateOptions {
    */
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Adapter-backed autonomous context loop used by the production CLI. */
+  agentRuntime?: CodeAgentRuntime;
 }
 
 export interface AppliedUnit {

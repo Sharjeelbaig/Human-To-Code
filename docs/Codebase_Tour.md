@@ -59,7 +59,9 @@ instructions reviewable without reading network code.
 Safe project context, official-documentation retrieval, compiler knowledge,
 per-file declarations, static file summaries, and project-wide relationships.
 Memory is rebuilt from repository evidence and is bounded before it reaches a
-model.
+model. The normal-mode agent may request additional evidence, but memory only
+returns host-authorized candidates and secret-scanned content; the model never
+reads the filesystem directly.
 
 ### `src/tools/`
 

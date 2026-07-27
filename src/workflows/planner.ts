@@ -1,8 +1,8 @@
 /** Deterministic creation and loading of reviewed ChangeContractV1 artifacts. */
 
 import { constants as fsConstants } from "node:fs";
-import { lstat, open, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { lstat, open, writeFile } from "node:fs/promises";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import type { ProjectProfileV1, WorkspaceProfileV1 } from "../tools/analysis/analyzer-types.ts";
 import {
   hashCanonical,

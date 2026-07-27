@@ -11,10 +11,21 @@ import { scanSecrets, type ContextRequestV1 } from "../memory/context.ts";
 export type ProviderOperation = "contract" | "context" | "patch" | "repair";
 export type ProviderMessageRole = "system" | "user" | "assistant" | "tool";
 
+export interface ProviderToolCallV1 {
+  /** Provider call identity. The host supplies a deterministic one when omitted. */
+  id: string;
+  name: string;
+  arguments: Readonly<Record<string, JsonValue>>;
+}
+
 export interface ProviderMessageV1 {
   role: ProviderMessageRole;
   content: string;
   name?: string;
+  /** Present only on an assistant turn that requested host tools. */
+  toolCalls?: readonly ProviderToolCallV1[];
+  /** Associates one tool result with the assistant request that caused it. */
+  toolCallId?: string;
 }
 
 export type JsonSchemaV1 = Readonly<Record<string, JsonValue>>;
@@ -444,8 +455,53 @@ function validateProviderRequest(request: ProviderGenerationRequestV1): void {
   request.messages.forEach((message) => {
     if (!(["system", "user", "assistant", "tool"] as const).includes(message.role)
       || typeof message.content !== "string" || message.content.includes("\0")
-      || (message.name !== undefined && (typeof message.name !== "string" || message.name.length === 0 || message.name.length > 128))) {
+      || (message.name !== undefined && (typeof message.name !== "string" || message.name.length === 0 || message.name.length > 128))
+      || (message.toolCallId !== undefined && (typeof message.toolCallId !== "string" || message.toolCallId.length === 0 || message.toolCallId.length > 256))) {
       throw new ProviderError("configuration", "Provider message is invalid.");
+    }
+    if (
+      (message.toolCalls !== undefined && message.role !== "assistant")
+      || (message.toolCallId !== undefined && message.role !== "tool")
+      || (message.role === "tool" && message.toolCallId !== undefined && message.name === undefined)
+    ) {
+      throw new ProviderError(
+        "configuration",
+        "Provider tool transcripts use assistant toolCalls and named tool results only.",
+      );
+    }
+    if (message.toolCalls !== undefined) {
+      if (!Array.isArray(message.toolCalls) || message.toolCalls.length === 0) {
+        throw new ProviderError("configuration", "Assistant toolCalls must be a non-empty array.");
+      }
+      const callIds = new Set<string>();
+      for (const call of message.toolCalls) {
+        if (
+          typeof call !== "object" || call === null
+          || typeof call.id !== "string" || call.id.length === 0 || call.id.length > 256
+          || typeof call.name !== "string" || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(call.name)
+          || typeof call.arguments !== "object" || call.arguments === null || Array.isArray(call.arguments)
+          || callIds.has(call.id)
+        ) {
+          throw new ProviderError("configuration", "Assistant tool call transcript is invalid.");
+        }
+        callIds.add(call.id);
+        try {
+          const serializedArguments = canonicalJson(call.arguments);
+          if (scanSecrets(serializedArguments).length > 0) {
+            throw new ProviderError(
+              "safety",
+              "Credential-like tool arguments are blocked at the provider boundary.",
+            );
+          }
+        } catch (error) {
+          if (error instanceof ProviderError) throw error;
+          throw new ProviderError(
+            "configuration",
+            "Assistant tool arguments are not canonical JSON.",
+            { cause: error },
+          );
+        }
+      }
     }
     const bytes = Buffer.byteLength(message.content, "utf8");
     totalMessageBytes += bytes;

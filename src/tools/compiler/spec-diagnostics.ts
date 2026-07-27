@@ -16,7 +16,7 @@ export interface UnresolvedFacet {
 }
 
 export interface SpecDiagnostic {
-  code: "E-UNDERSPECIFIED";
+  code: "E-UNDERSPECIFIED" | "E-IMPORT-UNRESOLVED";
   rule: string;
   severity: DiagnosticSeverity;
   sourcePath: string;

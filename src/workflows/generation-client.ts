@@ -43,8 +43,10 @@ import {
   type ModelSkill,
   type SkillSelectionInput,
 } from "../skills/index.ts";
+import { GENERATED_CODE_SCHEMA_V1 } from "../llms/schemas.ts";
 import { languageProfile } from "../tools/discovery/languages.ts";
 import { ModelOutputError, stripCodeFence } from "./presentation.ts";
+import { runProviderToolLoop } from "./provider-tool-loop.ts";
 import type { GenerateOptions } from "./types.ts";
 
 /**
@@ -261,6 +263,67 @@ async function withSkills(prompt: PromptMessages, input: SkillSelectionInput): P
   return attachModelSkills(prompt, await loadSelectedModelSkills(input));
 }
 
+function validateGeneratedCodeEnvelope(value: unknown): string {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new ModelOutputError("Provider generated-code output was not an object.");
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (
+    keys.length !== 2
+    || keys[0] !== "code"
+    || keys[1] !== "schemaVersion"
+    || record.schemaVersion !== 1
+    || typeof record.code !== "string"
+    || record.code.trim().length === 0
+    || Buffer.byteLength(record.code, "utf8") > MAX_RESPONSE_BYTES
+  ) {
+    throw new ModelOutputError(
+      "Provider generated-code output failed the exact {schemaVersion, code} contract.",
+    );
+  }
+  return record.code;
+}
+
+async function requestAgentCode(
+  prompt: PromptMessages,
+  options: GenerateOptions,
+): Promise<string> {
+  const runtime = options.agentRuntime;
+  if (runtime === undefined) {
+    throw new Error("The agent runtime was not configured.");
+  }
+  const remainingToolCalls = runtime.remainingToolCalls();
+  const tools =
+    remainingToolCalls > 0 && !runtime.adapter.capabilities.remote
+      ? runtime.tools
+      : [];
+  const result = await runProviderToolLoop({
+    adapter: runtime.adapter,
+    budget: runtime.budget,
+    request: {
+      operation: "patch",
+      model: options.model,
+      messages: [
+        { role: "system", content: prompt.system },
+        { role: "system", content: runtime.contextSystemPrompt },
+        { role: "user", content: prompt.user },
+      ],
+      responseSchema: GENERATED_CODE_SCHEMA_V1,
+      timeoutMs: Math.min(requestTimeoutMs(options), 60 * 60_000),
+      maxOutputTokens: runtime.maxOutputTokens,
+      temperature: 0,
+      signal: options.signal,
+    },
+    validateFinal: validateGeneratedCodeEnvelope,
+    tools,
+    validateToolCall: runtime.validateToolCall,
+    executeTool: runtime.executeTool,
+    maxToolCalls: remainingToolCalls,
+  });
+  return stripCodeFence(result.value);
+}
+
 /**
  * Resolve the exact package-owned guidance used for one coding request. Compiler
  * replay keys call the same helper, so changing a selected skill invalidates
@@ -320,6 +383,7 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.rejectedDraft ? { rejectedDraft: options.rejectedDraft } : {}),
     ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
     ...(options.compilerMode ? { compilerMode: true } : {}),
+    ...(options.agentRuntime ? { structuredOutput: true } : {}),
   });
   // Every request reasons through the model, so the src/skills guidance is
   // attached in compiler mode too — that is exactly when a small model most
@@ -329,7 +393,9 @@ export async function generateCode(instruction: string, options: GenerateOptions
     basePrompt,
     await loadCodingModelSkills(instruction, options),
   );
-  return requestChatCompletion(prompt, options);
+  return options.agentRuntime
+    ? requestAgentCode(prompt, options)
+    : requestChatCompletion(prompt, options);
 }
 
 /**

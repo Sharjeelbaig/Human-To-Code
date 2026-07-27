@@ -34,6 +34,26 @@ async function cli(
   });
 }
 
+function ollamaFixtureResponse(
+  request: Record<string, unknown>,
+  content: string,
+): Record<string, unknown> {
+  const structured = Object.hasOwn(request, "format");
+  return {
+    model:
+      typeof request.model === "string" ? request.model : "fixture-model",
+    done: true,
+    done_reason: "stop",
+    message: {
+      content: structured
+        ? JSON.stringify({ schemaVersion: 1, code: content })
+        : content,
+    },
+    prompt_eval_count: 8,
+    eval_count: Math.max(1, Math.ceil(content.length / 4)),
+  };
+}
+
 test("default human-readable flow starts with the human-to-code ASCII banner", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-banner-"));
   try {
@@ -466,7 +486,9 @@ test("unreachable cross-file CSS receives one bounded repair before atomic write
     incoming.setEncoding("utf8");
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       const user = parsed.messages.find((message) => message.role === "user")?.content ?? "";
       const content = system.includes("Classify one @human")
@@ -479,7 +501,7 @@ test("unreachable cross-file CSS receives one bounded repair before atomic write
             ? "position: relative; overflow: hidden;"
             : ".hero-overlay.hero-gradient { background: linear-gradient(red, blue); }";
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content } }));
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -534,7 +556,9 @@ test("unused generated CSS selector drift receives one bounded reconciliation pa
     incoming.setEncoding("utf8");
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       const content = system.includes("Classify one @human")
         ? '{"action":"edit"}'
@@ -554,7 +578,7 @@ test("unused generated CSS selector drift receives one bounded reconciliation pa
           ? 'export default function Projects() { return <section className="project-grid" />; }'
           : ".projects-grid { display: grid; }";
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content } }));
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -629,7 +653,7 @@ test("multi-language receipt reports the inferred outputs instead of the configu
       units: Array<{ output: string; language: string }>;
       additionalRequests?: unknown;
     };
-    assert.equal(plan.context, "project-memory-v1");
+    assert.equal(plan.context, "project-memory-v1 + autonomous-context-v1");
     assert.deepEqual(plan.languages, ["typescript", "html", "css", "javascript"]);
     assert.deepEqual(plan.units.map(({ output, language }) => ({ output, language })), [
       { output: "index.html", language: "html" },
@@ -652,7 +676,9 @@ test("plain browser JavaScript is not rewritten for an unrequested TypeScript ch
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
       requests += 1;
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       if (system.includes("repairing previously generated code")) repairs += 1;
       const content = system.includes("target: index.html")
@@ -661,7 +687,7 @@ test("plain browser JavaScript is not rewritten for an unrequested TypeScript ch
           ? 'const status = document.querySelector(".status");\nif (status) status.innerText = "Ready";'
           : ".status { color: green; }";
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content } }));
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -714,13 +740,15 @@ test("a failed whole-file candidate withholds the complete conversion batch", as
     incoming.setEncoding("utf8");
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       const content = system.includes("target: index.html")
         ? '<main>Ready</main><script src="script.js"></script>'
         : "const broken = ;";
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content } }));
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -820,7 +848,9 @@ test("opt-in CLI performs a generic audit, target repair, and verification cycle
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
       requests += 1;
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       let content: string;
       if (system.includes("read-only cross-language integration auditor")) {
@@ -847,7 +877,7 @@ test("opt-in CLI performs a generic audit, target repair, and verification cycle
             : ".calculator { display: grid; }";
       }
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content } }));
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -980,7 +1010,9 @@ test("planning agrees a shared vocabulary and completes an incomplete first pass
     incoming.setEncoding("utf8");
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       const system = parsed.messages.find((message) => message.role === "system")?.content ?? "";
       const user = parsed.messages.find((message) => message.role === "user")?.content ?? "";
       let content: string;
@@ -1020,7 +1052,7 @@ test("planning agrees a shared vocabulary and completes an incomplete first pass
           : ".project-card{display:flex}\n@media (max-width:600px){.project-card{display:block}}";
       }
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content } }));
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
       void user;
     });
   });
@@ -1085,10 +1117,14 @@ test("planning.enabled false restores exactly one request per unit", async () =>
     incoming.on("data", (chunk: string) => { body += chunk; });
     incoming.on("end", () => {
       requests += 1;
-      const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> };
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
       systems.push(parsed.messages.find((message) => message.role === "system")?.content ?? "");
       outgoing.writeHead(200, { "content-type": "application/json" });
-      outgoing.end(JSON.stringify({ message: { content: ".project-card{display:flex}" } }));
+      outgoing.end(JSON.stringify(
+        ollamaFixtureResponse(parsed, ".project-card{display:flex}"),
+      ));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -1132,6 +1168,124 @@ test("planning.enabled false restores exactly one request per unit", async () =>
     assert.ok(systems.every((system) => !system.includes("A separate later request will write the code")));
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local CLI agent requests bounded project evidence before generating code", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-context-agent-"));
+  let requests = 0;
+  let toolEvidence = "";
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      requests += 1;
+      const parsed = JSON.parse(body) as {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+        tools?: unknown[];
+      };
+      const toolMessage = parsed.messages.find((message) => message.role === "tool");
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      if (toolMessage === undefined) {
+        assert.equal(parsed.tools?.length, 1);
+        outgoing.end(JSON.stringify({
+          model: parsed.model,
+          done: true,
+          done_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: "lookup-1",
+              type: "function",
+              function: {
+                name: "request_context",
+                arguments: {
+                  schemaVersion: 1,
+                  requestId: "existing-service-name",
+                  kind: "file",
+                  workspace: "general:.",
+                  query: "src/constants.ts",
+                  reason: "Need the existing exported service name.",
+                  maxItems: 1,
+                  path: "src/constants.ts",
+                },
+              },
+            }],
+          },
+          prompt_eval_count: 8,
+          eval_count: 4,
+        }));
+        return;
+      }
+      toolEvidence = toolMessage.content;
+      assert.match(toolEvidence, /SERVICE_NAME/u);
+      assert.match(toolEvidence, /"untrusted":true/u);
+      outgoing.end(JSON.stringify({
+        model: parsed.model,
+        done: true,
+        done_reason: "stop",
+        message: {
+          role: "assistant",
+          content: JSON.stringify({
+            schemaVersion: 1,
+            code:
+              'import { SERVICE_NAME } from "./src/constants.js";\n'
+              + "export const label = SERVICE_NAME;\n",
+          }),
+        },
+        prompt_eval_count: 12,
+        eval_count: 10,
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      language: "typescript",
+      languages: ["typescript"],
+      provider: {
+        name: "ollama",
+        model: "tool-fixture",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: {
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: { enabled: false },
+      },
+    }));
+    await put(root, "src/constants.ts", 'export const SERVICE_NAME = "billing";\n');
+    await put(root, "feature.human", "Use the existing service-name constant.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as {
+      autonomousAgent: { contextRequests: number; providerTurns: number };
+      contextManifest: {
+        hash: string;
+        evidence: Array<{ path?: string; sha256: string; content?: string }>;
+      };
+    };
+    assert.equal(requests, 2);
+    assert.equal(done.autonomousAgent.contextRequests, 1);
+    assert.equal(done.autonomousAgent.providerTurns, 2);
+    assert.match(done.contextManifest.hash, /^[a-f0-9]{64}$/u);
+    assert.equal(done.contextManifest.evidence[0]?.path, "src/constants.ts");
+    assert.equal(Object.hasOwn(done.contextManifest.evidence[0] ?? {}, "content"), false);
+    assert.match(await readFile(join(root, "feature.ts"), "utf8"), /SERVICE_NAME/u);
+    assert.match(toolEvidence, /billing/u);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
     await rm(root, { recursive: true, force: true });
   }
 });

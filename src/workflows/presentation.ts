@@ -102,6 +102,7 @@ export function renderReceipt(
     reconcileIntegrations?: boolean;
     planning?: PlanningDisclosureOptions;
     compiler?: { enabled: boolean; onUnderspecified: "error" | "warn" };
+    contextToolCallsUpTo?: number;
   } = {},
 ): string {
   const configured = typeof configuredLanguages === "string"
@@ -188,6 +189,11 @@ export function renderReceipt(
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
     ...(adaptiveDisclaimer ? [adaptiveDisclaimer] : []),
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
+    ...(options.contextToolCallsUpTo && options.contextToolCallsUpTo > 0
+      ? [
+          `  Agent context: the local model may request up to ${options.contextToolCallsUpTo} bounded, read-only evidence lookup(s) across the entire run; every path and byte remains host-authorized.`,
+        ]
+      : []),
     ...(integrationDisclaimer ? [integrationDisclaimer] : []),
     ...(conditional !== undefined && conditional.compilerRepairUpTo > 0
       ? [`  Validation: up to ${conditional.compilerRepairUpTo} additional bounded JS/TS compiler-repair request${conditional.compilerRepairUpTo === 1 ? "" : "s"}, only if validation fails.`]
@@ -215,20 +221,23 @@ export function renderCompileErrors(
     lines.push(
       `${diagnostic.sourcePath}:${diagnostic.line ?? 1}  ${diagnostic.code} (${diagnostic.rule})`,
       `  ${diagnostic.message}`,
-      "",
-      "  Answer these in the request itself:",
     );
-    for (const facet of diagnostic.facets) {
-      lines.push(
-        `    ${facet.id.padEnd(16)}- ${facet.question} (for example ${JSON.stringify(facet.example)})`,
-      );
+    if (diagnostic.facets.length > 0) {
+      lines.push("", "  Answer these in the request itself:");
+      for (const facet of diagnostic.facets) {
+        lines.push(
+          `    ${facet.id.padEnd(16)}- ${facet.question} (for example ${JSON.stringify(facet.example)})`,
+        );
+      }
     }
     lines.push("");
   }
   const count = diagnostics.length;
   lines.push(
     `${count} compile error${count === 1 ? "" : "s"}. Nothing was generated, no files were written.`,
-    'Set "compiler": { "onUnderspecified": "warn" } to generate anyway, or',
+    ...(diagnostics.every((item) => item.code === "E-UNDERSPECIFIED")
+      ? ['Set "compiler": { "onUnderspecified": "warn" } to generate anyway, or']
+      : []),
     'set "compiler": { "enabled": false } to turn compiler mode off.',
   );
   return lines.join("\n");

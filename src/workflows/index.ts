@@ -10,3 +10,4 @@ export * from "./completion-groups.ts";
 export * from "./planner.ts";
 export * from "./run-store.ts";
 export * from "./compile-gate.ts";
+export * from "./provider-tool-loop.ts";

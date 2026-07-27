@@ -7,6 +7,23 @@ const ID = "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$";
 const WORKSPACE_ID = "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,511}$";
 const PATH = "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?![A-Za-z]:).+$";
 
+/**
+ * Transport envelope for direct code generation. The `code` string still
+ * passes through the language and project validators before any write.
+ */
+export const GENERATED_CODE_SCHEMA_V1 = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://human-to-code.dev/schemas/generated-code-v1.json",
+  title: "GeneratedCodeV1",
+  type: "object",
+  additionalProperties: false,
+  required: ["schemaVersion", "code"],
+  properties: {
+    schemaVersion: { const: 1 },
+    code: { type: "string", minLength: 1, maxLength: 16 * 1024 * 1024 },
+  },
+} as unknown as JsonSchemaV1;
+
 const stringArray = (minimum = 0): Record<string, unknown> => ({
   type: "array",
   items: { type: "string", minLength: 1 },
