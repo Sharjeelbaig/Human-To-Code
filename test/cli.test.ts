@@ -791,6 +791,72 @@ test("a failed whole-file candidate withholds the complete conversion batch", as
   }
 });
 
+test("compiler mode commits no generated sibling when any unit fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-compiler-transaction-"));
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const parsed = JSON.parse(body) as Record<string, unknown> & {
+        messages: Array<{ role: string; content: string }>;
+      };
+      const prompt = parsed.messages.map((message) => message.content).join("\n");
+      const content = prompt.includes("good.py")
+        ? "value = 1"
+        : "def broken(:";
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(parsed, content)));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      language: "python",
+      languages: ["python"],
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      compiler: {
+        enabled: true,
+        onUnderspecified: "error",
+        semanticDiagnostics: false,
+        lockfile: true,
+        replayFromLock: true,
+        vocabulary: {},
+      },
+    }));
+    const good = "# @human assign the integer 1 to a module variable named value\n";
+    const bad = "# @human define a module function named broken with no parameters that returns the integer 2\n";
+    await put(root, "good.py", good);
+    await put(root, "bad.py", bad);
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 5, result.stderr || result.stdout);
+    const done = JSON.parse(result.stdout) as {
+      status: string;
+      written: string[];
+      skipped: Array<{ reason: string }>;
+    };
+    assert.equal(done.status, "FAILED");
+    assert.deepEqual(done.written, []);
+    assert.equal(done.skipped.length, 2);
+    assert.ok(done.skipped.some(({ reason }) => /compiler transaction was withheld/u.test(reason)));
+    assert.equal(await readFile(join(root, "good.py"), "utf8"), good);
+    assert.equal(await readFile(join(root, "bad.py"), "utf8"), bad);
+    await assert.rejects(access(join(root, "human-to-code.lock.json")));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("opt-in integration reconciliation is disclosed while the default receipt stays unchanged", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-integration-opt-in-"));
   try {

@@ -1,4 +1,4 @@
-/** Pre-write direct-candidate syntax checks; this is not semantic or sandbox verification. */
+/** Pre-write direct-candidate structural checks; this is not sandbox verification. */
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
@@ -23,7 +23,7 @@ const PYTHON_SYNTAX_SCRIPT = [
   "import ast, json, sys",
   "source = sys.stdin.read()",
   "try:",
-  "    ast.parse(source, filename='<candidate>', mode='exec', type_comments=True)",
+  "    tree = ast.parse(source, filename='<candidate>', mode='exec', type_comments=True)",
   "except (SyntaxError, ValueError, TypeError) as error:",
   "    print(json.dumps({",
   "        'kind': type(error).__name__,",
@@ -31,6 +31,35 @@ const PYTHON_SYNTAX_SCRIPT = [
   "        'line': getattr(error, 'lineno', None),",
   "        'column': getattr(error, 'offset', None),",
   "    }))",
+  "else:",
+  "    issues = []",
+  "    def inspect_body(owner, body):",
+  "        terminated = False",
+  "        for statement in body:",
+  "            if terminated:",
+  "                issues.append({",
+  "                    'kind': 'UnreachableCode',",
+  "                    'message': 'statement follows an unconditional return, raise, break, or continue',",
+  "                    'line': getattr(statement, 'lineno', None),",
+  "                    'column': getattr(statement, 'col_offset', 0) + 1,",
+  "                })",
+  "                break",
+  "            if isinstance(statement, (ast.Return, ast.Raise, ast.Break, ast.Continue)):",
+  "                terminated = True",
+  "            if owner is not None and isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and statement.name == owner:",
+  "                issues.append({",
+  "                    'kind': 'DuplicateNestedDefinition',",
+  "                    'message': f'{statement.name} is nested inside a definition with the same name',",
+  "                    'line': getattr(statement, 'lineno', None),",
+  "                    'column': getattr(statement, 'col_offset', 0) + 1,",
+  "                })",
+  "    for node in ast.walk(tree):",
+  "        body = getattr(node, 'body', None)",
+  "        if isinstance(body, list):",
+  "            owner = node.name if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else None",
+  "            inspect_body(owner, body)",
+  "    if issues:",
+  "        print(json.dumps(issues[0]))",
 ].join("\n");
 
 // Delimiter balancing misreads prose-bearing markup: apostrophes in HTML text
@@ -173,6 +202,87 @@ function requestedHtmlId(prompt: string): string | undefined {
   )?.[1] ?? prompt.match(
     /\bwith\s+(?:an?\s+)?id\s+(?:named\s+)?([A-Za-z][\w:.-]{0,99})\b/iu,
   )?.[1];
+}
+
+interface PythonImportRequirement {
+  module: string;
+  name?: string;
+  alias?: string;
+}
+
+function pythonImportRequirements(prompt: string): PythonImportRequirement[] {
+  const requirements: PythonImportRequirement[] = [];
+  const seen = new Set<string>();
+  const add = (requirement: PythonImportRequirement): void => {
+    const key = `${requirement.module}\0${requirement.name ?? ""}\0${requirement.alias ?? ""}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      requirements.push(requirement);
+    }
+  };
+  const fromPattern =
+    /\bimport(?:ing)?\s+([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?\s+from\s+([A-Za-z_][\w.]*)\b/giu;
+  for (const match of prompt.matchAll(fromPattern)) {
+    add({
+      name: match[1]!,
+      ...(match[2] ? { alias: match[2] } : {}),
+      module: match[3]!,
+    });
+  }
+  const modulePattern =
+    /\bimport(?:ing)?\s+([A-Za-z_][\w.]*)(?:\s+as\s+([A-Za-z_]\w*))?\s+at\s+the\s+top\b/giu;
+  for (const match of prompt.matchAll(modulePattern)) {
+    // A longer "X from module at the top" phrase was already captured above.
+    if (prompt.slice(match.index, match.index + match[0].length).includes(" from ")) continue;
+    add({
+      module: match[1]!,
+      ...(match[2] ? { alias: match[2] } : {}),
+    });
+  }
+  return requirements;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function hasPythonImport(code: string, requirement: PythonImportRequirement): boolean {
+  const module = escapeRegExp(requirement.module);
+  const alias = requirement.alias === undefined
+    ? ""
+    : `\\s+as\\s+${escapeRegExp(requirement.alias)}`;
+  if (requirement.name !== undefined) {
+    return new RegExp(
+      `^from\\s+${module}\\s+import\\s+${escapeRegExp(requirement.name)}${alias}(?:\\s*(?:#.*)?)?$`,
+      "mu",
+    ).test(code);
+  }
+  return new RegExp(
+    `^import\\s+${module}${alias}(?:\\s*(?:#.*)?)?$`,
+    "mu",
+  ).test(code);
+}
+
+function validatePythonImportRequirements(
+  unit: ConversionUnit,
+  candidate: string,
+  sourcePath: string,
+): void {
+  if (extname(sourcePath).toLowerCase() !== ".py") return;
+  const missing = pythonImportRequirements(unit.prompt).filter(
+    (requirement) => !hasPythonImport(candidate, requirement),
+  );
+  if (missing.length === 0) return;
+  const expected = missing.map((requirement) =>
+    requirement.name === undefined
+      ? `import ${requirement.module}${requirement.alias ? ` as ${requirement.alias}` : ""}`
+      : `from ${requirement.module} import ${requirement.name}${requirement.alias ? ` as ${requirement.alias}` : ""}`);
+  throw new DirectCandidateValidationError(
+    `${sourcePath}: candidate violates explicit requirements: `
+    + expected.map((item) =>
+      `The instruction explicitly requires the module-level Python import ${JSON.stringify(item)}, but the complete candidate does not contain it.`)
+      .join(" "),
+  );
 }
 
 function validateExplicitRequirements(
@@ -396,7 +506,8 @@ function typeScriptSyntaxDiagnostics(text: string, sourcePath: string): Candidat
 
 /**
  * Validate a complete source candidate without importing or executing it.
- * Python uses its real parser so indentation and grammar are covered; other
+ * Python uses its real AST so indentation, grammar, same-name nested
+ * definitions, and trivially unreachable statements are covered; other
  * supported text languages retain the conservative delimiter parser.
  */
 export async function validateCandidateFileSyntax(
@@ -733,5 +844,6 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
   validateExplicitRequirements(unit, code, sourcePath);
   if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);
   const { baseline, candidate } = await sourceAndCandidateForUnit(unit, code);
+  validatePythonImportRequirements(unit, candidate, sourcePath);
   await validateCandidateFileSyntax(sourcePath, candidate, baseline);
 }

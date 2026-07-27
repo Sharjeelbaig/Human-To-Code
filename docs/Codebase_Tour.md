@@ -20,9 +20,10 @@ The folder names describe those responsibilities directly.
 8. `src/tools/validation/` and `src/tools/security/` reject unsafe or invalid
    candidates.
 9. `src/tools/file-ops/` applies an accepted candidate with stale-write and
-   rollback protection.
-10. Compiler mode secret-scans and caches accepted bytes, then atomically
-    updates `human-to-code.lock.json`.
+   rollback protection. Compiler mode first requires every unit in the run to
+   pass, so it never commits a partial compilation.
+10. Compiler mode secret-scans and caches the complete accepted batch, then
+    atomically updates `human-to-code.lock.json`.
 
 For example, `npx human-to-code . --yes` starts in `cli.ts`, discovers a marker,
 assembles a project-aware normal-mode prompt, validates the returned code, and

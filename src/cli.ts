@@ -1787,6 +1787,37 @@ async function buildCommand(
   }
   spinner.stop();
 
+  // Compiler mode is a run-level transaction. Its lockfile promises that the
+  // accepted outputs correspond to one complete compilation, so a rejected
+  // unit must prevent generated and replayed siblings from being committed.
+  // Normal direct mode retains its documented independent-unit behavior.
+  let compilerBatchRejection: string | undefined;
+  if (effective.compiler.enabled) {
+    const blocker = generated.find(
+      (item) =>
+        item.contextOnly !== true
+        && (item.error !== undefined || item.code.trim().length === 0),
+    );
+    if (blocker !== undefined) {
+      const target =
+        blocker.unit.kind === "file"
+          ? blocker.unit.outputPath!
+          : blocker.unit.sourcePath;
+      compilerBatchRejection =
+        `compiler transaction was withheld because ${target}`
+        + ` failed: ${blocker.error ?? "empty model output"}`;
+      for (const item of generated) {
+        if (
+          item.contextOnly === true
+          || item.error !== undefined
+          || item.code.trim().length === 0
+        ) continue;
+        item.error = compilerBatchRejection;
+        item.code = "";
+      }
+    }
+  }
+
   generated = withholdIncompleteRelatedTargets(
     generated,
     effective.compiler.enabled ? undefined : projectMemory,
@@ -1803,10 +1834,14 @@ async function buildCommand(
   });
   const written: string[] = [];
   const skipped: Array<{ source: string; reason: string }> = [];
-  const replayedUnitSet = new Set(replayedUnits.keys());
+  const replayedUnitSet = compilerBatchRejection === undefined
+    ? new Set(replayedUnits.keys())
+    : new Set<ConversionUnit>();
   const replayApplications = [...replayedUnits]
     .filter(([unit, replay]) =>
-      unit.kind === "file" && replay.needsWrite
+      compilerBatchRejection === undefined
+      && unit.kind === "file"
+      && replay.needsWrite
     )
     .map(([unit, replay]) => ({ unit, code: replay.code }));
   if (replayApplications.length > 0) {
@@ -1915,7 +1950,11 @@ async function buildCommand(
     }
   }
   const compilerWarnings: string[] = [];
-  if (effective.compiler.enabled && effective.compiler.lockfile) {
+  if (
+    effective.compiler.enabled
+    && effective.compiler.lockfile
+    && compilerBatchRejection === undefined
+  ) {
     const nextLock: CompilerLockfileV1 = {
       schemaVersion: 1,
       units: { ...(compilerLock?.units ?? {}) },
@@ -1997,9 +2036,11 @@ async function buildCommand(
                 semanticRequests: compileGate?.semanticRequests ?? 0,
               },
               replayed: [
-                ...new Set(
-                  [...replayedUnits.values()].map(({ target }) => target),
-                ),
+                ...(compilerBatchRejection === undefined
+                  ? new Set(
+                      [...replayedUnits.values()].map(({ target }) => target),
+                    )
+                  : []),
               ],
               diagnostics: compileGate?.diagnostics ?? [],
               compilerWarnings,

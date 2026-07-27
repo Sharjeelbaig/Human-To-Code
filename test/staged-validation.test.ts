@@ -7,6 +7,7 @@ import {
   applyUnit,
   buildCandidateOverlay,
   discoverDirectUnits,
+  validateCandidateFileSyntax,
   validateCandidateProject,
   type ConversionUnit,
   type GeneratedConversionUnit,
@@ -464,6 +465,53 @@ test("combined Python candidates with invalid grammar are withheld before write"
     assert.equal(outcome.validated, false);
     assert.equal(outcome.results[0]?.code, "");
     assert.match(outcome.results[0]?.error ?? "", /combined Python candidate.*(?:IndentationError|unindent|indent)/iu);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("syntactically valid Python ghost definitions are withheld before write", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-python-ghost-definition-"));
+  try {
+    const outcome = await validateCandidateProject(root, [
+      {
+        unit: fileUnit(root, "repository.human", "repository.py"),
+        code: [
+          "class UserRepository:",
+          "    def add(self, user):",
+          "        def add(self, user):",
+          "            raise NotImplementedError",
+          "        ...",
+        ].join("\n"),
+      },
+    ]);
+    assert.equal(outcome.results[0]?.code, "");
+    assert.match(
+      outcome.results[0]?.error ?? "",
+      /DuplicateNestedDefinition.*add is nested inside a definition with the same name/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("new unreachable Python statements are withheld but unchanged baseline debt is tolerated", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-staged-python-unreachable-"));
+  try {
+    const source = "def existing():\n    return 1\n    raise NotImplementedError\n";
+    await writeFile(join(root, "service.py"), source);
+    await validateCandidateFileSyntax(
+      "service.py",
+      `${source}\nvalue = 1\n`,
+      source,
+    );
+
+    const rejected = await validateCandidateProject(root, [{
+      unit: fileUnit(root, "service.human", "generated.py"),
+      code: "def run():\n    return 1\n    raise NotImplementedError\n",
+    }]);
+    assert.equal(rejected.results[0]?.code, "");
+    assert.match(rejected.results[0]?.error ?? "", /UnreachableCode/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

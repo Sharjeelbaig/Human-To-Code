@@ -427,9 +427,14 @@ source/FileMemory context. It skips turn classification, ProjectMemory, shared
 blueprints, todo planning, cross-file audits, and integration
 reconciliation—even when those `direct` features are enabled. Deterministic
 candidate validation still runs, and one failed candidate may receive one
-bounded correction attempt before the unit fails closed. Normal mode keeps the
-full project-aware agent workflow. An unchanged compiler-mode run can still make
-zero provider requests by replaying secret-scanned bytes from the lock/cache.
+bounded correction attempt before the run fails closed. Compiler mode commits
+as one transaction: if any fresh or replayed unit is rejected, it writes no
+source, cache artifact, or lockfile update. For Python, the pre-write AST gate
+also rejects newly introduced same-name nested definitions, trivially
+unreachable statements, and missing or incorrectly scoped module-level imports
+explicitly requested in natural language. Normal mode keeps the full
+project-aware agent workflow. An unchanged compiler-mode run can still make zero
+provider requests by replaying secret-scanned bytes from the lock/cache.
 
 `compiler.semanticDiagnostics` is a separate opt-in model pass for domain
 decisions outside the static rule table. It can only add questions, is batched,

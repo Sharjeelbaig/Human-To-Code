@@ -509,6 +509,43 @@ test("Python candidates are checked with the real parser before write", async ()
   }
 });
 
+test("Python candidates must honor explicit natural-language import forms", async () => {
+  const unit: ConversionUnit = {
+    kind: "file",
+    sourcePath: "jwt_service.human",
+    absoluteSource: "/tmp/jwt_service.human",
+    outputPath: "jwt_service.py",
+    prompt: "create JwtService, importing jwt at the top and importing uuid4 from uuid",
+    describe: "jwt_service.human -> jwt_service.py",
+  };
+  await assert.rejects(
+    () => validateGeneratedUnit(unit, [
+      "import uuid4",
+      "class JwtService:",
+      "    pass",
+    ].join("\n")),
+    (error: unknown) =>
+      error instanceof DirectCandidateValidationError
+      && /requires the module-level Python import "import jwt"/u.test(error.message)
+      && /requires the module-level Python import "from uuid import uuid4"/u.test(error.message),
+  );
+  await validateGeneratedUnit(unit, [
+    "import jwt",
+    "from uuid import uuid4",
+    "class JwtService:",
+    "    pass",
+  ].join("\n"));
+
+  const aliasUnit: ConversionUnit = {
+    ...unit,
+    prompt: "importing router as health_router from src.interfaces.api.routers.health_router at the top",
+  };
+  await validateGeneratedUnit(
+    aliasUnit,
+    "from src.interfaces.api.routers.health_router import router as health_router\n",
+  );
+});
+
 test("issue 09: regex literal structure does not truncate FileMemory declarations", () => {
   const entries = extractStaticFileMemory("example.ts", [
     "const repeated = /a{2}/;",
