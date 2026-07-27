@@ -652,7 +652,7 @@ test("custom Ollama Cloud endpoint requires an explicit environment key name", (
   );
 });
 
-test("Ollama Cloud malformed JSON is terminal schema failure", async () => {
+test("Ollama Cloud code-fence-wrapped JSON is extracted and parsed", async () => {
   const provider = new OllamaProvider(
     {
       name: "ollama",
@@ -665,7 +665,7 @@ test("Ollama Cloud malformed JSON is terminal schema failure", async () => {
     {
       env: { OLLAMA_API_KEY: "key" },
       resolveHostname: PUBLIC_RESOLVER,
-      requestIdFactory: () => "malformed-cloud",
+      requestIdFactory: () => "wrapped-json-cloud",
       fetch: async () =>
         response({
           model: "cloud-model",
@@ -676,10 +676,8 @@ test("Ollama Cloud malformed JSON is terminal schema failure", async () => {
         }),
     },
   );
-  await assert.rejects(
-    provider.generate(request({ model: "cloud-model" })),
-    (error: unknown) => error instanceof ProviderError && error.code === "schema",
-  );
+  const result = await provider.generate(request({ model: "cloud-model" }));
+  assert.deepStrictEqual(result.output, { ok: true });
 });
 
 test("generateValidated locally rejects a schema-invalid Cloud object", async () => {
