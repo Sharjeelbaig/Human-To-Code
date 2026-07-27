@@ -992,65 +992,6 @@ function parsedJsonOutput(text: string): unknown {
   }
 }
 
-async function extractJsonWithLlmFallback(
-  text: string,
-  runtime: HttpRuntime,
-  endpoint: URL,
-  model: string,
-  apiKeyEnv: string | undefined,
-  env: Record<string, string | undefined>,
-  timeoutMs: number,
-  signal: AbortSignal | undefined,
-): Promise<unknown> {
-  try {
-    return parsedJsonOutput(text);
-  } catch {
-    const extractionPrompt = `Extract the JSON object from the following text. Return ONLY the JSON, nothing else:
-
-${text}`;
-
-    const credential =
-      apiKeyEnv === undefined ? undefined : requireCredential(env, apiKeyEnv);
-    const extractionBody = {
-      model,
-      messages: [{ role: "user", content: extractionPrompt }],
-      stream: false,
-      options: { temperature: 0, num_predict: 8192 },
-    };
-
-    try {
-      const response = await postJson(
-        runtime,
-        endpoint,
-        extractionBody,
-        credential === undefined ? {} : { authorization: `Bearer ${credential}` },
-        true,
-        timeoutMs,
-        signal,
-        DEFAULT_MAX_RESPONSE_BYTES,
-      );
-
-      const record = expectRecord(response.value, "extraction response");
-      if (typeof record.error === "string" && record.error.length > 0) {
-        throw new ProviderError("server", "JSON extraction request failed.", {
-          requestId: response.clientRequestId,
-        });
-      }
-
-      const message = expectRecord(record.message, "extraction message");
-      const extractedText = expectString(message.content, "extraction output");
-      return parsedJsonOutput(extractedText);
-    } catch (extractionError) {
-      if (extractionError instanceof ProviderError) throw extractionError;
-      throw new ProviderError(
-        "schema",
-        "Provider structured output was not valid JSON and extraction failed.",
-        { cause: extractionError instanceof Error ? extractionError : new Error(String(extractionError)) },
-      );
-    }
-  }
-}
-
 function normalizedToolCalls(raw: unknown): unknown[] {
   if (!Array.isArray(raw)) {
     throw new ProviderError("schema", "Provider tool calls were invalid.");
@@ -1408,16 +1349,7 @@ export class OllamaProvider implements ProviderAdapter {
       finishReason = "tool_call";
     } else {
       const content = expectString(message.content, "structured output text");
-      output = await extractJsonWithLlmFallback(
-        content,
-        this.#runtime,
-        this.#endpoint,
-        this.#model,
-        this.#apiKeyEnv,
-        this.#runtime.env,
-        request.timeoutMs,
-        request.signal,
-      );
+      output = parsedJsonOutput(content);
       finishReason = ollamaFinishReason(record);
     }
     return {
