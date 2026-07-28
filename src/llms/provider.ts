@@ -558,6 +558,15 @@ export async function generateValidated<T>(
   if (request.signal?.aborted) throw new ProviderError("cancelled", "Provider request was cancelled.");
   const remainingOutput = options.budget?.remainingOutputTokens;
   const remainingElapsed = options.budget?.remainingElapsedMs;
+  // A clamp that reaches zero means the run budget is spent. Say so here: the
+  // adapter would otherwise reject the zeroed request as malformed and report a
+  // configuration fault that never happened.
+  if (remainingOutput !== undefined && remainingOutput < 1) {
+    throw new ProviderError("budget", "Provider output-token budget is exhausted.");
+  }
+  if (remainingElapsed !== undefined && remainingElapsed < 1) {
+    throw new ProviderError("budget", "Provider elapsed-time budget is exhausted.");
+  }
   const effectiveRequest = {
     ...request,
     maxOutputTokens: remainingOutput === undefined ? request.maxOutputTokens : Math.min(request.maxOutputTokens, remainingOutput),

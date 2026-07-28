@@ -125,6 +125,43 @@ test("a well-formed todo list parses and constrains names to the blueprint", () 
   assert.equal(list.todos[2]!.expects, undefined);
 });
 
+test("planning output survives the wrappings a small model actually emits", () => {
+  // These are the shapes that silently cost a run its whole planning stage: a
+  // model that answered correctly but framed the answer.
+  const todos = '{"todos":[{"id":"T1","requirement":"Add the nav."}]}';
+  const wrappings = [
+    (json: string) => `\`\`\`json\n${json}\n\`\`\``,
+    (json: string) => `\`\`\`\n${json}\n\`\`\``,
+    (json: string) => `Here is the plan:\n${json}`,
+    (json: string) => `Sure! Here you go:\n\`\`\`json\n${json}\n\`\`\`\nLet me know if you need changes.`,
+    (json: string) => `${json}\n\nThat covers the requirements.`,
+    (json: string) => `  \n${json}\n  `,
+  ];
+  for (const wrap of wrappings) {
+    assert.equal(
+      parseUnitTodoList(wrap(todos)).todos[0]!.requirement,
+      "Add the nav.",
+      `todo list lost to wrapping: ${wrap(todos)}`,
+    );
+    assert.equal(
+      parseProjectBlueprint(wrap(blueprintJson()), TARGETS).files.length,
+      3,
+      `blueprint lost to wrapping: ${wrap(blueprintJson())}`,
+    );
+  }
+});
+
+test("wrapping tolerance never invents a value the model did not send", () => {
+  assert.throws(() => parseUnitTodoList("I could not produce a plan."), /not valid JSON/u);
+  assert.throws(() => parseUnitTodoList("```json\nnot json\n```"), /not valid JSON/u);
+  // Narrowing to a span must not turn a rejected shape into an accepted one.
+  assert.throws(() => parseUnitTodoList('Here: {"todos":[],"extra":1}'), /exactly todos/u);
+  assert.throws(
+    () => parseProjectBlueprint('```json\n{"files":[]}\n```', TARGETS),
+    /exactly files and vocabulary/u,
+  );
+});
+
 test("todo parsing rejects malformed and oversized output", () => {
   assert.throws(() => parseUnitTodoList("{"), /not valid JSON/u);
   assert.throws(() => parseUnitTodoList('{"todos":[],"extra":1}'), /exactly todos/u);

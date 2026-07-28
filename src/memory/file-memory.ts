@@ -208,6 +208,7 @@ export async function generateConversionUnits(
     let coverage: TodoCoverage = { addressed: [], unaddressed: [], unverifiable: [] };
     let plannedTodos: UnitTodoList | undefined;
     let planningAttempted = false;
+    let planningFailure: string | undefined;
     let rejectedDraft: string | undefined;
     let validationFailure: string | undefined;
     let contextOnly = false;
@@ -246,7 +247,15 @@ export async function generateConversionUnits(
         ) {
           options.onProgress?.({ kind: "classify", unit });
           classificationRequests += 1;
-          classifiedAction = await options.classify(unit, baseContext);
+          // Classification only chooses between context and edit. A model that
+          // cannot answer must not cost the unit its conversion: fall through
+          // to editing, which is what an unclassified turn always was.
+          try {
+            classifiedAction = await options.classify(unit, baseContext);
+          } catch (error) {
+            if (error instanceof ContextSecurityError) throw error;
+            classifiedAction = "edit";
+          }
         }
         if (classifiedAction === "context") {
           contextOnly = true;
@@ -254,15 +263,21 @@ export async function generateConversionUnits(
           break;
         }
 
-        // Planning enriches context; it is never allowed to fail the unit.
+        // Planning enriches context; it is never allowed to fail the unit. It is
+        // still a real provider request that was sent and paid for, so it is
+        // counted before the await and its failure is reported rather than
+        // swallowed: silently losing the whole planning stage is how a run ends
+        // up with files that never agreed on a vocabulary.
         if (options.plan && options.shouldPlan?.(unit) !== false && !planningAttempted) {
           planningAttempted = true;
           options.onProgress?.({ kind: "plan", unit });
+          todoRequests += 1;
           try {
             plannedTodos = await options.plan(unit, baseContext);
-            todoRequests += 1;
-          } catch {
+          } catch (error) {
+            if (error instanceof ContextSecurityError) throw error;
             plannedTodos = undefined;
+            planningFailure = error instanceof Error ? error.message : String(error);
           }
         }
         const todos = plannedTodos;
@@ -353,6 +368,7 @@ export async function generateConversionUnits(
       todoRequests,
       codingRequests,
       ...(refinementRejected !== undefined ? { refinementRejected } : {}),
+      ...(planningFailure !== undefined ? { planningFailure } : {}),
       addressed: coverage.addressed.length,
       unaddressed: coverage.unaddressed.length,
       unverifiable: coverage.unverifiable.length,

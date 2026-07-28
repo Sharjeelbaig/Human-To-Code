@@ -321,8 +321,22 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
     for (const values of facts.classSets) renderedClassSets.push(new Set(values));
     if (file.generated) for (const values of facts.emptyClassSets) emptyRenderedClassSets.push(new Set(values));
   }
+  // What the scripts in this project put beyond a static scanner's reach. Each
+  // blocking check below may only fire while its own proof survives these.
+  let dynamicClassNames = false;
+  let dynamicIds = false;
+  let buildsMarkup = false;
+  let injectsContent = false;
   for (const file of scripts) {
     const facts = scriptByFile.get(file.path)!;
+    if (facts.dynamicClassNames) dynamicClassNames = true;
+    if (facts.dynamicIds) dynamicIds = true;
+    if (facts.buildsMarkup) buildsMarkup = true;
+    if (facts.injectsContent) injectsContent = true;
+    // A class or id the script itself puts on an element exists at runtime just
+    // as surely as one written into the markup.
+    for (const value of facts.assignedIds) if (value.length > 0) htmlIds.add(value);
+    for (const value of facts.toggledClasses) if (value.length > 0) htmlClasses.add(value);
     for (const value of facts.toggledClasses) if (value.length > 0) toggledClasses.add(value);
     for (const value of facts.renderedClasses) if (value.length > 0) htmlClasses.add(value);
     for (const values of facts.renderedClassSets) renderedClassSets.push(new Set(values));
@@ -331,7 +345,12 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
 
   // Blocking: every class exists, but no rendered element owns the complete
   // generated compound selector. The rule cannot match in the candidate UI.
-  for (const file of css) {
+  //
+  // A script that composes class names at runtime, or builds markup this
+  // scanner never sees, puts the real class set out of static reach, so
+  // deadness cannot be proven. Withholding a whole group of correct files on an
+  // unprovable claim is the worse failure: stay silent.
+  if (!dynamicClassNames && !buildsMarkup) for (const file of css) {
     if (!file.generated) continue;
     const facts = cssByFile.get(file.path)!;
     for (const selector of [...facts.selectors, ...expandedNestedSelectors(file.content)]) {
@@ -355,24 +374,30 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
       if (!file.generated) continue;
       const facts = scriptByFile.get(file.path)!;
       for (const selector of new Set(facts.selectors)) {
-        for (const token of selectorIdTokens(selector)) {
-          if (!htmlIds.has(token)) {
-            push(findings, counts, {
-              code: "JS_SELECTOR_MISSING",
-              severity: "blocking",
-              path: file.path,
-              detail: `${file.path} queries "${selector}" but no id "${token}" exists in the generated markup.`,
-            });
+        // An element built at runtime can carry any id or class, so a query
+        // that misses the static markup is not thereby proven broken.
+        if (!buildsMarkup && !dynamicIds) {
+          for (const token of selectorIdTokens(selector)) {
+            if (!htmlIds.has(token)) {
+              push(findings, counts, {
+                code: "JS_SELECTOR_MISSING",
+                severity: "blocking",
+                path: file.path,
+                detail: `${file.path} queries "${selector}" but no id "${token}" exists in the generated markup.`,
+              });
+            }
           }
         }
-        for (const token of selectorClassTokens(selector)) {
-          if (!htmlClasses.has(token)) {
-            push(findings, counts, {
-              code: "JS_SELECTOR_MISSING",
-              severity: "blocking",
-              path: file.path,
-              detail: `${file.path} queries "${selector}" but no element with class "${token}" exists in the generated markup.`,
-            });
+        if (!buildsMarkup && !dynamicClassNames) {
+          for (const token of selectorClassTokens(selector)) {
+            if (!htmlClasses.has(token)) {
+              push(findings, counts, {
+                code: "JS_SELECTOR_MISSING",
+                severity: "blocking",
+                path: file.path,
+                detail: `${file.path} queries "${selector}" but no element with class "${token}" exists in the generated markup.`,
+              });
+            }
           }
         }
       }
@@ -400,7 +425,10 @@ export function collectReferenceFindings(files: readonly ReferenceFile[]): Refer
 
   // Blocking: an empty generated element has visual paint but no intrinsic or
   // declared box size. Its background, shadow, or border cannot be seen.
-  for (const classSet of emptyRenderedClassSets) {
+  //
+  // An element that a script fills at runtime is only empty in the markup, and
+  // its content then supplies the height this check says is missing.
+  for (const classSet of injectsContent ? [] : emptyRenderedClassSets) {
     const declarations = new Map<string, string>();
     let paintedBy: { path: string; selector: string } | undefined;
     for (const [path, rules] of rulesByFile) {

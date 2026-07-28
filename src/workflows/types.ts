@@ -126,6 +126,8 @@ export interface UnitPlanningOutcome {
   codingRequests: number;
   /** Set when a refinement was generated and then rejected by the ratchet. */
   refinementRejected?: string;
+  /** Set when the per-target todo request was made but its answer was unusable. */
+  planningFailure?: string;
   addressed: number;
   unaddressed: number;
   unverifiable: number;

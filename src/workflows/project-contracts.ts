@@ -87,8 +87,30 @@ export interface CssFacts {
 export interface JavaScriptFacts {
   modules: string[];
   selectors: string[];
-  /** Class names passed to classList add/remove/toggle/contains. */
+  /** Class names passed as string literals to classList add/remove/toggle/contains. */
   toggledClasses: string[];
+  /**
+   * True when a class name reaches the DOM through something other than a plain
+   * string literal — a template literal, a variable, a ternary branch. The real
+   * class set is then beyond static reach, so no static pass may declare a rule
+   * that mentions those classes dead.
+   */
+  dynamicClassNames: boolean;
+  /** Element ids the script assigns, as string literals. */
+  assignedIds: string[];
+  /** True when an id reaches the DOM as something other than a string literal. */
+  dynamicIds: boolean;
+  /**
+   * True when the script creates elements or writes markup — `createElement`,
+   * `innerHTML`, `insertAdjacentHTML`, `append`. Elements this scanner never
+   * sees can then carry any id or class.
+   */
+  buildsMarkup: boolean;
+  /**
+   * True when the script writes children or text into an existing element, so
+   * an element that is empty in the markup need not be empty when painted.
+   */
+  injectsContent: boolean;
   /** Static class and className tokens rendered by JSX or DOM-like templates. */
   renderedClasses: string[];
   /** Static JSX className tokens grouped by the element that owns them. */
@@ -143,9 +165,53 @@ export function cssFacts(content: string): CssFacts {
   };
 }
 
+/**
+ * Text of every `classList.*` argument that names a class, bounded and
+ * unparsed. `toggle`'s second argument is a boolean force flag, not a class,
+ * so it is dropped. One scan feeds both the literal names and the
+ * dynamic-composition signal.
+ */
+function classNameArguments(content: string): string[] {
+  return [
+    ...content.matchAll(
+      /\bclassList\s*\.\s*(add|remove|toggle|contains|replace)\s*\(([^)]{0,400})/gu,
+    ),
+  ].map((match) => {
+    const args = match[2] ?? "";
+    return match[1] === "toggle" ? (args.split(",")[0] ?? "") : args;
+  });
+}
+
+/**
+ * An expression composes a class name at runtime when it carries no string
+ * literal to read, or interpolates one. A ternary between two literals is not
+ * dynamic: both outcomes are already known.
+ */
+function composesClassNameAtRuntime(expression: string): boolean {
+  if (expression.trim().length === 0) return false;
+  if (/`[^`]*\$\{/u.test(expression)) return true;
+  return !/["'][^"'`]*["']/u.test(expression);
+}
+
 export function javaScriptFacts(content: string): JavaScriptFacts {
-  const renderedClassSets = [...content.matchAll(/<[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*>/giu)]
+  const classNameArgs = classNameArguments(content);
+  const classNameAssignments = [
+    ...matches(content, /\bclassName\s*\+?=([^=;\n]{0,200})/gu),
+    ...matches(content, /\bsetAttribute\s*\(\s*["']class["']\s*,([^)]{0,200})/gu),
+  ];
+  const idAssignments = [
+    ...matches(content, /\.\s*id\s*=([^=;\n]{0,200})/gu),
+    ...matches(content, /\bsetAttribute\s*\(\s*["']id["']\s*,([^)]{0,200})/gu),
+  ];
+  const jsxClassSets = [...content.matchAll(/<[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*>/giu)]
     .map((match) => (match[1] ?? "").split(/\s+/u).filter(Boolean));
+  // A whole-attribute assignment renders those classes together on one element,
+  // exactly like a static `class` attribute does.
+  const assignedClassSets = [
+    ...matches(content, /\bclassName\s*=\s*["']([^"']+)["']/gu),
+    ...matches(content, /\bsetAttribute\s*\(\s*["']class["']\s*,\s*["']([^"']+)["']/gu),
+  ].map((value) => value.split(/\s+/u).filter(Boolean));
+  const renderedClassSets = [...jsxClassSets, ...assignedClassSets];
   const emptyRenderedClassSets = [
     ...content.matchAll(/<[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*\/\s*>/giu),
     ...content.matchAll(/<([A-Za-z][A-Za-z0-9.]*)\b[^>]*\bclass(?:Name)?\s*=\s*["']([^"']+)["'][^>]*>\s*<\/\1\s*>/gu),
@@ -160,10 +226,26 @@ export function javaScriptFacts(content: string): JavaScriptFacts {
       ...matches(content, /\bquerySelector(?:All)?\s*\(\s*["']([^"']+)["']/gu),
       ...matches(content, /\bgetElementById\s*\(\s*["']([^"']+)["']/gu).map((value) => `#${value}`),
     ],
-    toggledClasses: matches(
-      content,
-      /\bclassList\s*\.\s*(?:add|remove|toggle|contains)\s*\(\s*["']([^"']+)["']/gu,
-    ).flatMap((value) => value.split(/\s+/u)),
+    // Every string literal anywhere in the argument list, so a ternary, a
+    // multi-argument call, and a literal sitting beside a variable all count.
+    toggledClasses: classNameArgs
+      .flatMap((args) => matches(args, /(["'])([^"'`]*)\1/gu, 2))
+      .flatMap((value) => value.split(/\s+/u))
+      .filter(Boolean),
+    dynamicClassNames: [...classNameArgs, ...classNameAssignments].some(
+      composesClassNameAtRuntime,
+    ),
+    assignedIds: idAssignments
+      .flatMap((value) => matches(value, /(["'])([^"'`]*)\1/gu, 2))
+      .flatMap((value) => value.split(/\s+/u))
+      .filter(Boolean),
+    dynamicIds: idAssignments.some(composesClassNameAtRuntime),
+    buildsMarkup:
+      /\b(?:createElement|createElementNS|insertAdjacentHTML|cloneNode)\s*\(/u.test(content)
+      || /\b(?:innerHTML|outerHTML)\s*\+?=/u.test(content),
+    injectsContent:
+      /\b(?:innerHTML|outerHTML|textContent|innerText)\s*\+?=/u.test(content)
+      || /\.\s*(?:append|appendChild|prepend|replaceChildren|insertAdjacentHTML|insertAdjacentElement|insertBefore)\s*\(/u.test(content),
     renderedClasses: matches(content, /\bclass(?:Name)?\s*=\s*["']([^"']+)["']/giu)
       .flatMap((value) => value.split(/\s+/u)),
     renderedClassSets,

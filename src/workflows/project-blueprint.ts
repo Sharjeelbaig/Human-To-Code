@@ -12,6 +12,7 @@
  * run.
  */
 import { scanSecrets } from "../memory/context.ts";
+import { parseJsonFromModelText } from "../core/json-text.ts";
 
 export const BLUEPRINT_VOCABULARY_KINDS: readonly string[] = Object.freeze([
   "class", "id", "attribute", "selector", "cssVariable", "symbol", "route", "event", "dataKey",
@@ -68,10 +69,8 @@ export function parseProjectBlueprint(
   output: string,
   allowedPaths: ReadonlySet<string>,
 ): ProjectBlueprint {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(output);
-  } catch {
+  const parsed = parseJsonFromModelText(output);
+  if (parsed === undefined) {
     throw new Error("Project blueprint is not valid JSON.");
   }
   if (!object(parsed) || !ownKeys(parsed, ["files", "vocabulary"])) {

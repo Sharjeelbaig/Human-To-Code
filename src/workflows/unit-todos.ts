@@ -12,6 +12,7 @@
  * requirement is implemented" and never verification.
  */
 import { extname } from "node:path";
+import { parseJsonFromModelText } from "../core/json-text.ts";
 import { extractStaticFileMemory } from "../memory/file-memory-extraction.ts";
 import { BLUEPRINT_VOCABULARY_KINDS, type BlueprintVocabularyKind } from "./project-blueprint.ts";
 import { cssFacts, htmlFacts, javaScriptFacts } from "./project-contracts.ts";
@@ -76,10 +77,8 @@ function object(value: unknown): value is Record<string, unknown> {
  * become a new instruction.
  */
 export function parseUnitTodoList(output: string, allowedNames?: ReadonlySet<string>): UnitTodoList {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(output);
-  } catch {
+  const parsed = parseJsonFromModelText(output);
+  if (parsed === undefined) {
     throw new Error("Todo list is not valid JSON.");
   }
   if (!object(parsed) || !ownKeys(parsed, ["todos"])) {

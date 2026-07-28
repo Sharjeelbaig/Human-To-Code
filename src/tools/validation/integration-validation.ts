@@ -422,18 +422,25 @@ export async function reconcileGeneratedIntegrations(
       continue;
     }
 
-    let repaired = true;
+    // A repair that produces nothing usable leaves its unit exactly as the
+    // generator wrote it. That is not itself grounds to discard the group: the
+    // candidates already passed every deterministic check, and only the
+    // verification audit below can say whether an inconsistency truly remains.
+    let unrepaired = false;
+    let blocked = false;
     const byTarget = new Map<string, DirectIntegrationIssue[]>();
     for (const issue of initial.issues) byTarget.set(issue.targetPath, [...(byTarget.get(issue.targetPath) ?? []), issue]);
     for (const [path, issues] of byTarget) {
       const unit = group.units.find((candidate) => targetPath(candidate) === path)!;
       if (repairedUnits.has(unit)) {
-        repaired = false;
-        break;
+        unrepaired = true;
+        continue;
       }
       const request = buildRepairRequest(unit, issues, byUnit, contextCharBudget, options.projectMemory);
+      // No safe bounded request, or outbound secrets: a boundary, not a quality
+      // judgment. Fail closed without consulting the model again.
       if (!request || scanSecrets(repairOutbound(request)).length > 0) {
-        repaired = false;
+        blocked = true;
         break;
       }
       options.onProgress?.({ kind: "integration-repair", unit, attempt: 1, issues: issues.length });
@@ -441,24 +448,32 @@ export async function reconcileGeneratedIntegrations(
       repairedUnits.add(unit);
       try {
         const code = await options.repair(request);
+        // Byte-identical output is the model reporting nothing to change, not a
+        // failed request.
         if (code.trim().length === 0 || code === byUnit.get(unit)!.code) {
-          repaired = false;
-          break;
+          unrepaired = true;
+          continue;
         }
         await validateGeneratedUnit(unit, code);
         byUnit.get(unit)!.code = code;
         options.projectMemory?.remember(unit, code);
       } catch (error) {
         if (error instanceof ContextSecurityError) throw error;
-        repaired = false;
-        break;
+        unrepaired = true;
       }
     }
-    if (!repaired) {
-      rejectGroup(group, "cross-file integration repair failed within its bounded target budget");
+    if (blocked) {
+      rejectGroup(group, "cross-file integration repair could not be requested within its safe bounded context");
       continue;
     }
-    if (maxAuditPasses < 2) continue;
+    // Without a verification pass there is nothing left to adjudicate the
+    // audit's claim, so an unrepaired issue stays fail-closed.
+    if (maxAuditPasses < 2) {
+      if (unrepaired) {
+        rejectGroup(group, "cross-file integration repair failed within its bounded target budget");
+      }
+      continue;
+    }
     const verified = await runAudit(2);
     if (!verified || verified.status !== "consistent") {
       rejectGroup(group, "cross-file integration remained inconsistent after bounded repair and verification");

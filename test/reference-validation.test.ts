@@ -234,6 +234,90 @@ test("a generated compound selector must match one rendered element", () => {
     finding.code === "CSS_COMPOUND_SELECTOR_UNMATCHED" && finding.severity === "blocking"));
 });
 
+test("a runtime state class reached by any means keeps its compound rule", () => {
+  // Each of these puts "is-error" on .form-status at runtime, so the compound
+  // rule is live even though no static element carries both classes.
+  const scripts = [
+    'el.classList.add("is-error");',
+    'el.classList.add(ok ? "is-success" : "is-error");',
+    'el.classList.toggle("is-error", !ok);',
+    'el.className = "form-status is-error";',
+    'el.setAttribute("class", "form-status is-error");',
+    "el.classList.add(`is-${status}`);",
+    "el.classList.add(stateClass);",
+  ];
+  for (const script of scripts) {
+    const findings = collectReferenceFindings([
+      generated("index.html", '<p class="form-status"></p>'),
+      generated("script.js", `const el = document.querySelector(".form-status");\n${script}`),
+      generated("styles.css", ".form-status { color: gray; }\n.form-status.is-error { color: red; }"),
+    ]);
+    assert.equal(
+      findings.some((finding) => finding.code === "CSS_COMPOUND_SELECTOR_UNMATCHED"),
+      false,
+      `expected no unmatched-compound finding for: ${script}`,
+    );
+  }
+});
+
+test("a class or id the script itself puts on an element is not a missing selector", () => {
+  const findings = collectReferenceFindings([
+    generated("index.html", '<main id="app"></main>'),
+    generated("script.js", [
+      'const card = document.createElement("div");',
+      'card.classList.add("project-card");',
+      'card.id = "first-card";',
+      'document.querySelector(".project-card");',
+      'document.getElementById("first-card");',
+    ].join("\n")),
+    generated("styles.css", ".project-card { color: red; }\n#app { display: block; }"),
+  ]);
+  assert.equal(findings.some((finding) => finding.code === "JS_SELECTOR_MISSING"), false);
+});
+
+test("a script that builds markup suspends selector and compound proofs", () => {
+  const findings = collectReferenceFindings([
+    generated("index.html", '<main id="app"></main>'),
+    generated("script.js", [
+      "const rows = items.map((item) => `<li class=\"${item.kind}\">${item.name}</li>`);",
+      'document.querySelector("#app").innerHTML = rows.join("");',
+      'document.querySelectorAll(".row-active");',
+    ].join("\n")),
+    generated("styles.css", ".row-active.row-pinned { color: red; }"),
+  ]);
+  assert.equal(findings.some((finding) => finding.code === "JS_SELECTOR_MISSING"), false);
+  assert.equal(findings.some((finding) => finding.code === "CSS_COMPOUND_SELECTOR_UNMATCHED"), false);
+});
+
+test("a selector no runtime path can produce is still blocking", () => {
+  const findings = collectReferenceFindings([
+    generated("index.html", '<main id="app"></main>'),
+    generated("script.js", 'document.querySelector(".never-exists").focus();'),
+    generated("styles.css", "#app { display: block; }"),
+  ]);
+  assert.ok(findings.some((finding) =>
+    finding.code === "JS_SELECTOR_MISSING" && finding.severity === "blocking"));
+});
+
+test("an empty element a script fills is not a zero-size paint defect", () => {
+  const findings = collectReferenceFindings([
+    generated("index.html", '<div class="chart-panel"></div>'),
+    generated("script.js", 'document.querySelector(".chart-panel").textContent = "42";'),
+    generated("styles.css", ".chart-panel { background: red; }"),
+  ]);
+  assert.equal(findings.some((finding) => finding.code === "EMPTY_VISUAL_ZERO_SIZE"), false);
+});
+
+test("a compound selector no script can ever produce is still blocking", () => {
+  const findings = collectReferenceFindings([
+    generated("index.html", '<p class="form-status"></p><p class="is-error"></p>'),
+    generated("script.js", 'document.querySelector(".form-status").textContent = "done";'),
+    generated("styles.css", ".form-status.is-error { color: red; }"),
+  ]);
+  assert.ok(findings.some((finding) =>
+    finding.code === "CSS_COMPOUND_SELECTOR_UNMATCHED" && finding.severity === "blocking"));
+});
+
 test("nested ampersand compound selectors are checked against rendered elements", () => {
   const findings = collectReferenceFindings([
     { path: "index.html", content: '<div id="root"></div>', generated: false },

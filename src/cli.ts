@@ -2018,6 +2018,12 @@ async function buildCommand(
   const refinementsRejected = planningOutcomes.filter(
     (outcome) => outcome.refinementRejected !== undefined,
   );
+  // A planning request that was sent and came back unusable costs the target its
+  // todo list. Losing the whole planning stage in silence is how files end up
+  // never agreeing on a vocabulary, so it is always reported.
+  const planningFailures = planningOutcomes.filter(
+    (outcome) => outcome.planningFailure !== undefined,
+  );
   const contextRequests = contextCoordinator?.contextRequests ?? 0;
   const contextManifest =
     contextRequests > 0 ? contextCoordinator?.manifest : undefined;
@@ -2148,6 +2154,17 @@ async function buildCommand(
           ? outcome.unit.outputPath!
           : outcome.unit.sourcePath;
       output(`  ! ${target}: ${outcome.refinementRejected}`, false);
+    }
+    for (const outcome of planningFailures) {
+      const target =
+        outcome.unit.kind === "file"
+          ? outcome.unit.outputPath!
+          : outcome.unit.sourcePath;
+      output(
+        `  ! ${target}: per-target plan unavailable (${outcome.planningFailure});`
+        + " this target was coded without one",
+        false,
+      );
     }
   }
   return written.length === 0 && skipped.length > 0 ? 5 : 0;

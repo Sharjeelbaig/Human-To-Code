@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { canonicalJson } from "../core/contracts.ts";
+import { parseJsonFromModelText } from "../core/json-text.ts";
 import {
   pinnedHttpFetch,
   type PinnedDestination,
@@ -946,50 +947,13 @@ function ollamaTools(
   }));
 }
 
-function tryExtractJsonFromCodeBlocks(text: string): string | null {
-  const jsonMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (jsonMatch?.[1]) return jsonMatch[1].trim();
-  return null;
-}
-
-function tryExtractJsonObject(text: string): string | null {
-  const firstBrace = text.indexOf("{");
-  if (firstBrace === -1) return null;
-  const lastBrace = text.lastIndexOf("}");
-  if (lastBrace <= firstBrace) return null;
-  return text.slice(firstBrace, lastBrace + 1);
-}
-
-function heuristicJsonExtract(text: string): unknown | null {
-  const candidates = [
-    tryExtractJsonFromCodeBlocks(text),
-    tryExtractJsonObject(text),
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate === null) continue;
-    try {
-      return JSON.parse(candidate) as unknown;
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
 function parsedJsonOutput(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    const extracted = heuristicJsonExtract(text);
-    if (extracted !== null) return extracted;
-
-    throw new ProviderError(
-      "schema",
-      "Provider structured output was not valid JSON.",
-      { cause: new Error("JSON parse failed and heuristic extraction found no valid JSON") },
-    );
-  }
+  const parsed = parseJsonFromModelText(text);
+  if (parsed !== undefined) return parsed;
+  throw new ProviderError(
+    "schema",
+    "Provider structured output was not valid JSON.",
+  );
 }
 
 function normalizedToolCalls(raw: unknown): unknown[] {

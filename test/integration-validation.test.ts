@@ -169,6 +169,87 @@ test("an unresolved generic integration issue rejects its evidenced group", asyn
   assert.equal(outcome.results.every((item) => /remained inconsistent/u.test(item.error ?? "")), true);
 });
 
+function twoUnitGroup(): {
+  units: [ConversionUnit, ConversionUnit];
+  memory: ProjectMemoryProvider;
+  generated: Array<{ unit: ConversionUnit; code: string }>;
+} {
+  const caller = fileUnit("caller.ts", "typescript", "Use the shared function.");
+  const shared = fileUnit("shared.ts", "typescript", "Export greet.");
+  return {
+    units: [caller, shared],
+    memory: relationshipMemory(new Map([
+      ["caller.ts", [relation("shared.ts", "module candidate")]],
+      ["shared.ts", [relation("caller.ts", "module consumer")]],
+    ])),
+    generated: [
+      { unit: caller, code: 'import { greet } from "./shared.ts";\ngreet();' },
+      { unit: shared, code: "export function greet(): void {}" },
+    ],
+  };
+}
+
+const AUDIT_ISSUE = JSON.stringify({
+  status: "issues",
+  issues: [{
+    targetPath: "caller.ts",
+    relatedPaths: ["shared.ts"],
+    code: "EXPORT_MISMATCH",
+    message: "caller imports hello while shared exports greet.",
+  }],
+});
+const AUDIT_CONSISTENT = '{"status":"consistent","issues":[]}';
+
+test("a repair with nothing to change defers to verification instead of discarding the group", async () => {
+  // The audit claims an issue, the repair model answers with byte-identical
+  // code, and the verification pass then finds nothing wrong. The candidates
+  // passed every deterministic check, so they must survive.
+  for (const repair of [
+    async (request: { currentCode: string }) => request.currentCode, // identical
+    async () => "", // empty
+    async () => { throw new Error("repair produced invalid code"); },
+  ]) {
+    const { memory, generated } = twoUnitGroup();
+    let audits = 0;
+    const outcome = await reconcileGeneratedIntegrations(generated, {
+      projectMemory: memory,
+      audit: async () => (++audits === 1 ? AUDIT_ISSUE : AUDIT_CONSISTENT),
+      repair,
+    });
+    assert.equal(outcome.auditRequests, 2);
+    assert.equal(outcome.repairRequests, 1);
+    assert.equal(
+      outcome.results.every((item) => item.error === undefined),
+      true,
+      `expected the group to survive, got: ${outcome.results.map((item) => item.error).join(" | ")}`,
+    );
+    assert.equal(outcome.results.every((item) => item.code.length > 0), true);
+  }
+});
+
+test("a repair with nothing to change still fails closed when verification confirms the issue", async () => {
+  const { memory, generated } = twoUnitGroup();
+  const outcome = await reconcileGeneratedIntegrations(generated, {
+    projectMemory: memory,
+    audit: async () => AUDIT_ISSUE,
+    repair: async (request) => request.currentCode,
+  });
+  assert.equal(outcome.repairRequests, 1);
+  assert.equal(outcome.results.every((item) => /remained inconsistent/u.test(item.error ?? "")), true);
+});
+
+test("without a verification pass an unrepaired issue stays fail-closed", async () => {
+  const { memory, generated } = twoUnitGroup();
+  const outcome = await reconcileGeneratedIntegrations(generated, {
+    projectMemory: memory,
+    maxAuditPassesPerGroup: 1,
+    audit: async () => AUDIT_ISSUE,
+    repair: async (request) => request.currentCode,
+  });
+  assert.equal(outcome.auditRequests, 1);
+  assert.equal(outcome.results.every((item) => /bounded target budget/u.test(item.error ?? "")), true);
+});
+
 test("unrelated generated files are not audited merely because they share a run", async () => {
   const python = fileUnit("tool.py", "python", "Print a value.");
   const rust = fileUnit("src/main.rs", "rust", "Print another value.");

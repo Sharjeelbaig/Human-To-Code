@@ -175,6 +175,18 @@ function runCli(root, argv, killAfterMs) {
   });
 }
 
+/**
+ * A target language's own parser reporting on a candidate is the tool working:
+ * behaviors like `windows-paths` append a `//` comment to Python on purpose, and
+ * catching that is the point. Such a diagnostic is quoted in the CLI's own
+ * framing, so drop the quoted message before hunting for escaped exceptions.
+ */
+const REPORTED_DIAGNOSTIC = /(?:failed syntax validation|failed import validation): [^\n]*/gu;
+
+function withoutReportedDiagnostics(output) {
+  return output.replace(REPORTED_DIAGNOSTIC, "<reported candidate diagnostic>");
+}
+
 /** Everything the corpus treats as a stability defect, with a stable id. */
 function judge(scenario, run, files, contents, mock) {
   const findings = [];
@@ -194,9 +206,10 @@ function judge(scenario, run, files, contents, mock) {
   if (run.code === 6) {
     add("INTERNAL_ERROR", `exit 6 (internal error): ${firstLine(run.stderr) || firstLine(run.stdout)}`);
   }
+  const scannable = withoutReportedDiagnostics(combined);
   for (const signature of CRASH_SIGNATURES) {
-    if (combined.includes(signature)) {
-      add("CRASH_SIGNATURE", `${signature} — ${nearby(combined, signature)}`);
+    if (scannable.includes(signature)) {
+      add("CRASH_SIGNATURE", `${signature} — ${nearby(scannable, signature)}`);
       break;
     }
   }
