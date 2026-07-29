@@ -119,6 +119,25 @@ export const CONTEXT_REQUEST_TOOL: Readonly<ProviderToolDefinitionV1> = deepFree
   },
 });
 
+/**
+ * Terminal coding tool for a host-resolved source selection. The model submits
+ * replacement text, while the host retains ownership of path authorization,
+ * byte offsets, stale checks, candidate validation, and the eventual write.
+ */
+export const SELECTED_CODE_EDIT_TOOL: Readonly<ProviderToolDefinitionV1> = deepFreeze({
+  name: "replace_selected_code",
+  description: "Submit replacement code only for the host-selected source range in the current target. The host owns the path and byte range; this tool cannot edit any other text.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["path", "newText"],
+    properties: {
+      path: { type: "string", minLength: 1, maxLength: 4096 },
+      newText: { type: "string", minLength: 1, maxLength: 16 * 1024 * 1024 },
+    },
+  },
+});
+
 export const COMPILER_CONTEXT_TOOLS: readonly ProviderToolDefinitionV1[] = deepFreeze([
   CONTEXT_REQUEST_TOOL,
 ]);

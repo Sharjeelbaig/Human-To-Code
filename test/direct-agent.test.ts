@@ -13,6 +13,7 @@ import {
   extractInlineMarkers,
   generateCode,
   generateConversionUnits,
+  validateGeneratedUnit,
   type UnitGenerationContext,
 } from "../src/index.ts";
 
@@ -56,6 +57,103 @@ test("a marker-only source is recognized as a safe whole-file replacement", asyn
     const fragment = units.find((unit) => unit.sourcePath === "fragment.ts")!;
     assert.equal(app.ownsWholeFile, true);
     assert.equal(fragment.ownsWholeFile, undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an explicit repair selects only the existing code below the marker", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-existing-file-edit-"));
+  const path = join(root, "main.py");
+  const source = [
+    "from fastapi import FastAPI",
+    "",
+    "app = FastAPI()",
+    "",
+    "# @human correct the endpoint below",
+    '@app.post("/generate")',
+    "async def generate(request):",
+    "    body = request.json()",
+    "    return body.prompt",
+    "",
+    "AFTER = True",
+    "",
+  ].join("\n");
+  try {
+    await writeFile(path, source);
+    const unit = (await discoverUnits(root, "python"))[0]!;
+
+    assert.equal(unit.ownsWholeFile, undefined);
+    assert.equal(unit.range?.start, source.indexOf("# @human"));
+    assert.equal(unit.range?.end, source.indexOf("    return body.prompt") + "    return body.prompt".length);
+    assert.match(unit.expectedMarker ?? "", /^# @human correct the endpoint below/u);
+    assert.doesNotMatch(unit.expectedMarker ?? "", /from fastapi import/u);
+    assert.doesNotMatch(unit.expectedMarker ?? "", /AFTER/u);
+    assert.doesNotMatch(unit.existingSource ?? "", /@human/u);
+    assert.match(unit.existingSource ?? "", /@app\.post\("\/generate"\)/u);
+    assert.equal(unit.selectedSource, [
+      '@app.post("/generate")',
+      "async def generate(request):",
+      "    body = request.json()",
+      "    return body.prompt",
+    ].join("\n"));
+    assert.equal(unit.insertionContext, undefined);
+    assert.match(unit.describe, /selected-code edit from @human/u);
+
+    const corrected = [
+      '@app.post("/generate")',
+      "async def generate(request):",
+      "    body = await request.json()",
+      '    return {"prompt": body["prompt"]}',
+    ].join("\n");
+    await assert.rejects(
+      validateGeneratedUnit(unit, unit.selectedSource!),
+      /removed the @human marker but did not change/u,
+    );
+    await assert.rejects(
+      validateGeneratedUnit(unit, "app = FastAPI()"),
+      /discarded more than half/u,
+    );
+    await assert.rejects(
+      validateGeneratedUnit(unit, `# Corrected endpoint\n${corrected}`),
+      /added a comment that the instruction did not request/u,
+    );
+    await assert.rejects(
+      validateGeneratedUnit(
+        unit,
+        corrected.replace("generate(request)", "generate(request: Request)"),
+      ),
+      /annotation name Request is not imported or declared/u,
+    );
+    await validateGeneratedUnit(unit, corrected);
+    await applyUnit(root, unit, corrected);
+    const applied = await readFile(path, "utf8");
+    assert.equal(applied.slice(0, source.indexOf("# @human")), source.slice(0, source.indexOf("# @human")));
+    assert.match(applied, /body = await request\.json\(\)/u);
+    assert.match(applied, /\n\nAFTER = True\n$/u);
+    assert.doesNotMatch(applied, /@human/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ordinary insertion and multi-marker files keep narrow marker ranges", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-narrow-markers-"));
+  try {
+    await writeFile(
+      join(root, "single.py"),
+      "# @human add an endpoint below\napp = object()\n",
+    );
+    await writeFile(
+      join(root, "multiple.py"),
+      "# @human correct the function below\ndef one(): pass\n# @human add logging\ndef two(): pass\n",
+    );
+    const units = await discoverUnits(root, "python");
+    const single = units.find((unit) => unit.sourcePath === "single.py")!;
+    const multiple = units.filter((unit) => unit.sourcePath === "multiple.py");
+    assert.equal(single.ownsWholeFile, undefined);
+    assert.ok(single.range!.end < (await readFile(join(root, "single.py"), "utf8")).length);
+    assert.ok(multiple.every((unit) => unit.ownsWholeFile === undefined));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

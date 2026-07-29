@@ -44,6 +44,10 @@ import {
   type SkillSelectionInput,
 } from "../skills/index.ts";
 import { GENERATED_CODE_SCHEMA_V1 } from "../llms/schemas.ts";
+import {
+  SELECTED_CODE_EDIT_TOOL,
+  type ProviderToolCallV1,
+} from "../llms/provider.ts";
 import { languageProfile } from "../tools/discovery/languages.ts";
 import { ModelOutputError, stripCodeFence } from "./presentation.ts";
 import { runProviderToolLoop } from "./provider-tool-loop.ts";
@@ -293,11 +297,36 @@ async function requestAgentCode(
   if (runtime === undefined) {
     throw new Error("The agent runtime was not configured.");
   }
-  const remainingToolCalls = runtime.remainingToolCalls();
-  const tools =
-    remainingToolCalls > 0 && !runtime.adapter.capabilities.remote
-      ? runtime.tools
-      : [];
+  const remainingContextCalls = runtime.remainingToolCalls();
+  const selectedEdit = options.selectedSource !== undefined;
+  const tools = runtime.adapter.capabilities.remote
+    ? []
+    : [
+        ...(remainingContextCalls > 0 ? runtime.tools : []),
+        ...(selectedEdit ? [SELECTED_CODE_EDIT_TOOL] : []),
+      ];
+  const maximumToolCalls = Math.min(
+    8,
+    remainingContextCalls + (selectedEdit ? 1 : 0),
+  );
+  let submittedReplacement: string | undefined;
+  const validateSelectedEditCall = (call: ProviderToolCallV1): string => {
+    const keys = Object.keys(call.arguments).sort();
+    if (
+      keys.length !== 2
+      || keys[0] !== "newText"
+      || keys[1] !== "path"
+      || call.arguments.path !== options.targetPath
+      || typeof call.arguments.newText !== "string"
+      || call.arguments.newText.trim().length === 0
+      || Buffer.byteLength(call.arguments.newText, "utf8") > MAX_RESPONSE_BYTES
+    ) {
+      throw new ModelOutputError(
+        "replace_selected_code requires exactly the reviewed target path and non-empty newText.",
+      );
+    }
+    return call.arguments.newText;
+  };
   const result = await runProviderToolLoop({
     adapter: runtime.adapter,
     budget: runtime.budget,
@@ -315,11 +344,44 @@ async function requestAgentCode(
       temperature: 0,
       signal: options.signal,
     },
-    validateFinal: validateGeneratedCodeEnvelope,
+    validateFinal: selectedEdit
+      ? () => {
+          throw new ModelOutputError(
+            "A selected-code edit must be submitted through replace_selected_code.",
+          );
+        }
+      : validateGeneratedCodeEnvelope,
     tools,
-    validateToolCall: runtime.validateToolCall,
-    executeTool: runtime.executeTool,
-    maxToolCalls: remainingToolCalls,
+    validateToolCall: (call) => {
+      if (call.name === SELECTED_CODE_EDIT_TOOL.name) {
+        validateSelectedEditCall(call);
+      } else {
+        runtime.validateToolCall(call);
+      }
+    },
+    executeTool: async (call) => {
+      if (call.name === SELECTED_CODE_EDIT_TOOL.name) {
+        submittedReplacement = validateSelectedEditCall(call);
+        return {
+          schemaVersion: 1,
+          ok: true,
+          path: options.targetPath!,
+          staged: true,
+        };
+      }
+      return runtime.executeTool(call);
+    },
+    terminalAfterTools: (calls) => {
+      const edits = calls.filter((call) => call.name === SELECTED_CODE_EDIT_TOOL.name);
+      if (edits.length === 0) return undefined;
+      if (edits.length !== 1 || submittedReplacement === undefined) {
+        throw new ModelOutputError(
+          "The agent must submit exactly one replace_selected_code call.",
+        );
+      }
+      return { value: submittedReplacement };
+    },
+    maxToolCalls: maximumToolCalls,
   });
   return stripCodeFence(result.value);
 }
@@ -374,6 +436,11 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.insertionContext ? { insertionContext: options.insertionContext } : {}),
     ...(options.insertionOwner ? { insertionOwner: options.insertionOwner } : {}),
     ...(options.surroundingSource ? { surroundingSource: options.surroundingSource } : {}),
+    ...(options.existingSource ? { existingSource: options.existingSource } : {}),
+    ...(options.selectedSource ? { selectedSource: options.selectedSource } : {}),
+    ...(options.selectedSource && options.agentRuntime
+      ? { selectedEditTool: true }
+      : {}),
     ...(options.fileMemory ? { fileMemory: options.fileMemory } : {}),
     ...(options.projectMemory ? { projectMemory: options.projectMemory } : {}),
     ...(options.blueprint ? { blueprint: options.blueprint } : {}),

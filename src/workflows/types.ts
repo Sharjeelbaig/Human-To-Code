@@ -36,6 +36,10 @@ export interface ConversionUnit {
   expectedMarker?: string;
   /** True when a single inline marker is the file's only meaningful content. */
   ownsWholeFile?: boolean;
+  /** Complete target contents with only a selected-edit marker removed. */
+  existingSource?: string;
+  /** Existing host-selected construct this unit is authorized to replace. */
+  selectedSource?: string;
   /** 1-based source line of the marker, for progress display. */
   line?: number;
   /** Grammar position receiving an inline replacement. */
@@ -226,6 +230,10 @@ export interface GenerateOptions {
   insertionOwner?: string;
   /** Bounded source around the marker. */
   surroundingSource?: string;
+  /** Existing complete target source for a selected-code edit. */
+  existingSource?: string;
+  /** Existing host-selected construct an edit tool may replace. */
+  selectedSource?: string;
   /** Deterministic earlier replacements from the same file. */
   fileMemory?: string;
   /** Compact current/projected repository evidence for this exact target. */

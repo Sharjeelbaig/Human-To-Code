@@ -219,6 +219,17 @@ another comment stays inert. When it does replace a marker, it removes exactly
 the comment range it recognized and leaves the surrounding text, newline style,
 and indentation alone.
 
+Inline markers insert code at the comment by default. When a file contains one
+marker that explicitly asks to correct, fix, update, refactor, or otherwise
+modify existing code below it, direct mode discloses a **selected-code edit from
+`@human`** instead. The agent may read the complete marker-free file, but the
+host resolves and owns the exact following construct. A local agent must submit
+only that construct's replacement through `replace_selected_code`; it cannot
+choose offsets or rewrite unrelated lines. The complete spliced candidate is
+then syntax checked, and the write succeeds only if the selected original bytes
+still match the reviewed snapshot. Multiple markers in one file retain narrow
+insertion scope so overlapping edit ownership is never guessed.
+
 Inline markers are ordered conversation turns. Before any code is generated, a
 strict classifier decides whether each one asks for an edit or only adds context
 (greetings and problem statements count as context). Context-only markers are

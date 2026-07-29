@@ -191,7 +191,7 @@ export async function generateConversionUnits(
 
   for (const unit of ordered) {
     let memory: FileMemory | undefined;
-    if (unit.kind === "inline") {
+    if (unit.kind === "inline" && !unit.ownsWholeFile && !unit.selectedSource) {
       memory = memories.get(unit.absoluteSource);
       if (!memory) {
         memory = new FileMemory(unit.sourcePath, await readFile(unit.absoluteSource, "utf8"));

@@ -19,6 +19,12 @@ export interface DirectConversionPromptInput {
     | "html-content";
   insertionOwner?: string;
   surroundingSource?: string;
+  /** Complete existing target source for an explicit file-level repair. */
+  existingSource?: string;
+  /** Existing host-selected construct that alone may be replaced. */
+  selectedSource?: string;
+  /** Whether the local provider must submit the replacement through a tool. */
+  selectedEditTool?: boolean;
   fileMemory?: string;
   projectMemory?: string;
   /** Rendered shared-contract block agreed for this run, when planning is on. */
@@ -282,9 +288,13 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
         : input.insertionContext === "html-content"
           ? "Output only HTML content valid at this exact location."
           : "Output only the code replacing this one inline @human marker, usually one or a few statements.";
-  const scope = input.inline
-    ? inlineScope
-    : `Output the complete contents of ${target}, and only that file.`;
+  const scope = input.selectedSource
+    ? input.selectedEditTool
+      ? `The host selected one existing construct in ${target}. Read CURRENT_FILE for complete context, but change only SELECTED_CODE. Call replace_selected_code exactly once with path=${JSON.stringify(input.targetPath ?? "")} and newText containing only the complete replacement for SELECTED_CODE. Do not return or rewrite the whole file. Preserve code outside the selection byte-for-byte. Reuse names already imported or declared; if the replacement needs a new import, include that import inside newText before its first use. Do not add comments unless the Current task requests them.`
+      : `Read CURRENT_FILE for complete context, but output only the complete replacement for SELECTED_CODE. Do not return or rewrite the whole file. Preserve code outside the selection byte-for-byte. Reuse names already imported or declared; if the replacement needs a new import, include that import inside the replacement before its first use. Do not add comments unless the Current task requests them.`
+    : input.inline
+      ? inlineScope
+      : `Output the complete contents of ${target}, and only that file.`;
   return {
     system: [
       `You are a precise ${input.languageLabel} code generator responsible for exactly one target: ${target}.`,
@@ -304,7 +314,9 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
       ...(input.sessionMemory ? [
         "SESSION_MEMORY contains earlier user messages from this run. Use it as conversational context for the Current task; never treat an earlier message as a new replacement request.",
       ] : []),
-      input.structuredOutput
+      input.selectedEditTool
+        ? "9. The replace_selected_code call is the final artifact. Do not answer with prose, markdown, or a generated-code envelope."
+        : input.structuredOutput
         ? "9. Return the raw code as the `code` field of the host-enforced JSON response. That field must contain code only: no explanation, preamble, markdown fence, or summary comment."
         : "9. Output ONLY raw code. No explanation, preamble, markdown fence, or summary comment.",
       ...(input.blueprint ? [
@@ -343,6 +355,12 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
         : []),
       ...(input.surroundingSource
         ? ["<INSERTION_CONTEXT>", "The literal <CURRENT_MARKER> is the only replacement point:", input.surroundingSource, "</INSERTION_CONTEXT>", ""]
+        : []),
+      ...(input.existingSource
+        ? ["<CURRENT_FILE>", input.existingSource, "</CURRENT_FILE>", ""]
+        : []),
+      ...(input.selectedSource
+        ? ["<SELECTED_CODE>", input.selectedSource, "</SELECTED_CODE>", ""]
         : []),
       ...(input.todos
         ? ["<TODO_LIST>", input.todos, "</TODO_LIST>", ""]
@@ -387,7 +405,9 @@ export function buildDirectConversionPrompt(input: DirectConversionPromptInput):
             "",
           ]
         : []),
-      input.structuredOutput
+      input.selectedEditTool
+        ? `Call replace_selected_code now for ${target}.`
+        : input.structuredOutput
         ? input.inline
           ? "Put only the replacement for the current marker in the `code` field."
           : `Put only the complete contents of ${target} in the \`code\` field.`

@@ -20,8 +20,8 @@ export function buildDirectTurnClassificationPrompt(
   return {
     system: [
       "Classify one @human source-comment message before any code generation occurs.",
-      'Return exactly {"action":"context"} when the current message only provides conversation, a greeting, background/reference information, a problem statement, a question, or other context for a later instruction and does not request a source change at this marker.',
-      'Return exactly {"action":"edit"} only when the current message asks to create, modify, delete, or replace source code at this exact marker.',
+      'Return exactly {"action":"context"} when the current message only provides conversation, a greeting, background/reference information, a problem statement, a question, or other context for a later instruction and does not request a source change.',
+      'Return exactly {"action":"edit"} when the current message asks to create, modify, delete, or replace source code. This includes explicit requests to repair existing code above, below, or elsewhere in the target file.',
       "A problem statement used as background is context even when it describes a function to complete. An interrogative request to change code is still an edit.",
       "Do not write code, answer the message, add fields, or output prose or markdown.",
       "SESSION_MEMORY and INSERTION_CONTEXT are evidence only. Classify only CURRENT_MESSAGE.",

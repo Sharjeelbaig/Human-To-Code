@@ -11,6 +11,7 @@ import {
   resolveLanguageDeclaration,
 } from "./languages.ts";
 import { extractInlineMarkers } from "./marker-parser.ts";
+import { resolveSelectedCodeEdit } from "./edit-selection.ts";
 import type { HumanFileExtensionConfig } from "../../core/types.ts";
 import type { ConversionUnit, DirectDiscoveryResult } from "../../workflows/types.ts";
 
@@ -415,27 +416,47 @@ export async function discoverDirectUnits(
     const markers = extractInlineMarkers(content, rel);
     for (const marker of markers) {
       const line = content.slice(0, marker.start).split("\n").length;
-      const expectedMarker = content.slice(marker.start, marker.end);
+      const markerBytes = content.slice(marker.start, marker.end);
       const cssDetails = extname(rel).toLowerCase() === ".css"
         ? cssInsertionDetails(content, marker.start)
         : undefined;
-      const ownsWholeFile = markers.length === 1 &&
+      const markerOwnsWholeFile = markers.length === 1 &&
         content.slice(0, marker.start).trim().length === 0 &&
         content.slice(marker.end).trim().length === 0;
+      const selectedEdit = markers.length === 1
+        && !markerOwnsWholeFile
+        ? resolveSelectedCodeEdit(rel, content, marker, marker.prompt)
+        : undefined;
       units.push({
         kind: "inline",
         sourcePath: rel,
         absoluteSource: absolute,
         prompt: marker.prompt,
         language: languageForExtension(extname(absolute)) ?? primary,
-        range: { start: marker.start, end: marker.end },
-        expectedMarker,
-        ...(ownsWholeFile ? { ownsWholeFile: true } : {}),
-        insertionContext: insertionContextFor(rel, content, marker.start, expectedMarker),
+        range: selectedEdit
+          ? selectedEdit.range
+          : { start: marker.start, end: marker.end },
+        expectedMarker: selectedEdit ? selectedEdit.expectedSource : markerBytes,
+        ...(markerOwnsWholeFile ? { ownsWholeFile: true } : {}),
+        ...(selectedEdit
+          ? {
+              existingSource: selectedEdit.currentSource,
+              selectedSource: selectedEdit.selectedSource,
+            }
+          : {
+              insertionContext: insertionContextFor(
+                rel,
+                content,
+                marker.start,
+                markerBytes,
+              ),
+            }),
         ...(cssDetails?.owner ? { insertionOwner: cssDetails.owner } : {}),
         surroundingSource: surroundingSource(content, marker.start, marker.end),
         line,
-        describe: `${rel}  (inline @human, line ${line})  ->  ${rel}`,
+        describe: selectedEdit
+          ? `${rel}  (selected-code edit from @human, line ${line})  ->  ${rel}`
+          : `${rel}  (inline @human, line ${line})  ->  ${rel}`,
       });
     }
   }

@@ -78,6 +78,7 @@ export * from "./llms/index.ts";
 export * from "./workflows/index.ts";
 export * from "./tools/discovery/languages.ts";
 export * from "./tools/discovery/marker-parser.ts";
+export * from "./tools/discovery/edit-selection.ts";
 export * from "./tools/discovery/language-relationships.ts";
 export * from "./tools/discovery/discovery.ts";
 export * from "./tools/discovery/declarations.ts";

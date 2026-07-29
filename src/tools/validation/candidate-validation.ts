@@ -20,7 +20,7 @@ const TYPESCRIPT_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".j
 const PYTHON_SYNTAX_TIMEOUT_MS = 5_000;
 const MAX_PYTHON_DIAGNOSTIC_BYTES = 64 * 1024;
 const PYTHON_SYNTAX_SCRIPT = [
-  "import ast, json, sys",
+  "import ast, builtins, json, sys",
   "source = sys.stdin.read()",
   "try:",
   "    tree = ast.parse(source, filename='<candidate>', mode='exec', type_comments=True)",
@@ -33,6 +33,51 @@ const PYTHON_SYNTAX_SCRIPT = [
   "    }))",
   "else:",
   "    issues = []",
+  "    module_bound = set(dir(builtins))",
+  "    def bind_target(target):",
+  "        if isinstance(target, ast.Name):",
+  "            module_bound.add(target.id)",
+  "        elif isinstance(target, (ast.Tuple, ast.List)):",
+  "            for item in target.elts:",
+  "                bind_target(item)",
+  "    for statement in tree.body:",
+  "        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):",
+  "            module_bound.add(statement.name)",
+  "        elif isinstance(statement, (ast.Assign, ast.AnnAssign)):",
+  "            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]",
+  "            for target in targets:",
+  "                bind_target(target)",
+  "        elif isinstance(statement, ast.Import):",
+  "            for alias in statement.names:",
+  "                module_bound.add(alias.asname or alias.name.split('.')[0])",
+  "        elif isinstance(statement, ast.ImportFrom):",
+  "            for alias in statement.names:",
+  "                if alias.name != '*':",
+  "                    module_bound.add(alias.asname or alias.name)",
+  "    for statement in tree.body:",
+  "        if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):",
+  "            continue",
+  "        annotations = [argument.annotation for argument in [*statement.args.posonlyargs, *statement.args.args, *statement.args.kwonlyargs] if argument.annotation is not None]",
+  "        if statement.args.vararg is not None and statement.args.vararg.annotation is not None:",
+  "            annotations.append(statement.args.vararg.annotation)",
+  "        if statement.args.kwarg is not None and statement.args.kwarg.annotation is not None:",
+  "            annotations.append(statement.args.kwarg.annotation)",
+  "        if statement.returns is not None:",
+  "            annotations.append(statement.returns)",
+  "        for annotation in annotations:",
+  "            for name in (node for node in ast.walk(annotation) if isinstance(node, ast.Name)):",
+  "                if name.id not in module_bound:",
+  "                    issues.append({",
+  "                        'kind': 'UndefinedAnnotation',",
+  "                        'message': f'annotation name {name.id} is not imported or declared at module scope',",
+  "                        'line': getattr(name, 'lineno', None),",
+  "                        'column': getattr(name, 'col_offset', 0) + 1,",
+  "                    })",
+  "                    break",
+  "            if issues:",
+  "                break",
+  "        if issues:",
+  "            break",
   "    def inspect_body(owner, body):",
   "        terminated = False",
   "        for statement in body:",
@@ -600,7 +645,12 @@ function stripRepeatedTrailingSource(
   unit: ConversionUnit,
   code: string,
 ): string {
-  if (unit.kind !== "inline" || !unit.surroundingSource) return code;
+  if (
+    unit.kind !== "inline"
+    || unit.ownsWholeFile
+    || unit.selectedSource
+    || !unit.surroundingSource
+  ) return code;
   const marker = "<CURRENT_MARKER>";
   const markerIndex = unit.surroundingSource.indexOf(marker);
   if (markerIndex < 0) return code;
@@ -832,6 +882,46 @@ function validateNoLiveMarker(
   );
 }
 
+function validateSelectedCodeEdit(unit: ConversionUnit, code: string): void {
+  if (unit.selectedSource === undefined) return;
+  if (code.trim() === unit.selectedSource.trim()) {
+    throw new DirectCandidateValidationError(
+      `${unit.sourcePath}: the model removed the @human marker but did not change the selected code requested by the instruction.`,
+    );
+  }
+  const permitsLargeRemoval =
+    /\b(?:delete|remove)\b/iu.test(unit.prompt)
+    || /\b(?:replace|rewrite)\s+(?:the\s+)?(?:entire|whole)\s+(?:file|module)\b/iu.test(unit.prompt);
+  if (
+    !permitsLargeRemoval
+    && Buffer.byteLength(code, "utf8")
+      < Math.floor(Buffer.byteLength(unit.selectedSource, "utf8") / 2)
+  ) {
+    throw new DirectCandidateValidationError(
+      `${unit.sourcePath}: selected-code edit discarded more than half of the selected source even though the instruction did not authorize a broad removal.`,
+    );
+  }
+  if (!/\b(?:comment|documentation|document|docstring)\b/iu.test(unit.prompt)) {
+    const existingComments = new Set(
+      unit.selectedSource
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => /^(?:#|\/\/|\/\*|\*|<!--)/u.test(line)),
+    );
+    const addedComment = code
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find((line) =>
+        /^(?:#|\/\/|\/\*|\*|<!--)/u.test(line)
+        && !existingComments.has(line));
+    if (addedComment !== undefined) {
+      throw new DirectCandidateValidationError(
+        `${unit.sourcePath}: selected-code edit added a comment that the instruction did not request.`,
+      );
+    }
+  }
+}
+
 /** Validate the complete candidate file before any direct-agent write occurs. */
 export async function validateGeneratedUnit(unit: ConversionUnit, code: string): Promise<void> {
   if (code.trim().length === 0) throw new DirectCandidateValidationError(`${unit.sourcePath}: model returned no code.`);
@@ -840,6 +930,7 @@ export async function validateGeneratedUnit(unit: ConversionUnit, code: string):
   }
   const sourcePath = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
   validateNoLiveMarker(unit, code, sourcePath);
+  validateSelectedCodeEdit(unit, code);
   validateLanguageRuleExpectation(unit, code, sourcePath);
   validateExplicitRequirements(unit, code, sourcePath);
   if (extname(sourcePath).toLowerCase() === ".css" && unit.kind === "inline") validateCssReplacement(unit, code);

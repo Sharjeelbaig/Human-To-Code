@@ -9,6 +9,7 @@ import {
   DeterministicMockProvider,
   ProviderBudgetTracker,
   ProviderError,
+  SELECTED_CODE_EDIT_TOOL,
   type ProviderAdapter,
   type ProviderGenerationRequestV1,
 } from "../src/llms/provider.ts";
@@ -146,6 +147,39 @@ test("local provider autonomously requests real bounded context before final cod
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a terminal edit tool returns its staged replacement without a second model turn", async () => {
+  const replacement = "async def generate(request):\n    body = await request.json()";
+  const provider = new DeterministicMockProvider({
+    steps: [{
+      finishReason: "tool_call",
+      output: {
+        toolCalls: [{
+          id: "edit-1",
+          name: "replace_selected_code",
+          arguments: { path: "main.py", newText: replacement },
+        }],
+      },
+    }],
+  });
+  const result = await runProviderToolLoop({
+    adapter: provider,
+    request: request(),
+    validateFinal: (): string => {
+      throw new Error("A terminal edit must not request a final model response.");
+    },
+    tools: [SELECTED_CODE_EDIT_TOOL],
+    executeTool: async () => ({ schemaVersion: 1, ok: true, staged: true }),
+    terminalAfterTools: (calls) =>
+      calls[0]?.name === "replace_selected_code"
+        ? { value: calls[0].arguments.newText as string }
+        : undefined,
+    maxToolCalls: 1,
+  });
+  assert.equal(result.value, replacement);
+  assert.equal(result.turns.length, 1);
+  assert.equal(result.toolCalls, 1);
 });
 
 test("tool batches are validated atomically before any host action", async () => {

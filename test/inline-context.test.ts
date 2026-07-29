@@ -175,11 +175,40 @@ test("a strict classifier handles arbitrary conversational turns, not named dire
     sessionMemory: '- main.ts:1: "Hi"',
   });
   assert.match(prompt.system, /greeting, background\/reference information/u);
+  assert.match(prompt.system, /repair existing code above, below/u);
   assert.match(prompt.system, /exactly \{"action":"context"\}/u);
   assert.match(prompt.user, /<SESSION_MEMORY>\n- main\.ts:1: "Hi"/u);
   assert.equal(parseDirectTurnClassification('{"action":"context"}'), "context");
   assert.equal(parseDirectTurnClassification('{"action":"edit"}'), "edit");
   assert.throws(() => parseDirectTurnClassification('{"action":"context","code":"oops"}'));
+});
+
+test("selected-code prompts include the whole file but authorize only the selected construct", () => {
+  const prompt = buildDirectConversionPrompt({
+    languageLabel: "Python",
+    targetPath: "main.py",
+    instruction: "correct the endpoint below",
+    inline: false,
+    existingSource: [
+      "from fastapi import FastAPI",
+      "app = FastAPI()",
+      '@app.post("/generate")',
+      "async def generate(request): ...",
+    ].join("\n"),
+    selectedSource: [
+      '@app.post("/generate")',
+      "async def generate(request): ...",
+    ].join("\n"),
+    selectedEditTool: true,
+  });
+
+  assert.match(prompt.system, /change only SELECTED_CODE/u);
+  assert.match(prompt.system, /replace_selected_code exactly once/u);
+  assert.match(prompt.system, /Do not return or rewrite the whole file/u);
+  assert.match(prompt.user, /<CURRENT_FILE>[\s\S]*@app\.post\("\/generate"\)[\s\S]*<\/CURRENT_FILE>/u);
+  assert.match(prompt.user, /<SELECTED_CODE>[\s\S]*async def generate[\s\S]*<\/SELECTED_CODE>/u);
+  assert.match(prompt.user, /Call replace_selected_code now for main\.py/u);
+  assert.doesNotMatch(prompt.user, /<INSERTION_CONTEXT>/u);
 });
 
 test("a greeting is retained without blocking the next edit in the same file", async () => {

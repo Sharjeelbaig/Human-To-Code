@@ -59,6 +59,15 @@ export interface ProviderToolLoopOptions<T> {
   /** Exact host validator, run for the whole batch before the first execution. */
   validateToolCall?: (call: ProviderToolCallV1) => void;
   executeTool?: (call: ProviderToolCallV1) => Promise<unknown>;
+  /**
+   * A validated tool may itself be the terminal artifact. This is used by
+   * selected-code edits so replacement text is submitted through the edit tool
+   * and never needs a second, potentially different model response.
+   */
+  terminalAfterTools?: (
+    calls: readonly ProviderToolCallV1[],
+    outputs: readonly unknown[],
+  ) => { value: T } | undefined;
   /** A run may authorize fewer calls; the absolute implementation cap is 8. */
   maxToolCalls?: number;
 }
@@ -253,6 +262,14 @@ export async function runProviderToolLoop<T>(
     const outputs: unknown[] = [];
     for (const call of calls) outputs.push(await options.executeTool(call));
     usedToolCalls += calls.length;
+    const terminal = options.terminalAfterTools?.(calls, outputs);
+    if (terminal !== undefined) {
+      return {
+        value: terminal.value,
+        turns,
+        toolCalls: usedToolCalls,
+      };
+    }
     messages.push({ role: "assistant", content: "", toolCalls: calls });
     calls.forEach((call, index) => {
       messages.push({

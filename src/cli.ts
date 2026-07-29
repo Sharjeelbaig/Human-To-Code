@@ -941,8 +941,10 @@ async function buildCommand(
         language: unitLanguage,
         targetPath: target,
         compilerMode: true,
-        inline: unit.kind === "inline" && !unit.ownsWholeFile,
-        ...(!unit.ownsWholeFile && unit.insertionContext
+        inline: unit.kind === "inline"
+          && !unit.ownsWholeFile
+          && !unit.selectedSource,
+        ...(!unit.ownsWholeFile && !unit.selectedSource && unit.insertionContext
           ? { insertionContext: unit.insertionContext }
           : {}),
       });
@@ -1182,7 +1184,9 @@ async function buildCommand(
   const describeUnit = (unit: ConversionUnit): string =>
     unit.kind === "file"
       ? `${unit.sourcePath} → ${unit.outputPath}`
-      : `${unit.sourcePath} (inline @human, line ${unit.line ?? "?"})`;
+      : unit.selectedSource
+        ? `${unit.sourcePath} (selected-code edit from @human, line ${unit.line ?? "?"})`
+        : `${unit.sourcePath} (inline @human, line ${unit.line ?? "?"})`;
   const interactive = !cli.json;
   const spinner = createSpinner(interactive);
   const started = Date.now();
@@ -1366,7 +1370,8 @@ async function buildCommand(
         if (
           (modelContext.fileMemory?.length ?? 0) +
             (modelContext.projectMemory?.length ?? 0) +
-            (modelContext.sessionMemory?.length ?? 0) >
+            (modelContext.sessionMemory?.length ?? 0) +
+            (unit.existingSource?.length ?? 0) >
           contextCharBudget
         ) {
           throw new ContextSecurityError(
@@ -1383,19 +1388,27 @@ async function buildCommand(
           ...(codeAgentRuntime === undefined
             ? {}
             : { agentRuntime: codeAgentRuntime }),
-          ...(!unit.ownsWholeFile && unit.insertionContext
+          ...(!unit.ownsWholeFile && !unit.selectedSource && unit.insertionContext
             ? {
                 insertionContext: unit.insertionContext,
               }
             : {}),
-          ...(!unit.ownsWholeFile && unit.insertionOwner
+          ...(!unit.ownsWholeFile && !unit.selectedSource && unit.insertionOwner
             ? { insertionOwner: unit.insertionOwner }
             : {}),
-          ...(!unit.ownsWholeFile && unit.surroundingSource
+          ...(!unit.ownsWholeFile && !unit.selectedSource && unit.surroundingSource
             ? { surroundingSource: unit.surroundingSource }
             : {}),
+          ...(unit.existingSource
+            ? { existingSource: unit.existingSource }
+            : {}),
+          ...(unit.selectedSource
+            ? { selectedSource: unit.selectedSource }
+            : {}),
           ...modelContext,
-          inline: unit.kind === "inline" && !unit.ownsWholeFile,
+          inline: unit.kind === "inline"
+            && !unit.ownsWholeFile
+            && !unit.selectedSource,
         }).then((code) => effective.compiler.enabled
           ? normalizeCompilerGeneratedUnitCode(unit, code)
           : normalizeGeneratedUnitCode(unit, code));
