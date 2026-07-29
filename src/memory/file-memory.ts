@@ -233,7 +233,7 @@ export async function generateConversionUnits(
           contextCharBudget - (renderedMemory?.length ?? 0) - (renderedSessionMemory?.length ?? 0),
         );
         const renderedProjectMemory = options.projectMemory?.renderFor(unit, remaining);
-        const baseContext: UnitGenerationContext = {
+        let baseContext: UnitGenerationContext = {
           inline: unit.kind === "inline",
           ...(renderedSessionMemory ? { sessionMemory: renderedSessionMemory } : {}),
           ...(renderedMemory ? { fileMemory: renderedMemory } : {}),
@@ -252,6 +252,11 @@ export async function generateConversionUnits(
           // to editing, which is what an unclassified turn always was.
           try {
             classifiedAction = await options.classify(unit, baseContext);
+            if (unit.selectedSource && memory) {
+              memory = undefined;
+              const { fileMemory: _fileMemory, ...withoutFileMemory } = baseContext;
+              baseContext = withoutFileMemory;
+            }
           } catch (error) {
             if (error instanceof ContextSecurityError) throw error;
             classifiedAction = "edit";

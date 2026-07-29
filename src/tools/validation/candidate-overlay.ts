@@ -7,7 +7,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import ts from "typescript";
-import { replaceInlineMarker } from "../file-ops/replacement.ts";
+import { replaceScopedInlineUnit } from "../file-ops/replacement.ts";
 import type { ConversionUnit, GeneratedConversionUnit } from "../../workflows/types.ts";
 
 /** Extensions that participate in combined TypeScript program validation. */
@@ -122,7 +122,11 @@ export async function buildCandidateOverlay(
     let failed = false;
     for (const item of ordered) {
       try {
-        content = replaceInlineMarker(content, item.unit.range!, item.unit.expectedMarker, item.code);
+        content = replaceScopedInlineUnit(
+          content,
+          item.unit as ConversionUnit & { range: { start: number; end: number } },
+          item.code,
+        );
         applied.push(item.unit);
       } catch (error) {
         failed = true;

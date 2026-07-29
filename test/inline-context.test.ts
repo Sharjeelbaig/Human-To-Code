@@ -174,12 +174,23 @@ test("a strict classifier handles arbitrary conversational turns, not named dire
     instruction: "Write your code here",
     sessionMemory: '- main.ts:1: "Hi"',
   });
-  assert.match(prompt.system, /greeting, background\/reference information/u);
-  assert.match(prompt.system, /repair existing code above, below/u);
+  assert.match(prompt.system, /semantically in any human language/u);
+  assert.match(prompt.system, /Do not depend on English keywords/u);
   assert.match(prompt.system, /exactly \{"action":"context"\}/u);
   assert.match(prompt.user, /<SESSION_MEMORY>\n- main\.ts:1: "Hi"/u);
-  assert.equal(parseDirectTurnClassification('{"action":"context"}'), "context");
-  assert.equal(parseDirectTurnClassification('{"action":"edit"}'), "edit");
+  assert.deepEqual(parseDirectTurnClassification('{"action":"context"}'), { action: "context" });
+  assert.deepEqual(parseDirectTurnClassification('{"action":"edit"}'), {
+    action: "edit",
+    mode: "insert",
+    startLine: 1,
+    endLine: 1,
+  });
+  assert.deepEqual(
+    parseDirectTurnClassification(
+      '{"action":"edit","mode":"replace","startLine":12,"endLine":21}',
+    ),
+    { action: "edit", mode: "replace", startLine: 12, endLine: 21 },
+  );
   assert.throws(() => parseDirectTurnClassification('{"action":"context","code":"oops"}'));
 });
 

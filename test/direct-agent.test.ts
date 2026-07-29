@@ -7,6 +7,7 @@ import { ContextSecurityError } from "../src/memory/context.ts";
 import {
   FileMemory,
   FileMemoryConflictError,
+  applyPlannedEditSelection,
   applyUnit,
   discoverDirectUnits,
   discoverUnits,
@@ -62,7 +63,7 @@ test("a marker-only source is recognized as a safe whole-file replacement", asyn
   }
 });
 
-test("an explicit repair selects only the existing code below the marker", async () => {
+test("a semantic plan selects only its exact existing construct", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-existing-file-edit-"));
   const path = join(root, "main.py");
   const source = [
@@ -85,10 +86,15 @@ test("an explicit repair selects only the existing code below the marker", async
 
     assert.equal(unit.ownsWholeFile, undefined);
     assert.equal(unit.range?.start, source.indexOf("# @human"));
-    assert.equal(unit.range?.end, source.indexOf("    return body.prompt") + "    return body.prompt".length);
+    assert.equal(unit.range?.end, source.indexOf("# @human") + "# @human correct the endpoint below".length);
     assert.match(unit.expectedMarker ?? "", /^# @human correct the endpoint below/u);
     assert.doesNotMatch(unit.expectedMarker ?? "", /from fastapi import/u);
     assert.doesNotMatch(unit.expectedMarker ?? "", /AFTER/u);
+    applyPlannedEditSelection(unit, source, {
+      mode: "replace",
+      startLine: 6,
+      endLine: 9,
+    });
     assert.doesNotMatch(unit.existingSource ?? "", /@human/u);
     assert.match(unit.existingSource ?? "", /@app\.post\("\/generate"\)/u);
     assert.equal(unit.selectedSource, [

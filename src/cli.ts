@@ -53,6 +53,8 @@ import {
   collectReferenceFindings,
   candidateTextsForGenerated,
   classifyHumanTurn,
+  applyPlannedEditSelection,
+  numberedSource,
   classifyPlanningNeed,
   classifyUnitsNeedingPlanning,
   normalizeGeneratedUnitCode,
@@ -1419,14 +1421,25 @@ async function buildCommand(
         ...(effective.compiler.enabled
           ? { sessionMemory: false }
           : {
-              classify: (
+              classify: async (
                 unit: ConversionUnit,
                 context: UnitGenerationContext,
-              ) =>
-                classifyHumanTurn(
+              ) => {
+                const source = await readFile(unit.absoluteSource, "utf8");
+                const numbered = numberedSource(source);
+                if (numbered.length > contextCharBudget) {
+                  throw new ContextSecurityError(
+                    "BUDGET_EXCEEDED",
+                    `Line-numbered source for ${unit.sourcePath} exceeds the configured context budget.`,
+                    unit.sourcePath,
+                  );
+                }
+                const plan = await classifyHumanTurn(
                   {
                     targetPath: unit.sourcePath,
                     instruction: unit.prompt,
+                    ...(unit.line === undefined ? {} : { markerLine: unit.line }),
+                    numberedSource: numbered,
                     ...(context.sessionMemory
                       ? { sessionMemory: context.sessionMemory }
                       : {}),
@@ -1439,7 +1452,13 @@ async function buildCommand(
                     language: unit.language ?? language,
                     targetPath: unit.sourcePath,
                   },
-                ),
+                );
+                if (plan.action === "context") return "context";
+                if (plan.mode === "replace") {
+                  applyPlannedEditSelection(unit, source, plan);
+                }
+                return "edit";
+              },
               shouldClassify: (unit: ConversionUnit) =>
                 unit.kind === "inline",
               projectMemory,

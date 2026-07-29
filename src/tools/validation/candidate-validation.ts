@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import ts from "typescript";
-import { replaceInlineMarker } from "../file-ops/replacement.ts";
+import { replaceScopedInlineUnit } from "../file-ops/replacement.ts";
 import { MARKER_SCANNED_EXTENSIONS } from "../discovery/discovery.ts";
 import { extractInlineMarkers } from "../discovery/marker-parser.ts";
 import { expectedCodeFromLanguageRules } from "../compiler/language-rules.ts";
@@ -798,7 +798,11 @@ async function sourceAndCandidateForUnit(
   const baseline = await readFile(unit.absoluteSource, "utf8");
   return {
     baseline,
-    candidate: replaceInlineMarker(baseline, unit.range!, unit.expectedMarker, code),
+    candidate: replaceScopedInlineUnit(
+      baseline,
+      unit as ConversionUnit & { range: { start: number; end: number } },
+      code,
+    ),
   };
 }
 
@@ -824,7 +828,11 @@ export async function candidateTextsForGenerated(
     }
     let content = await readFile(items[0]!.unit.absoluteSource, "utf8");
     for (const item of [...items].sort((left, right) => right.unit.range!.start - left.unit.range!.start)) {
-      content = replaceInlineMarker(content, item.unit.range!, item.unit.expectedMarker, item.code);
+      content = replaceScopedInlineUnit(
+        content,
+        item.unit as ConversionUnit & { range: { start: number; end: number } },
+        item.code,
+      );
     }
     candidates.set(path, content);
   }

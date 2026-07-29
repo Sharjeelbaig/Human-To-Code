@@ -11,7 +11,7 @@ import {
   buildDirectTurnClassificationPrompt,
   parseDirectTurnClassification,
   type DirectTurnClassificationPromptInput,
-  type DirectTurnAction,
+  type DirectTurnPlan,
 } from "../prompts/direct-turn-classification.ts";
 import {
   buildDirectPlanClassificationPrompt,
@@ -498,7 +498,7 @@ export async function generateSpecDiagnostics(
 export async function classifyHumanTurn(
   request: DirectTurnClassificationPromptInput,
   options: GenerateOptions,
-): Promise<DirectTurnAction> {
+): Promise<DirectTurnPlan> {
   const raw = await requestChatCompletion(buildDirectTurnClassificationPrompt(request), options);
   return parseDirectTurnClassification(raw);
 }

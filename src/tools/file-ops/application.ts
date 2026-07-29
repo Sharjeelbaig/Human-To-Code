@@ -5,7 +5,7 @@
 import { chmod, open, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
-import { replaceInlineMarker } from "../file-ops/replacement.ts";
+import { replaceScopedInlineUnit } from "../file-ops/replacement.ts";
 import type { ConversionUnit } from "../../workflows/types.ts";
 
 export class DirectApplicationError extends Error {
@@ -153,10 +153,9 @@ export async function applyUnit(root: string, unit: ConversionUnit, code: string
   }
 
   const original = await readFile(unit.absoluteSource, "utf8");
-  const { start, end } = unit.range!;
   let replaced: string;
   try {
-    replaced = replaceInlineMarker(original, { start, end }, unit.expectedMarker, code);
+    replaced = replaceScopedInlineUnit(original, unit as ConversionUnit & { range: { start: number; end: number } }, code);
   } catch (error) {
     throw new DirectApplicationError(
       `${unit.sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
@@ -174,11 +173,18 @@ export async function applyInlineFileBatch(applications: readonly InlineFileAppl
   if (applications.some(({ unit }) => unit.kind !== "inline" || unit.absoluteSource !== first.absoluteSource)) {
     throw new DirectApplicationError("Inline batch spans more than one source file.");
   }
+  if (applications.length > 1 && applications.some(({ unit }) => unit.selectedRange !== undefined)) {
+    throw new DirectApplicationError("A planned selected-code edit must be the only marker applied in its file.");
+  }
   let content = await readFile(first.absoluteSource, "utf8");
   const ordered = [...applications].sort((left, right) => right.unit.range!.start - left.unit.range!.start);
   try {
     for (const { unit, code } of ordered) {
-      content = replaceInlineMarker(content, unit.range!, unit.expectedMarker, code);
+      content = replaceScopedInlineUnit(
+        content,
+        unit as ConversionUnit & { range: { start: number; end: number } },
+        code,
+      );
     }
   } catch (error) {
     throw new DirectApplicationError(

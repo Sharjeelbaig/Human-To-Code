@@ -40,6 +40,9 @@ export interface ConversionUnit {
   existingSource?: string;
   /** Existing host-selected construct this unit is authorized to replace. */
   selectedSource?: string;
+  /** Exact independently stale-checked bytes selected for replacement. */
+  selectedRange?: { start: number; end: number };
+  expectedSelectedSource?: string;
   /** 1-based source line of the marker, for progress display. */
   line?: number;
   /** Grammar position receiving an inline replacement. */
