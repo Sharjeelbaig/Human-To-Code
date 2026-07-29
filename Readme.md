@@ -209,7 +209,8 @@ regular file under 1 MiB gets reported as unsupported rather than silently
 skipped. Ignored directories, dot directories, and symlinks stay out of the walk,
 and oversized unsupported files are never opened just to produce a notice.
 
-The scanner is lexical. It reads `// @human` and `# @human` line comments,
+The scanner is lexical. It reads `// @human` and `# @human` line comments
+(including consecutive `#` comment lines after a Python marker),
 single-line and multiline `/* @human ... */` blocks, decorated JSDoc comments,
 and `<!-- @human ... -->` in HTML. Inside HTML it also reads the JavaScript and
 CSS comment forms in `<script>` and `<style>`. Anything marker-shaped sitting in

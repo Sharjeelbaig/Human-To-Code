@@ -35,6 +35,30 @@ test("issue 02: single-line and decorated multiline JSDoc markers are discovered
   ]);
 });
 
+test("Python markers support consecutive hash-comment lines but remain inert in docstrings", () => {
+  const source = [
+    "def health():",
+    "    # @human return this:",
+    "    # {",
+    "    #   api_health: good,",
+    "    #   time: 4:17pm",
+    "    # }",
+    '    """# @human ignore this string"""',
+  ].join("\n");
+
+  const markers = extractInlineMarkers(source, "main.py");
+  assert.deepEqual(markers.map(({ prompt }) => prompt), [
+    "return this:\n{\n  api_health: good,\n  time: 4:17pm\n}",
+  ]);
+  assert.equal(source.slice(markers[0]!.start, markers[0]!.end), [
+    "# @human return this:",
+    "    # {",
+    "    #   api_health: good,",
+    "    #   time: 4:17pm",
+    "    # }",
+  ].join("\n"));
+});
+
 test("HTML inline parsing supports single-line, multiline, script, and style markers lexically", () => {
   const source = [
     "<p>Don't let an apostrophe hide the next marker.</p>",

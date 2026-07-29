@@ -71,6 +71,35 @@ function pushLineMarker(
   return end;
 }
 
+function pushPythonLineMarker(
+  markers: InlineMarker[],
+  text: string,
+  start: number,
+): number {
+  const firstEnd = lineEnd(text, start);
+  const match = /^[ \t]*@human\b[ \t]*([^\r]*)$/u.exec(text.slice(start + 1, firstEnd));
+  if (!match) return firstEnd;
+
+  const lines = [(match[1] ?? "").trimEnd()];
+  let end = firstEnd;
+  let next = firstEnd < text.length ? firstEnd + 1 : firstEnd;
+
+  while (next < text.length) {
+    const continuationEnd = lineEnd(text, next);
+    const continuation = /^[ \t]*#[ \t]?(.*?)[ \t]*\r?$/u.exec(
+      text.slice(next, continuationEnd),
+    );
+    if (!continuation) break;
+    lines.push(continuation[1] ?? "");
+    end = continuationEnd;
+    next = continuationEnd < text.length ? continuationEnd + 1 : continuationEnd;
+  }
+
+  const prompt = lines.join("\n").trim();
+  if (prompt.length > 0) markers.push({ prompt, start, end });
+  return end;
+}
+
 function pushBlockMarker(
   markers: InlineMarker[],
   text: string,
@@ -189,6 +218,7 @@ export function extractInlineMarkers(text: string, sourcePath = ""): InlineMarke
   if (/\.html?$/iu.test(sourcePath)) return extractHtmlInlineMarkers(text);
 
   const markers: InlineMarker[] = [];
+  const python = /\.py$/iu.test(sourcePath);
   let offset = 0;
 
   while (offset < text.length) {
@@ -210,7 +240,9 @@ export function extractInlineMarkers(text: string, sourcePath = ""): InlineMarke
     }
 
     if (character === "#") {
-      offset = pushLineMarker(markers, text, offset, 1);
+      offset = python
+        ? pushPythonLineMarker(markers, text, offset)
+        : pushLineMarker(markers, text, offset, 1);
       continue;
     }
 
