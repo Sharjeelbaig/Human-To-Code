@@ -73,6 +73,58 @@ test("default human-readable flow starts with the human-to-code ASCII banner", a
   }
 });
 
+test("human-readable generation streams and reviews inline diffs before writing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-live-diff-"));
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const request = JSON.parse(body) as Record<string, unknown>;
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify(
+        ollamaFixtureResponse(request, "export const ready = true;"),
+      ));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      provider: {
+        name: "ollama",
+        model: "fixture-model",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: {
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: { enabled: false },
+      },
+    }));
+    await put(root, "ready.human", "Export a constant named ready set to true.\n");
+
+    const result = await cli([root, "--yes"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Candidate preview · ready\.ts/u);
+    assert.match(result.stdout, /Validated edits ready for review:/u);
+    assert.match(result.stdout, /\+ export const ready = true;/u);
+    assert.doesNotMatch(result.stdout, /\x1b\[/u);
+    assert.equal(
+      await readFile(join(root, "ready.ts"), "utf8"),
+      "export const ready = true;\n",
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("--agent is no longer a supported CLI option", async () => {
   const result = await cli(["--agent"]);
   assert.equal(result.code, 1, result.stderr || result.stdout);

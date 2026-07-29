@@ -18,8 +18,9 @@ The folder names describe those responsibilities directly.
    isolated compiler code-generation path.
 7. `src/llms/` sends structured requests through the selected model provider.
 8. `src/tools/validation/` and `src/tools/security/` reject unsafe or invalid
-   candidates.
-9. `src/tools/file-ops/` applies an accepted candidate with stale-write and
+   candidates. `src/workflows/inline-diff.ts` streams candidate previews and
+   renders the final review diff.
+9. After explicit final approval, `src/tools/file-ops/` applies an accepted candidate with stale-write and
    rollback protection. Compiler mode first requires every unit in the run to
    pass, so it never commits a partial compilation.
 10. Compiler mode secret-scans and caches the complete accepted batch, then

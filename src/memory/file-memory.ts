@@ -398,7 +398,7 @@ export async function generateConversionUnits(
     generated.push({ unit, code });
     if (memory && code.trim().length > 0) memory.rememberReplacement(unit.range!, code);
     if (code.trim().length > 0) options.projectMemory?.remember(unit, code);
-    options.onProgress?.({ kind: "done", unit });
+    options.onProgress?.({ kind: "done", unit, code });
   }
 
   return generated;

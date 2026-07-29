@@ -90,7 +90,9 @@ import {
   REFERENCE_EXTENSIONS,
   renderBlueprintFor,
   renderCompileErrors,
+  renderInlineDiff,
   renderReceipt,
+  replaceScopedInlineUnit,
   validateCandidateProject,
   validateContextRequestV1,
   validateGeneratedUnit,
@@ -139,7 +141,7 @@ Provider options:
 Other options:
   --root <root>                  Explicit project root
   --json                         Machine-readable output
-  -y, --yes                      Skip the confirmation prompt and write files
+  -y, --yes                      Skip generation and final diff approval prompts
   --dry-run                      Analyze and preview only; perform no generation
   --compiler                     Enable deterministic compiler mode for this command
   --no-compiler                  Disable compiler mode for this command
@@ -889,7 +891,7 @@ async function buildCommand(
     return 0;
   }
   const proceed =
-    cli.yes || (await confirmYes("\nGenerate and write these files? [y/N] "));
+    cli.yes || (await confirmYes("\nGenerate candidate edits for review? [y/N] "));
   if (!proceed) {
     output(
       cli.json ? { status: "ABORTED" } : "Aborted. No files were written.",
@@ -1011,58 +1013,6 @@ async function buildCommand(
     }
   }
   const generationUnits = units.filter((unit) => !replayedUnits.has(unit));
-  if (generationUnits.length === 0 && replayedUnits.size > 0) {
-    const wholeFileApplications = [...replayedUnits]
-      .filter(([unit, replay]) =>
-        unit.kind === "file" && replay.needsWrite
-      )
-      .map(([unit, replay]) => ({ unit, code: replay.code }));
-    const written = wholeFileApplications.length === 0
-      ? []
-      : await applyWholeFileBatch(root, wholeFileApplications, {
-          overwrite: lockedTargets,
-        });
-    const inlineByPath = new Map<
-      string,
-      Array<{ unit: ConversionUnit; code: string }>
-    >();
-    for (const [unit, replay] of replayedUnits) {
-      if (unit.kind !== "inline" || !replay.needsWrite) continue;
-      inlineByPath.set(unit.sourcePath, [
-        ...(inlineByPath.get(unit.sourcePath) ?? []),
-        { unit, code: replay.code },
-      ]);
-    }
-    for (const applications of inlineByPath.values()) {
-      written.push(await applyInlineFileBatch(applications));
-    }
-    const replayed = [
-      ...new Set([...replayedUnits.values()].map(({ target }) => target)),
-    ];
-    output(
-      cli.json
-        ? {
-            status: "DONE",
-            engine: "compiler",
-            written,
-            skipped: [],
-            replayed,
-            compiler: {
-              enabled: true,
-              semanticRequests: compileGate?.semanticRequests ?? 0,
-            },
-            blueprintRequests: 0,
-            classificationRequests: 0,
-            todoRequests: 0,
-            codingRequests: 0,
-            repairRequests: 0,
-          }
-        : `Up to date. ${replayed.length} target(s) replayed from the lockfile, 0 generation requests.`,
-      cli.json,
-    );
-    return 0;
-  }
-
   if (!localProvider && !effective.privacy.remoteProviderConsent) {
     throw new ContextSecurityError(
       "INVALID_CANDIDATE",
@@ -1191,6 +1141,48 @@ async function buildCommand(
         : `${unit.sourcePath} (inline @human, line ${unit.line ?? "?"})`;
   const interactive = !cli.json;
   const spinner = createSpinner(interactive);
+  const diffColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const diffBaselines = new Map<string, string>();
+  for (const unit of units) {
+    const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+    if (diffBaselines.has(target)) continue;
+    const absolute = unit.kind === "file"
+      ? resolve(root, target)
+      : unit.absoluteSource;
+    diffBaselines.set(
+      target,
+      await readFile(absolute, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return "";
+        throw error;
+      }),
+    );
+  }
+  const liveCodes = new Map<ConversionUnit, string>();
+  const liveCandidate = (unit: ConversionUnit, code: string): string => {
+    const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
+    const baseline = diffBaselines.get(target) ?? "";
+    if (unit.kind === "file") return code.endsWith("\n") ? code : `${code}\n`;
+    liveCodes.set(unit, code);
+    let candidate = baseline;
+    const applications = [...liveCodes]
+      .filter(([candidateUnit]) =>
+        candidateUnit.kind === "inline"
+        && candidateUnit.sourcePath === unit.sourcePath)
+      .sort(
+        ([left], [right]) =>
+          (right.range?.start ?? 0) - (left.range?.start ?? 0),
+      );
+    for (const [candidateUnit, candidateCode] of applications) {
+      candidate = replaceScopedInlineUnit(
+        candidate,
+        candidateUnit as ConversionUnit & {
+          range: { start: number; end: number };
+        },
+        candidateCode,
+      );
+    }
+    return candidate;
+  };
   const started = Date.now();
   const onProgress = interactive
     ? (event: ConversionProgress): void => {
@@ -1212,6 +1204,18 @@ async function buildCommand(
           );
         } else if (event.kind === "context") {
           spinner.note(`  · retained ${describeUnit(event.unit)} as session context`);
+        } else if (event.kind === "done") {
+          const target = event.unit.kind === "file"
+            ? event.unit.outputPath!
+            : event.unit.sourcePath;
+          const candidate = liveCandidate(event.unit, event.code);
+          const diff = renderInlineDiff(
+            target,
+            diffBaselines.get(target) ?? "",
+            candidate,
+            { color: diffColor },
+          );
+          if (diff) spinner.note(`\nCandidate preview · ${target}\n${diff}`);
         }
       }
     : undefined;
@@ -1864,6 +1868,38 @@ async function buildCommand(
     if (byPath !== 0) return byPath;
     return (right.unit.range?.start ?? 0) - (left.unit.range?.start ?? 0);
   });
+  const finalCandidates = await candidateTextsForGenerated(generated);
+  const finalDiffs: string[] = [];
+  for (const [target, rawCandidate] of finalCandidates) {
+    const ownsWholeFile = generated.some(
+      (item) =>
+        item.unit.kind === "file"
+        && item.unit.outputPath === target
+        && item.error === undefined,
+    );
+    const candidate =
+      ownsWholeFile && !rawCandidate.endsWith("\n")
+        ? `${rawCandidate}\n`
+        : rawCandidate;
+    const diff = renderInlineDiff(
+      target,
+      diffBaselines.get(target) ?? "",
+      candidate,
+      { color: diffColor },
+    );
+    if (diff) finalDiffs.push(diff);
+  }
+  if (interactive && finalDiffs.length > 0) {
+    output(`\nValidated edits ready for review:\n\n${finalDiffs.join("\n\n")}`, false);
+  }
+  if (
+    !cli.yes
+    && finalDiffs.length > 0
+    && !(await confirmYes("\nApply these validated edits? [y/N] "))
+  ) {
+    output("Rejected. No files were changed.", false);
+    return 3;
+  }
   const written: string[] = [];
   const skipped: Array<{ source: string; reason: string }> = [];
   const replayedUnitSet = compilerBatchRejection === undefined

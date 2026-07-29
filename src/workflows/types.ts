@@ -121,7 +121,7 @@ export type ConversionProgress =
   | { kind: "classify"; unit: ConversionUnit }
   | { kind: "plan"; unit: ConversionUnit }
   | { kind: "refine"; unit: ConversionUnit; pass: number; unaddressed: number }
-  | { kind: "done"; unit: ConversionUnit }
+  | { kind: "done"; unit: ConversionUnit; code: string }
   | { kind: "context"; unit: ConversionUnit }
   | { kind: "skip"; unit: ConversionUnit; reason: string };
 

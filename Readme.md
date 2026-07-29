@@ -149,10 +149,12 @@ The `.` is the folder to scan, not permission to rewrite it. A default run:
    directories and symlinks stay out of discovery.
 3. **Prints a receipt**: the languages this worklist selected, the provider, the
    model, the request count, and every source-to-output path.
-4. **Waits.** Nothing is written until you confirm or pass `-y`. If it found no
-   requests you get `NEEDS_INPUT`.
-5. **Converts, validates, writes.** [Generation engine](#generation-engine)
-   covers what happens inside that step.
+4. **Waits.** Confirm generation first. While the agent works, each accepted
+   candidate appears as an inline terminal diff with red removals and green
+   additions.
+5. **Reviews, then writes.** After validation, the CLI prints the authoritative
+   combined diff and separately asks whether to apply it. Nothing is written
+   before that approval. `-y` skips both prompts for automation.
 
 You don't need a configured provider to scan and preview. A default run picks
 loopback Ollama with `qwen2.5-coder:7b`, so a fresh `npx human-to-code .` sends
@@ -194,7 +196,8 @@ Node.js 24 or newer is required.
 </p>
 
 The host stays in control and the model only proposes code or requests bounded
-read-only evidence. Each inline marker gets a small classification request,
+read-only evidence. Candidate diffs are lifecycle output, not writes; the
+application layer remains paused until final human approval. Each inline marker gets a small classification request,
 then edit turns use a strict generated-code schema. Whole `.human` files go
 straight to coding. On loopback Ollama the model may call `request_context`
 before answering; tool use is optional, so a model can still finish without a
@@ -334,6 +337,9 @@ Options: `--provider`, `--model`, `--base-url`, `--api-key-env`,
 `--input-cost-per-million`, `--output-cost-per-million`, `--unmetered-provider`,
 `--trust-custom-endpoint`, `--root`, `--dry-run`, `--json`, `--compiler`,
 `--no-compiler`, `--explain-spec`, and `-y`/`--yes`.
+
+Interactive runs stream ANSI inline candidate diffs and ask for final
+application approval. Set `NO_COLOR=1` to keep the same gutters without color.
 
 ### Exit codes
 
