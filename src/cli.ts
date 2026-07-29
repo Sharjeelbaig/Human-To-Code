@@ -92,7 +92,6 @@ import {
   renderCompileErrors,
   renderInlineDiff,
   renderReceipt,
-  replaceScopedInlineUnit,
   validateCandidateProject,
   validateContextRequestV1,
   validateGeneratedUnit,
@@ -1160,32 +1159,6 @@ async function buildCommand(
       }),
     );
   }
-  const liveCodes = new Map<ConversionUnit, string>();
-  const liveCandidate = (unit: ConversionUnit, code: string): string => {
-    const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;
-    const baseline = diffBaselines.get(target) ?? "";
-    if (unit.kind === "file") return code.endsWith("\n") ? code : `${code}\n`;
-    liveCodes.set(unit, code);
-    let candidate = baseline;
-    const applications = [...liveCodes]
-      .filter(([candidateUnit]) =>
-        candidateUnit.kind === "inline"
-        && candidateUnit.sourcePath === unit.sourcePath)
-      .sort(
-        ([left], [right]) =>
-          (right.range?.start ?? 0) - (left.range?.start ?? 0),
-      );
-    for (const [candidateUnit, candidateCode] of applications) {
-      candidate = replaceScopedInlineUnit(
-        candidate,
-        candidateUnit as ConversionUnit & {
-          range: { start: number; end: number };
-        },
-        candidateCode,
-      );
-    }
-    return candidate;
-  };
   const started = Date.now();
   const onProgress = interactive
     ? (event: ConversionProgress): void => {
@@ -1211,14 +1184,7 @@ async function buildCommand(
           const target = event.unit.kind === "file"
             ? event.unit.outputPath!
             : event.unit.sourcePath;
-          const candidate = liveCandidate(event.unit, event.code);
-          const diff = renderInlineDiff(
-            target,
-            diffBaselines.get(target) ?? "",
-            candidate,
-            { color: diffColor },
-          );
-          if (diff) spinner.note(`\nCandidate preview · ${target}\n${diff}`);
+          spinner.note(`  ✓ candidate ready · ${target}`);
         }
       }
     : undefined;

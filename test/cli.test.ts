@@ -73,7 +73,7 @@ test("default human-readable flow starts with the human-to-code ASCII banner", a
   }
 });
 
-test("human-readable generation streams and reviews inline diffs before writing", async () => {
+test("human-readable generation shows the validated inline diff only once", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-live-diff-"));
   const server = createServer((incoming, outgoing) => {
     let body = "";
@@ -109,9 +109,14 @@ test("human-readable generation streams and reviews inline diffs before writing"
 
     const result = await cli([root, "--yes"]);
     assert.equal(result.code, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Candidate preview · ready\.ts/u);
+    assert.match(result.stdout, /candidate ready · ready\.ts/u);
+    assert.doesNotMatch(result.stdout, /Candidate preview/u);
     assert.match(result.stdout, /Validated edits ready for review:/u);
     assert.match(result.stdout, /\+ export const ready = true;/u);
+    assert.equal(
+      result.stdout.match(/diff --human-to-code a\/ready\.ts b\/ready\.ts/gu)?.length,
+      1,
+    );
     assert.doesNotMatch(result.stdout, /\x1b\[/u);
     assert.equal(
       await readFile(join(root, "ready.ts"), "utf8"),
