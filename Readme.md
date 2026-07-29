@@ -338,8 +338,11 @@ Options: `--provider`, `--model`, `--base-url`, `--api-key-env`,
 `--trust-custom-endpoint`, `--root`, `--dry-run`, `--json`, `--compiler`,
 `--no-compiler`, `--explain-spec`, and `-y`/`--yes`.
 
-Interactive runs stream ANSI inline candidate diffs and ask for final
-application approval. Set `NO_COLOR=1` to keep the same gutters without color.
+Interactive runs stream inline candidate diffs and ask for final application
+approval. The preview selects syntax colors from each file extension across all
+supported languages, uses red/green line backgrounds, and emphasizes the exact
+characters changed within modified lines. Non-TTY output, `TERM=dumb`, or
+`NO_COLOR=1` keeps the same diff and accurate hunk ranges as safe plain text.
 
 ### Exit codes
 

@@ -1141,7 +1141,10 @@ async function buildCommand(
         : `${unit.sourcePath} (inline @human, line ${unit.line ?? "?"})`;
   const interactive = !cli.json;
   const spinner = createSpinner(interactive);
-  const diffColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
+  const diffColor =
+    process.stdout.isTTY
+    && process.env.NO_COLOR === undefined
+    && process.env.TERM !== "dumb";
   const diffBaselines = new Map<string, string>();
   for (const unit of units) {
     const target = unit.kind === "file" ? unit.outputPath! : unit.sourcePath;

@@ -19,7 +19,8 @@ The folder names describe those responsibilities directly.
 7. `src/llms/` sends structured requests through the selected model provider.
 8. `src/tools/validation/` and `src/tools/security/` reject unsafe or invalid
    candidates. `src/workflows/inline-diff.ts` streams candidate previews and
-   renders the final review diff.
+   renders the final review diff; `src/workflows/syntax-highlighting.ts`
+   derives bounded, display-only syntax spans from each target language.
 9. After explicit final approval, `src/tools/file-ops/` applies an accepted candidate with stale-write and
    rollback protection. Compiler mode first requires every unit in the run to
    pass, so it never commits a partial compilation.
