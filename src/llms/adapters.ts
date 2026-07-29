@@ -1269,8 +1269,17 @@ export class OllamaProvider implements ProviderAdapter {
             })),
           }),
     }));
-    messages.push({ role: "system", content: buildProviderOutputContractPrompt(request.responseSchema) });
     const tools = ollamaTools(request.tools);
+    // A tool turn is already structured by the provider's function-call
+    // protocol. Requiring a second JSON response envelope at the same time
+    // conflicts with the tool instruction and causes otherwise valid coding
+    // output to be parsed as unrelated structured JSON.
+    if (tools === undefined || tools.length === 0) {
+      messages.push({
+        role: "system",
+        content: buildProviderOutputContractPrompt(request.responseSchema),
+      });
+    }
     const body: Record<string, unknown> = {
       model: request.model,
       messages,

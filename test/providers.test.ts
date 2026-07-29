@@ -597,6 +597,11 @@ test("Ollama exposes compiler tools only as declared function schemas", async ()
       },
     },
   ]);
+  const messages = body.messages as Array<{ role: string; content: string }>;
+  assert.doesNotMatch(
+    messages.map((message) => message.content).join("\n"),
+    /Return exactly one JSON value/u,
+  );
   assert.equal(Object.hasOwn(body, "command"), false);
 });
 
