@@ -1304,7 +1304,9 @@ test("local CLI agent requests bounded project evidence before generating code",
         model: string;
         messages: Array<{ role: string; content: string }>;
         tools?: unknown[];
+        format?: unknown;
       };
+      assert.equal(Object.hasOwn(parsed, "format"), false);
       const toolMessage = parsed.messages.find((message) => message.role === "tool");
       outgoing.writeHead(200, { "content-type": "application/json" });
       if (toolMessage === undefined) {
@@ -1348,12 +1350,9 @@ test("local CLI agent requests bounded project evidence before generating code",
         done_reason: "stop",
         message: {
           role: "assistant",
-          content: JSON.stringify({
-            schemaVersion: 1,
-            code:
-              'import { SERVICE_NAME } from "./src/constants.js";\n'
-              + "export const label = SERVICE_NAME;\n",
-          }),
+          content:
+            'import { SERVICE_NAME } from "./src/constants.js";\n'
+            + "export const label = SERVICE_NAME;\n",
         },
         prompt_eval_count: 12,
         eval_count: 10,
@@ -1400,6 +1399,84 @@ test("local CLI agent requests bounded project evidence before generating code",
     assert.equal(Object.hasOwn(done.contextManifest.evidence[0] ?? {}, "content"), false);
     assert.match(await readFile(join(root, "feature.ts"), "utf8"), /SERVICE_NAME/u);
     assert.match(toolEvidence, /billing/u);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("host rejects a model-owned code schema and corrects it to raw source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-host-code-schema-"));
+  let requests = 0;
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      requests += 1;
+      const parsed = JSON.parse(body) as {
+        model: string;
+        messages: Array<{ role: string; content: string }>;
+        tools?: unknown[];
+        format?: unknown;
+      };
+      assert.equal(Object.hasOwn(parsed, "format"), false);
+      if (requests === 2) {
+        assert.equal(parsed.tools, undefined);
+        assert.match(parsed.messages.at(-1)?.content ?? "", /HOST CORRECTION/u);
+      }
+      const content = requests === 1
+        ? JSON.stringify({
+            schemaVersion: 1,
+            code: "export const answer = 42;\n",
+          })
+        : "export const answer = 42;\n";
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({
+        model: parsed.model,
+        done: true,
+        done_reason: "stop",
+        message: { role: "assistant", content },
+        prompt_eval_count: 4,
+        eval_count: 4,
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    await put(root, "human-to-code.config.json", JSON.stringify({
+      schemaVersion: 1,
+      language: "typescript",
+      languages: ["typescript"],
+      provider: {
+        name: "ollama",
+        model: "raw-code-fixture",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        trustCustomEndpoint: true,
+      },
+      direct: {
+        reconcileIntegrations: false,
+        crossFileChecks: false,
+        planning: { enabled: false },
+      },
+    }));
+    await put(root, "feature.human", "Export the numeric answer 42.\n");
+
+    const result = await cli([root, "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    assert.equal(requests, 2);
+    assert.equal(
+      await readFile(join(root, "feature.ts"), "utf8"),
+      "export const answer = 42;\n",
+    );
+    const done = JSON.parse(result.stdout) as {
+      autonomousAgent: { providerTurns: number };
+    };
+    assert.equal(done.autonomousAgent.providerTurns, 2);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => error ? reject(error) : resolve()),

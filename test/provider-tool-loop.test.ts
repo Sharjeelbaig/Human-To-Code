@@ -20,6 +20,7 @@ import {
   AgentContextCoordinator,
   runProviderToolLoop,
 } from "../src/workflows/provider-tool-loop.ts";
+import { ModelOutputError, stripCodeFence } from "../src/workflows/presentation.ts";
 
 async function put(root: string, path: string, content: string): Promise<void> {
   await mkdir(join(root, path, ".."), { recursive: true });
@@ -50,16 +51,82 @@ function request(): ProviderGenerationRequestV1 {
   };
 }
 
-function budget(maxRequests = 4): ProviderBudgetTracker {
+function budget(maxRequests = 4, maxRepairs = 0): ProviderBudgetTracker {
   return new ProviderBudgetTracker({
     maxInputTokens: 1_000_000,
     maxOutputTokens: 20_000,
     maxRequests,
-    maxRepairs: 0,
+    maxRepairs,
     maxCostUsd: 1,
     maxElapsedMs: 20_000,
   });
 }
+
+test("host repairs one contaminated raw-code artifact with tools disabled", async () => {
+  const provider = new DeterministicMockProvider({
+    steps: [
+      {
+        output: "```python\nreturn one\n```\n```python\nreturn two\n```",
+      },
+      (second) => {
+        assert.equal(second.responseMode, "text");
+        assert.equal(second.tools, undefined);
+        assert.match(second.messages.at(-1)?.content ?? "", /HOST CORRECTION/u);
+        return { output: "return {\"result\": output}\n" };
+      },
+    ],
+  });
+  const tracker = budget(3, 1);
+  const result = await runProviderToolLoop({
+    adapter: provider,
+    budget: tracker,
+    request: {
+      ...request(),
+      responseMode: "text",
+    },
+    validateFinal: (value): string => {
+      if (typeof value !== "string") throw new ModelOutputError("Expected raw code.");
+      const code = stripCodeFence(value);
+      if (code.length === 0) throw new ModelOutputError("Expected non-empty code.");
+      return code;
+    },
+    repairFinal: (_value, error) =>
+      error instanceof ModelOutputError
+        ? `HOST CORRECTION: ${error.message}. Return one raw code artifact.`
+        : undefined,
+    tools: [CONTEXT_REQUEST_TOOL],
+    executeTool: async () => ({ ok: true }),
+    maxToolCalls: 1,
+  });
+  assert.equal(result.value, "return {\"result\": output}");
+  assert.equal(result.turns.length, 2);
+  assert.equal(tracker.usage.requests, 2);
+  assert.equal(tracker.usage.repairs, 1);
+});
+
+test("host code correction remains bounded to one attempt", async () => {
+  const invalid = "```js\none()\n```\n```js\ntwo()\n```";
+  const provider = new DeterministicMockProvider({
+    steps: [{ output: invalid }, { output: invalid }],
+  });
+  await assert.rejects(
+    runProviderToolLoop({
+      adapter: provider,
+      budget: budget(3, 2),
+      request: { ...request(), responseMode: "text" },
+      validateFinal: (value): string => {
+        if (typeof value !== "string") throw new ModelOutputError("Expected raw code.");
+        return stripCodeFence(value);
+      },
+      repairFinal: (_value, error) =>
+        error instanceof ModelOutputError ? "Return one raw code artifact." : undefined,
+    }),
+    (error: unknown) =>
+      error instanceof ProviderError
+      && error.code === "schema"
+      && /one bounded correction/u.test(error.message),
+  );
+});
 
 test("local provider autonomously requests real bounded context before final code", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-provider-tool-loop-"));

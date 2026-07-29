@@ -48,13 +48,24 @@ interface FinalTurn<T> {
   value: T;
 }
 
-type AgentTurn<T> = ToolTurn | FinalTurn<T>;
+interface RepairTurn {
+  kind: "repair";
+  feedback: string;
+  rejectedOutput: unknown;
+}
+
+type AgentTurn<T> = ToolTurn | FinalTurn<T> | RepairTurn;
 
 export interface ProviderToolLoopOptions<T> {
   adapter: ProviderAdapter;
   budget?: ProviderBudgetTracker;
   request: ProviderGenerationRequestV1;
   validateFinal: (value: unknown) => T;
+  /**
+   * Convert a final-artifact validation failure into one bounded correction
+   * turn. Tool validation and provider-envelope errors remain fail-closed.
+   */
+  repairFinal?: (value: unknown, error: unknown) => string | undefined;
   tools?: readonly ProviderToolDefinitionV1[];
   /** Exact host validator, run for the whole batch before the first execution. */
   validateToolCall?: (call: ProviderToolCallV1) => void;
@@ -182,12 +193,16 @@ export async function runProviderToolLoop<T>(
   const turns: ProviderGenerationResultV1[] = [];
   let usedToolCalls = 0;
   let turnNumber = 0;
+  let repairTurns = 0;
+  let finalOnly = false;
 
   for (;;) {
     turnNumber += 1;
     const available = Math.max(0, maximum - usedToolCalls);
     const requestTools =
-      available > 0 && declaredTools.length > 0 ? declaredTools : undefined;
+      !finalOnly && available > 0 && declaredTools.length > 0
+        ? declaredTools
+        : undefined;
     const generated = await generateValidated(
       options.adapter,
       {
@@ -197,11 +212,50 @@ export async function runProviderToolLoop<T>(
       },
       (value): AgentTurn<T> => {
         const toolTurn = parseToolTurn(value);
-        return toolTurn ?? { kind: "final", value: options.validateFinal(value) };
+        if (toolTurn !== undefined) return toolTurn;
+        try {
+          return { kind: "final", value: options.validateFinal(value) };
+        } catch (error) {
+          const feedback = options.repairFinal?.(value, error);
+          if (feedback === undefined) throw error;
+          return { kind: "repair", feedback, rejectedOutput: value };
+        }
       },
       { ...(options.budget === undefined ? {} : { budget: options.budget }) },
     );
     turns.push(generated.result);
+
+    if (generated.value.kind === "repair") {
+      if (generated.result.finishReason !== "stop") {
+        throw new ProviderError(
+          "schema",
+          "A rejected final artifact must finish with stop before correction.",
+          { requestId: generated.result.requestId },
+        );
+      }
+      if (repairTurns >= 1) {
+        throw new ProviderError(
+          "schema",
+          "Provider final output remained invalid after one bounded correction.",
+          { requestId: generated.result.requestId },
+        );
+      }
+      options.budget?.recordRepair();
+      repairTurns += 1;
+      finalOnly = true;
+      const rejected = generated.value.rejectedOutput;
+      if (
+        typeof rejected === "string"
+        && Buffer.byteLength(rejected, "utf8") <= 32 * 1024
+      ) {
+        messages.push({ role: "assistant", content: rejected });
+      }
+      messages.push({
+        role: "user",
+        content: generated.value.feedback,
+      });
+      continue;
+    }
 
     if (generated.value.kind === "final") {
       if (generated.result.finishReason !== "stop") {

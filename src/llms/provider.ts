@@ -51,6 +51,11 @@ export interface ProviderGenerationRequestV1 {
   operation: ProviderOperation;
   model: string;
   messages: ProviderMessageV1[];
+  /**
+   * `structured` asks the provider for JSON matching responseSchema. `text`
+   * returns assistant text unchanged so the host can construct the artifact.
+   */
+  responseMode?: "structured" | "text";
   responseSchema: JsonSchemaV1;
   tools?: ProviderToolDefinitionV1[];
   timeoutMs: number;
@@ -467,6 +472,12 @@ export function conservativeProviderInputTokenUpperBound(
 function validateProviderRequest(request: ProviderGenerationRequestV1): void {
   if (!request.model.trim()) throw new ProviderError("configuration", "An explicit provider model is required.");
   if (!Array.isArray(request.messages) || request.messages.length === 0) throw new ProviderError("configuration", "Provider request requires at least one message.");
+  if (
+    request.responseMode !== undefined
+    && !["structured", "text"].includes(request.responseMode)
+  ) {
+    throw new ProviderError("configuration", "Provider response mode is invalid.");
+  }
   if (!Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || request.timeoutMs > 60 * 60_000) throw new ProviderError("configuration", "Provider timeout is invalid.");
   if (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens < 1) throw new ProviderError("configuration", "Provider output limit is invalid.");
   if (request.temperature !== undefined && (!Number.isFinite(request.temperature) || request.temperature < 0 || request.temperature > 2)) throw new ProviderError("configuration", "Provider temperature must be from 0 to 2.");

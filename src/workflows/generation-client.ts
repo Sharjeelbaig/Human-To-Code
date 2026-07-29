@@ -289,6 +289,39 @@ function validateGeneratedCodeEnvelope(value: unknown): string {
   return record.code;
 }
 
+/**
+ * Models produce source text only. The trusted host extracts one unambiguous
+ * artifact, constructs the transport envelope, and validates that envelope.
+ */
+function constructGeneratedCodeArtifact(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new ModelOutputError(
+      "Provider generated-code output was not raw assistant text.",
+    );
+  }
+  const trimmed = value.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const legacy = JSON.parse(trimmed) as unknown;
+      if (
+        typeof legacy === "object"
+        && legacy !== null
+        && !Array.isArray(legacy)
+        && Object.keys(legacy).sort().join(",") === "code,schemaVersion"
+      ) {
+        throw new ModelOutputError(
+          "The model returned a generated-code envelope that only the host may construct.",
+        );
+      }
+    } catch (error) {
+      if (error instanceof ModelOutputError) throw error;
+      // A source artifact may legitimately start and end with braces.
+    }
+  }
+  const code = stripCodeFence(value);
+  return validateGeneratedCodeEnvelope({ schemaVersion: 1, code });
+}
+
 async function requestAgentCode(
   prompt: PromptMessages,
   options: GenerateOptions,
@@ -333,6 +366,7 @@ async function requestAgentCode(
     request: {
       operation: "patch",
       model: options.model,
+      responseMode: "text",
       messages: [
         { role: "system", content: prompt.system },
         { role: "system", content: runtime.contextSystemPrompt },
@@ -350,7 +384,21 @@ async function requestAgentCode(
             "A selected-code edit must be submitted through replace_selected_code.",
           );
         }
-      : validateGeneratedCodeEnvelope,
+      : constructGeneratedCodeArtifact,
+    ...(!selectedEdit
+      ? {
+          repairFinal: (_value: unknown, error: unknown): string | undefined =>
+            error instanceof ModelOutputError
+              ? [
+                  "HOST CORRECTION — your previous source artifact was rejected.",
+                  error.message,
+                  "Return exactly one raw code artifact for the original target.",
+                  "Do not return JSON, schemaVersion, a code property, prose, a diff, or multiple fenced blocks.",
+                  "A single complete fenced code block is tolerated, but raw code is preferred.",
+                ].join("\n")
+              : undefined,
+        }
+      : {}),
     tools,
     validateToolCall: (call) => {
       if (call.name === SELECTED_CODE_EDIT_TOOL.name) {
@@ -383,7 +431,7 @@ async function requestAgentCode(
     },
     maxToolCalls: maximumToolCalls,
   });
-  return stripCodeFence(result.value);
+  return result.value;
 }
 
 /**
@@ -450,7 +498,6 @@ export async function generateCode(instruction: string, options: GenerateOptions
     ...(options.rejectedDraft ? { rejectedDraft: options.rejectedDraft } : {}),
     ...(options.validationFailure ? { validationFailure: options.validationFailure } : {}),
     ...(options.compilerMode ? { compilerMode: true } : {}),
-    ...(options.agentRuntime ? { structuredOutput: true } : {}),
   });
   // Every request reasons through the model, so the src/skills guidance is
   // attached in compiler mode too — that is exactly when a small model most

@@ -198,8 +198,9 @@ Node.js 24 or newer is required.
 The host stays in control and the model only proposes code or requests bounded
 read-only evidence. Candidate diffs are lifecycle output, not writes; the
 application layer remains paused until final human approval. Each inline marker gets a small classification request,
-then edit turns use a strict generated-code schema. Whole `.human` files go
-straight to coding. On loopback Ollama the model may call `request_context`
+then edit turns return raw source code. The host extracts exactly one code
+artifact, constructs the strict `{schemaVersion, code}` envelope itself, and
+validates it locally. Whole `.human` files go straight to coding. On loopback Ollama the model may call `request_context`
 before answering; tool use is optional, so a model can still finish without a
 tool call.
 
@@ -581,7 +582,7 @@ provider this context only goes out after you enable
 > auxiliary and coding requests do not yet enforce the same things.
 >
 > Normal coding and every autonomous context follow-up use the certified
-> adapter path: strict structured output, pinned transport, pessimistic
+> adapter path: host-owned code artifacts, pinned transport, pessimistic
 > pre-request reservation, and cumulative request/token/cost accounting.
 >
 > Classification, blueprint, todo, audit, and repair passes still use the
@@ -684,9 +685,11 @@ To name an explicit local endpoint, acknowledge it:
 }
 ```
 
-Local Ollama receives the generated-code schema through its native `format`
-field, and the output is still parsed and schema-validated locally. In normal
-direct mode, a verified loopback model may make up to eight `request_context`
+For coding, local Ollama receives neither a JSON `format` constraint nor a
+model-owned artifact schema. It returns raw source; the host accepts raw code or
+one complete fenced block, constructs the generated-code envelope, and validates
+it locally. If extraction fails, one budgeted correction turn runs without
+tools. In normal direct mode, a verified loopback model may make up to eight `request_context`
 calls across the whole run. The host exact-validates each call, confines it to
 an analyzed target workspace, applies ignored/excluded/protected-path policy,
 materializes secret-scanned bounded evidence, and records provenance in the
@@ -726,10 +729,10 @@ export OLLAMA_API_KEY='...'
 ```
 
 Replace the example pricing with reviewed upper bounds for whichever Cloud model
-you pick. Ollama Cloud doesn't currently expose Ollama's native structured-output
-mode, so the adapter sends the JSON schema as a host-enforced instruction, parses
-exactly one JSON value, and puts it through the same local schema gate.
-Malformed or out-of-schema output is terminal and never accepted as a patch. As a
+you pick. Coding responses are raw source here too; planning and other structured
+artifacts retain their exact JSON schemas. The host never treats arbitrary JSON,
+prose, multiple code blocks, empty output, truncation, or an oversized response
+as source code. As a
 remote provider, Ollama Cloud gets no context tool definitions and can't expand
 the manifest you reviewed.
 

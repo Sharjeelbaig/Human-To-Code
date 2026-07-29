@@ -983,7 +983,10 @@ function normalizedToolCalls(raw: unknown): unknown[] {
   });
 }
 
-function openAiOutput(record: Record<string, unknown>): {
+function openAiOutput(
+  record: Record<string, unknown>,
+  responseMode: "structured" | "text",
+): {
   output: unknown;
   finishReason: ProviderFinishReason;
 } {
@@ -1033,9 +1036,13 @@ function openAiOutput(record: Record<string, unknown>): {
     return { output: null, finishReason: "other" };
   }
   if (texts.length === 0) {
-    throw new ProviderError("schema", "Provider omitted structured output text.");
+    throw new ProviderError("schema", "Provider omitted output text.");
   }
-  return { output: parsedJsonOutput(texts.join("")), finishReason: "stop" };
+  const text = texts.join("");
+  return {
+    output: responseMode === "text" ? text : parsedJsonOutput(text),
+    finishReason: "stop",
+  };
 }
 
 function openAiUsage(
@@ -1107,20 +1114,21 @@ export class OpenAIResponsesProvider implements ProviderAdapter {
     assertConcreteRequest(request, this.#model);
     const credential = requireCredential(this.#runtime.env, this.#apiKeyEnv);
     const tools = openAiTools(request.tools);
+    const responseMode = request.responseMode ?? "structured";
     const body: Record<string, unknown> = {
       model: request.model,
       instructions: openAiInstructions(request),
       input: openAiInput(request),
       store: false,
       max_output_tokens: request.maxOutputTokens,
-      text: {
+      ...(responseMode === "structured" ? { text: {
         format: {
           type: "json_schema",
           name: outputSchemaName(request),
           strict: true,
           schema: openAiCompatibleSchema(request.responseSchema),
         },
-      },
+      } } : {}),
     };
     if (request.temperature !== undefined) body.temperature = request.temperature;
     if (tools !== undefined && tools.length > 0) body.tools = tools;
@@ -1135,7 +1143,7 @@ export class OpenAIResponsesProvider implements ProviderAdapter {
       responseByteLimit(this.#runtime, request.maxOutputTokens),
     );
     const record = expectRecord(response.value, "response");
-    const extracted = openAiOutput(record);
+    const extracted = openAiOutput(record, responseMode);
     const resolvedModelId = expectString(record.model, "resolved model id");
     const requestId =
       response.headers.get("x-request-id") ??
@@ -1270,11 +1278,15 @@ export class OllamaProvider implements ProviderAdapter {
           }),
     }));
     const tools = ollamaTools(request.tools);
+    const responseMode = request.responseMode ?? "structured";
     // A tool turn is already structured by the provider's function-call
     // protocol. Requiring a second JSON response envelope at the same time
     // conflicts with the tool instruction and causes otherwise valid coding
     // output to be parsed as unrelated structured JSON.
-    if (tools === undefined || tools.length === 0) {
+    if (
+      responseMode === "structured"
+      && (tools === undefined || tools.length === 0)
+    ) {
       messages.push({
         role: "system",
         content: buildProviderOutputContractPrompt(request.responseSchema),
@@ -1291,7 +1303,9 @@ export class OllamaProvider implements ProviderAdapter {
     };
     // Ollama's local server supports JSON Schema in `format`.  Ollama Cloud
     // currently does not, so Cloud is prompt-constrained and locally gated.
-    if (!this.#remote) body.format = request.responseSchema;
+    if (!this.#remote && responseMode === "structured") {
+      body.format = request.responseSchema;
+    }
     if (tools !== undefined && tools.length > 0) body.tools = tools;
     const credential =
       this.#apiKeyEnv === undefined
@@ -1321,8 +1335,8 @@ export class OllamaProvider implements ProviderAdapter {
       output = { toolCalls: normalizedToolCalls(rawToolCalls) };
       finishReason = "tool_call";
     } else {
-      const content = expectString(message.content, "structured output text");
-      output = parsedJsonOutput(content);
+      const content = expectString(message.content, "output text");
+      output = responseMode === "text" ? content : parsedJsonOutput(content);
       finishReason = ollamaFinishReason(record);
     }
     return {

@@ -203,6 +203,31 @@ test("OpenAI uses Responses strict JSON Schema and records resolved identity", a
   assert.equal(result.finishReason, "stop");
 });
 
+test("OpenAI raw-code mode omits provider JSON schema and preserves source text", async () => {
+  let calledInit: RequestInit | undefined;
+  const provider = new OpenAIResponsesProvider(
+    { name: "openai", model: "requested-model", pricing: TEST_PRICING },
+    {
+      env: { OPENAI_API_KEY: "key" },
+      resolveHostname: PUBLIC_RESOLVER,
+      fetch: async (_url, init) => {
+        calledInit = init;
+        return response({
+          id: "raw-code-response",
+          model: "resolved-model",
+          status: "completed",
+          output_text: "return {\"result\": output}\n",
+          usage: { input_tokens: 2, output_tokens: 4 },
+        });
+      },
+    },
+  );
+  const result = await provider.generate(request({ responseMode: "text" }));
+  const body = JSON.parse(String(calledInit?.body)) as Record<string, unknown>;
+  assert.equal(Object.hasOwn(body, "text"), false);
+  assert.equal(result.output, "return {\"result\": output}\n");
+});
+
 test("OpenAI keeps policy in instructions and preserves conversational trust roles", async () => {
   let calledInit: RequestInit | undefined;
   const provider = new OpenAIResponsesProvider(
@@ -409,6 +434,39 @@ test("local Ollama uses loopback without a key and native schema format", async 
   assert.equal(provider.capabilities.nativeStructuredOutput, true);
   assert.deepEqual(result.output, { ok: true });
   assert.equal(result.resolvedModelId, "qwen3-coder:latest");
+});
+
+test("local Ollama raw-code mode sends neither format nor schema prompt", async () => {
+  let calledInit: RequestInit | undefined;
+  const provider = new OllamaProvider(
+    { name: "ollama", model: "qwen3-coder" },
+    {
+      resolveHostname: PUBLIC_RESOLVER,
+      fetch: async (_url, init) => {
+        calledInit = init;
+        return response({
+          model: "qwen3-coder",
+          done: true,
+          done_reason: "stop",
+          message: { role: "assistant", content: "return {'result': output}\n" },
+          prompt_eval_count: 2,
+          eval_count: 4,
+        });
+      },
+    },
+  );
+  const result = await provider.generate(request({
+    model: "qwen3-coder",
+    responseMode: "text",
+  }));
+  const body = JSON.parse(String(calledInit?.body)) as Record<string, unknown>;
+  assert.equal(Object.hasOwn(body, "format"), false);
+  const messages = body.messages as Array<{ role: string; content: string }>;
+  assert.equal(
+    messages.some((message) => /HOST-ENFORCED OUTPUT CONTRACT/u.test(message.content)),
+    false,
+  );
+  assert.equal(result.output, "return {'result': output}\n");
 });
 
 test("local Ollama provider uses the production DNS-pinned POST transport", async (t) => {

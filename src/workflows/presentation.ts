@@ -187,6 +187,11 @@ export function renderReceipt(
       ? [`  Compiler : on (${options.compiler.onUnderspecified === "error" ? "underspecified requests block the run" : "underspecified requests warn"})`]
       : []),
     `  Requests : ${requestBreakdown}${options.reconcileIntegrations ? "" : repairAllowance}`,
+    ...(options.compiler?.enabled
+      ? []
+      : [
+          "  Artifact : the model returns raw source; the host constructs the schema. One bounded format-correction request may be added only when extraction fails.",
+        ]),
     ...(adaptiveDisclaimer ? [adaptiveDisclaimer] : []),
     ...(refinementDisclaimer ? [refinementDisclaimer] : []),
     ...(options.contextToolCallsUpTo && options.contextToolCallsUpTo > 0

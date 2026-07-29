@@ -48,8 +48,9 @@ where a missing or unsafe configuration value is rejected before generation.
 ### `src/llms/`
 
 Provider-neutral request contracts, OpenAI and Ollama adapters, structured
-output schemas, and the certification gate. Provider code transports requests;
-it does not decide which files should be generated.
+planning schemas, raw-code transport mode, and the certification gate. Models
+return source text; the host constructs the generated-code artifact. Provider
+code transports requests; it does not decide which files should be generated.
 
 ### `src/prompts/`
 
