@@ -128,6 +128,14 @@ test("host code correction remains bounded to one attempt", async () => {
   );
 });
 
+test("raw Python may contain SQL fence delimiters inside string literals", () => {
+  const code = [
+    'output[0]["generated_text"][-1]["content"].split("```SQL")[-1].split("```")[0].strip()',
+    "return query",
+  ].join("\n");
+  assert.equal(stripCodeFence(code), code);
+});
+
 test("local provider autonomously requests real bounded context before final code", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-provider-tool-loop-"));
   try {

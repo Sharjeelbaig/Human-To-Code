@@ -259,7 +259,9 @@ export function stripCodeFence(output: string): string {
     throw new ModelOutputError("Model returned multiple fenced code blocks; refusing an ambiguous replacement.");
   }
   if (fences.length === 1) return (fences[0]?.[1] ?? "").trim();
-  if (trimmed.includes("```")) {
+  // Markdown fences are line-oriented. Triple backticks inside source string
+  // literals (for example split("```SQL")) are ordinary code, not formatting.
+  if (/^```/mu.test(trimmed)) {
     throw new ModelOutputError("Model returned an unterminated code fence; refusing to write formatting as source.");
   }
   return trimmed;
