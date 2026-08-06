@@ -893,7 +893,8 @@ html[data-theme="dark"] .icon-moon { display: block; }
   display: block;
   object-fit: contain;
   object-position: center;
-  filter: grayscale(.2) saturate(.82) contrast(1.06) drop-shadow(0 26px 32px color-mix(in srgb, var(--text) 18%, transparent));
+  opacity: 0.75;
+  filter: grayscale(1) saturate(.82) contrast(1.06) drop-shadow(0 26px 32px color-mix(in srgb, var(--text) 18%, transparent));
 }
 .qs-visual::before,
 .qs-visual::after {
@@ -918,7 +919,7 @@ html[data-theme="dark"] .icon-moon { display: block; }
   mix-blend-mode: soft-light;
   opacity: .45;
 }
-html[data-theme="dark"] .qs-visual > img { filter: grayscale(.24) saturate(.76) contrast(1.1) brightness(.95) drop-shadow(0 28px 40px rgba(0, 0, 0, .48)); }
+html[data-theme="dark"] .qs-visual > img { opacity: 0.75; filter: grayscale(1) saturate(.76) contrast(1.1) brightness(.95) drop-shadow(0 28px 40px rgba(0, 0, 0, .48)); }
 html[data-theme="dark"] .qs-visual::before { background: radial-gradient(circle at 43% 50%, color-mix(in srgb, var(--accent-a) 32%, transparent), transparent 46%), linear-gradient(110deg, transparent 28%, rgba(13, 13, 17, .78) 88%); }
 .qs-language-chip {
   position: absolute;

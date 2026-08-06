@@ -8,9 +8,20 @@ export function formatInlineReplacement(
   if (normalized.length === 0) return "";
   const lineStart = source.lastIndexOf("\n", Math.max(0, range.start - 1)) + 1;
   const prefix = source.slice(lineStart, range.start);
-  const indentation = /^[ \t]*$/u.test(prefix) ? prefix : "";
+  const markerIndentation = /^[ \t]*$/u.test(prefix) ? prefix : "";
+  // A selected-code range starts at the line start, so `prefix` is empty even
+  // when the original construct is nested. Recover that indentation from the
+  // original first line; ordinary marker ranges continue to use the bytes
+  // before the marker as their indentation source.
+  const selectedIndentation = range.start === lineStart
+    ? /^[ \t]*/u.exec(source.slice(lineStart, range.end))?.[0] ?? ""
+    : "";
+  const indentation = range.start === lineStart
+    ? selectedIndentation
+    : markerIndentation;
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
-  return normalized.split(/\r?\n/u).join(`${newline}${indentation}`);
+  const firstLineIndentation = range.start === lineStart ? indentation : "";
+  return `${firstLineIndentation}${normalized.split(/\r?\n/u).join(`${newline}${indentation}`)}`;
 }
 
 export function replaceInlineMarker(

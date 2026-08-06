@@ -124,6 +124,10 @@ test("algorithm and pseudocode terms do not activate unrelated UI requirement ru
     "Compute the height of a binary tree recursively; an empty tree has height zero.",
     "Find the shortest route between two vertices with Dijkstra's algorithm and return the path plus total distance.",
     "In Rust, sort the vector values in ascending order using merge sort and return a new Vec<i32>.",
+    "Sort Colors: given nums containing 0, 1, and 2, sort the array in-place.",
+    "Implement merge sort for an array and return a new sorted array.",
+    "Implement the longest substring without repeating characters under standard time and memory limits.",
+    "Find the endpoints of the shortest path in a graph.",
   ];
   for (const prompt of scenarios) {
     assert.deepEqual(

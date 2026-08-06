@@ -26,6 +26,18 @@ function lineEndWithoutNewline(source: string, starts: readonly number[], line: 
   return next - 1;
 }
 
+/** Return the 1-based source line containing an offset. */
+function lineAtOffset(starts: readonly number[], offset: number): number {
+  let low = 0;
+  let high = starts.length - 1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (starts[middle]! <= offset) low = middle + 1;
+    else high = middle - 1;
+  }
+  return high + 1;
+}
+
 function dedent(value: string): string {
   const lines = value.split(/\r?\n/u);
   const widths = lines
@@ -74,8 +86,22 @@ export function applyPlannedEditSelection(
     );
   }
   const start = starts[selection.startLine - 1]!;
-  const end = lineEndWithoutNewline(source, starts, selection.endLine);
+  let end = lineEndWithoutNewline(source, starts, selection.endLine);
   const marker = unit.range;
+  const markerLine = lineAtOffset(starts, marker.start);
+  // A trailing marker is commonly written after the unfinished statement it
+  // describes (`return value; //@human reverse this`). Treat the code prefix
+  // on that same line as the selectable construct. The marker itself remains
+  // a separate deletion range, so the two byte ranges stay disjoint.
+  if (
+    start < marker.start
+    && end > marker.start
+    && selection.startLine === markerLine
+    && selection.endLine === markerLine
+    && source.slice(start, marker.start).trim().length > 0
+  ) {
+    end = marker.start;
+  }
   const overlapsMarker = start < marker.end && end > marker.start;
   if (overlapsMarker) {
     throw new Error(

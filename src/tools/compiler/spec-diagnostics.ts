@@ -60,6 +60,10 @@ function vocabularyTerms(
 function applies(rule: RequirementRule, unit: ConversionUnit): boolean {
   rule.trigger.lastIndex = 0;
   if (!rule.trigger.test(unit.prompt.slice(0, 32_000))) return false;
+  if (
+    ["sort", "limit", "endpoint"].includes(rule.id)
+    && isAlgorithmicProblemPrompt(unit.prompt)
+  ) return false;
   if (rule.extensions === undefined || rule.extensions.length === 0) return true;
   return rule.extensions.includes(extname(targetPath(unit)).toLocaleLowerCase());
 }
@@ -69,6 +73,16 @@ function describeRule(rule: string): string {
   if (rule === "limit") return "a timeout, retry, or limit";
   if (rule === "endpoint" || rule === "animation") return `an ${rule}`;
   return `a ${rule}`;
+}
+
+/**
+ * UI facets need product-specific details; algorithm prompts use overlapping
+ * words such as "sort" and "limit" as behavioral requirements and often omit
+ * those UI details. Keep the facet gate from blocking data-structure work.
+ */
+function isAlgorithmicProblemPrompt(prompt: string): boolean {
+  return /\b(?:algorithm|pseudocode|leetcode|hacker\s*rank|coding\s+challenge|competitive\s+programming)\b/iu.test(prompt)
+    || /\b(?:arrays?|vectors?|matrices?|subarrays?|substrings?|nums|indices|in[- ]place|complexity|linked\s+lists?|graphs?|trees?|vertices|nodes)\b/iu.test(prompt);
 }
 
 function missingPhrase(rule: string, facet: UnresolvedFacet): string {
