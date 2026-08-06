@@ -536,6 +536,183 @@ test("--init stays compiler-off in non-interactive mode and migrate-config upgra
   }
 });
 
+test("--init --json emits a valid machine-readable initialization result", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-init-json-"));
+  try {
+    const result = await cli(["--init", root, "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const response = JSON.parse(result.stdout) as {
+      status: string;
+      path: string;
+      compiler: { enabled: boolean };
+    };
+    assert.equal(response.status, "INITIALIZED");
+    assert.equal(response.path, join(root, "human-to-code.config.json"));
+    assert.equal(response.compiler.enabled, false);
+    assert.equal(result.stderr, "");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("--dry-run --yes --json emits a plan without generating files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "h2c-cli-dry-run-json-"));
+  try {
+    await put(root, "health.human", "Add a health endpoint.\n");
+    const result = await cli([root, "--dry-run", "--yes", "--json"]);
+    assert.equal(result.code, 0, result.stderr || result.stdout);
+    const plan = JSON.parse(result.stdout) as {
+      status: string;
+      units: Array<{ source: string; output: string }>;
+    };
+    assert.equal(plan.status, "GENERATING");
+    assert.deepEqual(plan.units, [{
+      kind: "file",
+      source: "health.human",
+      output: "health.ts",
+      language: "typescript",
+    }]);
+    await assert.rejects(access(join(root, "health.ts")));
+    assert.equal(result.stderr, "");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("normal generation runs against representative TypeScript backend projects", async () => {
+  const scenarios = [
+    {
+      name: "express",
+      dependency: "express",
+      version: "5.1.0",
+      variant: "express",
+      source: [
+        "const app = {",
+        "  use(_path: string, _middleware: () => void) {},",
+        "  get(_path: string, _handler: () => void) {},",
+        "  listen(_port: number) {},",
+        "};",
+        "app.use('/api', () => {});",
+        "app.get('/health', () => {});",
+        "app.listen(3000);",
+      ].join("\n"),
+    },
+    {
+      name: "hono",
+      dependency: "hono",
+      version: "4.7.0",
+      variant: "hono",
+      source: [
+        "const app = {",
+        "  use(_path: string, _middleware: () => void) {},",
+        "  get(_path: string, _handler: () => unknown) {},",
+        "};",
+        "app.use('*', () => {});",
+        "app.get('/health', () => ({ ok: true }));",
+      ].join("\n"),
+    },
+    {
+      name: "fastify",
+      dependency: "fastify",
+      version: "5.2.0",
+      variant: "fastify",
+      source: [
+        "const app = {",
+        "  get(_path: string, _handler: () => object) {},",
+        "  listen(_options: { port: number }) {},",
+        "};",
+        "app.get('/health', () => ({ ok: true }));",
+        "app.listen({ port: 3000 });",
+      ].join("\n"),
+    },
+    {
+      name: "nestjs",
+      dependency: "@nestjs/core",
+      version: "11.0.11",
+      variant: "standard",
+      source: [
+        "const app = {",
+        "  useGlobalPipes(_pipe: unknown) {},",
+        "  listen(_port: number) {},",
+        "};",
+        "app.useGlobalPipes({});",
+        "app.listen(3000);",
+      ].join("\n"),
+    },
+  ] as const;
+  const server = createServer((incoming, outgoing) => {
+    let body = "";
+    incoming.setEncoding("utf8");
+    incoming.on("data", (chunk: string) => { body += chunk; });
+    incoming.on("end", () => {
+      const request = JSON.parse(body) as Record<string, unknown>;
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify(ollamaFixtureResponse(request, "export const backendReady = true;")));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    for (const scenario of scenarios) {
+      const root = await mkdtemp(join(tmpdir(), `h2c-cli-backend-${scenario.name}-`));
+      try {
+        await put(root, "human-to-code.config.json", JSON.stringify({
+          schemaVersion: 1,
+          provider: {
+            name: "ollama",
+            model: "fixture-model",
+            baseUrl: `http://127.0.0.1:${address.port}`,
+            trustCustomEndpoint: true,
+          },
+          direct: {
+            reconcileIntegrations: false,
+            crossFileChecks: false,
+            planning: { enabled: false },
+          },
+        }));
+        await put(root, "package.json", JSON.stringify({
+          name: scenario.name,
+          dependencies: { [scenario.dependency]: `^${scenario.version}` },
+          scripts: {
+            lint: "node -e \"process.exit(0)\"",
+            typecheck: "node -e \"process.exit(0)\"",
+            build: "node -e \"process.exit(0)\"",
+            test: "node -e \"process.exit(0)\"",
+            "test:e2e": "node -e \"process.exit(0)\"",
+          },
+        }));
+        await put(root, "package-lock.json", JSON.stringify({
+          lockfileVersion: 3,
+          packages: {
+            "": { name: scenario.name },
+            [`node_modules/${scenario.dependency}`]: { version: scenario.version },
+          },
+        }));
+        await put(root, "tsconfig.json", JSON.stringify({ compilerOptions: { strict: true } }));
+        await put(root, "src/main.ts", `${scenario.source}\n`);
+        await put(root, "backend.human", "Export a backend readiness constant.\n");
+
+        const result = await cli([root, "--yes", "--json"]);
+        assert.equal(result.code, 0, `${scenario.name}: ${result.stderr || result.stdout}`);
+        const response = JSON.parse(result.stdout) as {
+          status: string;
+          written: string[];
+        };
+        assert.equal(response.status, "DONE");
+        assert.deepEqual(response.written, ["backend.ts"]);
+        assert.equal(await readFile(join(root, "backend.ts"), "utf8"), "export const backendReady = true;\n");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    );
+  }
+});
+
 test("unreachable cross-file CSS receives one bounded repair before atomic write", async () => {
   const root = await mkdtemp(join(tmpdir(), "h2c-cli-selector-repair-"));
   const server = createServer((incoming, outgoing) => {

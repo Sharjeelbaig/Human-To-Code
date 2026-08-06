@@ -127,6 +127,60 @@ const SUPPORT_MATRIX_VALUE: readonly SupportMatrixEntry[] = [
     limitations: ["dynamic Nx plugins are not executed"],
   },
   {
+    key: "node.express",
+    ecosystem: "node",
+    variant: "express",
+    versions: "Express 4-5",
+    tier: "preview",
+    capabilities: ["routes", "middleware-signals", "package-scripts"],
+    limitations: ["runtime middleware ordering remains a static approximation", "generation certification benchmark pending"],
+  },
+  {
+    key: "node.hono",
+    ecosystem: "node",
+    variant: "hono",
+    versions: "Hono 4",
+    tier: "preview",
+    capabilities: ["routes", "middleware-signals", "package-scripts"],
+    limitations: ["runtime adapter and deployment target must be reviewed", "generation certification benchmark pending"],
+  },
+  {
+    key: "node.fastify",
+    ecosystem: "node",
+    variant: "fastify",
+    versions: "Fastify 4-5",
+    tier: "preview",
+    capabilities: ["routes", "middleware-signals", "package-scripts"],
+    limitations: ["plugin registration and schema compilation remain a static approximation", "generation certification benchmark pending"],
+  },
+  {
+    key: "node.koa",
+    ecosystem: "node",
+    variant: "koa",
+    versions: "Koa 2",
+    tier: "preview",
+    capabilities: ["routes", "middleware-signals", "package-scripts"],
+    limitations: ["runtime middleware ordering remains a static approximation", "generation certification benchmark pending"],
+  },
+  {
+    key: "node.http",
+    ecosystem: "node",
+    variant: "node-http",
+    versions: "Node.js HTTP server with TypeScript",
+    tier: "preview",
+    capabilities: ["routes", "package-scripts"],
+    limitations: ["framework-specific API contracts are not available", "generation certification benchmark pending"],
+  },
+  {
+    key: "node.nx",
+    ecosystem: "node",
+    variant: "nx-node",
+    versions: "Nx Node projects",
+    tier: "preview",
+    capabilities: ["workspace-ownership", "targets", "package-scripts"],
+    limitations: ["dynamic Nx plugins are not executed", "generation certification benchmark pending"],
+  },
+  {
     key: "fastapi.application",
     ecosystem: "fastapi",
     variant: "fastapi-application",
@@ -201,6 +255,10 @@ export function supportFor(
       if (entry.key === "react.cra") return major === 5;
       if (entry.key.startsWith("react.")) return major === 18 || major === 19;
       if (entry.key.startsWith("nestjs.")) return major === 10 || major === 11;
+      if (entry.key === "node.express") return major === 4 || major === 5;
+      if (entry.key === "node.hono") return major === 4;
+      if (entry.key === "node.fastify") return major === 4 || major === 5;
+      if (entry.key === "node.koa") return major === 2;
       if (entry.key === "fastapi.application") return major === 0 ? minor >= 110 : false;
       return true;
     })();

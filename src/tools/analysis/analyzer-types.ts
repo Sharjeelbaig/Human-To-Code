@@ -7,7 +7,7 @@
 
 export const PROJECT_PROFILE_SCHEMA_VERSION = "1" as const;
 
-export type Ecosystem = "react" | "nestjs" | "fastapi" | "rust" | "general";
+export type Ecosystem = "react" | "nestjs" | "node" | "fastapi" | "rust" | "general";
 
 export type ProjectAnalysisStatus =
   | "SUPPORTED"

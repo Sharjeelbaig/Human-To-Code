@@ -202,6 +202,141 @@ test("conflicting package-manager ownership fails closed with NEEDS_INPUT", asyn
   }
 });
 
+test("analyzeProject grounds TypeScript backend variants instead of falling back to general", async () => {
+  const cases = [
+    {
+      name: "express",
+      dependency: "express",
+      version: "5.1.0",
+      source: [
+        "import express from 'express';",
+        "const app = express();",
+        "app.use('/api', authMiddleware);",
+        "app.get('/health', (_req, res) => res.json({ ok: true }));",
+        "app.listen(3000);",
+      ].join("\n"),
+      route: "/health",
+    },
+    {
+      name: "hono",
+      dependency: "hono",
+      version: "4.7.0",
+      source: [
+        "import { Hono } from 'hono';",
+        "const app = new Hono();",
+        "app.use('*', authMiddleware);",
+        "app.get('/health', (c) => c.json({ ok: true }));",
+        "export default app;",
+      ].join("\n"),
+      route: "/health",
+    },
+    {
+      name: "fastify",
+      dependency: "fastify",
+      version: "5.2.0",
+      source: [
+        "import Fastify from 'fastify';",
+        "const app = Fastify();",
+        "app.get('/health', async () => ({ ok: true }));",
+        "app.listen({ port: 3000 });",
+      ].join("\n"),
+      route: "/health",
+    },
+    {
+      name: "koa",
+      dependency: "koa",
+      version: "2.16.0",
+      source: [
+        "import Koa from 'koa';",
+        "import Router from '@koa/router';",
+        "const app = new Koa();",
+        "const router = new Router();",
+        "router.get('/health', (ctx) => { ctx.body = { ok: true }; });",
+        "app.use(router.routes());",
+        "app.listen(3000);",
+      ].join("\n"),
+      route: "/health",
+    },
+    {
+      name: "nx-node",
+      dependency: undefined,
+      version: undefined,
+      source: [
+        "import { createServer } from 'node:http';",
+        "createServer((_req, res) => res.end('ok')).listen(3000);",
+      ].join("\n"),
+      route: undefined,
+    },
+    {
+      name: "node-http",
+      dependency: undefined,
+      version: undefined,
+      source: [
+        "import { createServer } from 'node:http';",
+        "createServer((_req, res) => res.end('ok')).listen(3000);",
+      ].join("\n"),
+      route: undefined,
+    },
+  ] as const;
+
+  for (const scenario of cases) {
+    const root = await fixture();
+    try {
+      await put(root, "package.json", JSON.stringify({
+        name: scenario.name,
+        dependencies: {
+          ...(scenario.dependency ? { [scenario.dependency]: `^${scenario.version}` } : {}),
+          typescript: "5.9.3",
+        },
+        scripts: {
+          lint: "eslint .",
+          typecheck: "tsc --noEmit",
+          build: "tsc -p tsconfig.json",
+          test: "vitest run",
+          "test:e2e": "vitest run test/e2e",
+        },
+      }));
+      await put(root, "package-lock.json", JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          "": { name: scenario.name },
+          ...(scenario.dependency
+            ? { [`node_modules/${scenario.dependency}`]: { version: scenario.version } }
+            : {}),
+          "node_modules/typescript": { version: "5.9.3" },
+        },
+      }));
+      await put(root, "tsconfig.json", JSON.stringify({ compilerOptions: { strict: true } }));
+      const sourcePath = scenario.name === "nx-node" ? "apps/api/src/main.ts" : "src/main.ts";
+      await put(root, sourcePath, `${scenario.source}\n`);
+      if (scenario.name === "nx-node") {
+        await put(root, "apps/api/project.json", JSON.stringify({
+          name: "api",
+          sourceRoot: "apps/api/src",
+          targets: { build: { executor: "@nx/node:build" } },
+        }));
+      }
+
+      const profile = await analyzeProject(root, { generalLanguage: "typescript" });
+      assert.equal(profile.status, "SUPPORTED", JSON.stringify(profile.diagnostics));
+      assert.equal(profile.workspaces.length, 1);
+      const workspace = profile.workspaces[0]!;
+      assert.equal(workspace.ecosystem, "node");
+      assert.equal(workspace.variant, scenario.name);
+      assert.equal(workspace.support.tier, "preview");
+      assert.ok(workspace.validationPlan.some((command) => command.category === "typecheck"));
+      assert.ok(workspace.validationPlan.some((command) => command.category === "build"));
+      assert.ok(workspace.validationPlan.some((command) => command.category === "test"));
+      assert.ok(workspace.validationPlan.some((command) => command.category === "integration"));
+      if (scenario.route !== undefined) assert.ok(workspace.routes.includes(scenario.route));
+      if (scenario.name !== "node-http") assert.equal(workspace.signals.httpAdapter, scenario.name);
+      assert.equal(workspace.diagnostics.some((diagnostic) => diagnostic.code === "GENERAL_UNGROUNDED_PREVIEW"), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
 test("static analysis never executes Vite configuration", async () => {
   const root = await fixture();
   const marker = join(root, "config-executed");

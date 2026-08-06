@@ -68,7 +68,7 @@ export function buildGeneralWorkspace(
     validationPlan: [],
     manualAcceptance: [
       "General generation is ungrounded and unvalidated: review every line, path, import, and side effect before use.",
-      "Provide a recognized project (React, NestJS, FastAPI, or Cargo) to obtain grounded, sandbox-validated output.",
+      "Provide a recognized project (React, NestJS, Node backend, FastAPI, or Cargo) to obtain grounded, sandbox-validated output.",
     ],
     diagnostics: [
       {

@@ -91,7 +91,7 @@ export interface DocumentationConfigV1 {
 }
 
 export interface OfficialDocumentationSourceV1 {
-  ecosystem: "react" | "nestjs" | "fastapi" | "rust";
+  ecosystem: "react" | "nestjs" | "node" | "fastapi" | "rust";
   dependency: string;
   version: string;
   url: string;
@@ -761,7 +761,7 @@ function validateDocumentation(
       const itemPath = `${path}.officialSources[${index}]`;
       const source = expectObject(raw, itemPath);
       assertKnownKeys(source, ["ecosystem", "dependency", "version", "url"], itemPath);
-      if (!["react", "nestjs", "fastapi", "rust"].includes(String(source.ecosystem))) {
+      if (!["react", "nestjs", "node", "fastapi", "rust"].includes(String(source.ecosystem))) {
         throw new ConfigError(`\`${itemPath}.ecosystem\` is not a supported ecosystem.`);
       }
       const dependency = expectString(source.dependency, `${itemPath}.dependency`, 256);

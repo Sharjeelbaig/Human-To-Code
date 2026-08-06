@@ -540,14 +540,14 @@ test("official documentation mappings are exact, bounded, and version-specific",
     documentation: {
       officialDomains: ["docs.example.com"],
       officialSources: [{
-        ecosystem: "fastapi",
-        dependency: "pydantic",
-        version: "2.11.7",
-        url: "https://docs.example.com/pydantic/2.11.7/",
+        ecosystem: "node",
+        dependency: "express",
+        version: "5.1.0",
+        url: "https://docs.example.com/express/5.1.0/",
       }],
     },
   });
-  assert.equal(config.documentation.officialSources[0]?.version, "2.11.7");
+  assert.equal(config.documentation.officialSources[0]?.version, "5.1.0");
   assert.throws(() => validateConfig({
     ...V1,
     documentation: {

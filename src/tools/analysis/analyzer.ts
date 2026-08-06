@@ -65,7 +65,7 @@ function analysisStatus(
 /**
  * Builds the static project profile that grounds a natural-language change
  * request in real workspaces, versions, and validation options. The built-in
- * React/NestJS, FastAPI, and Cargo adapters never execute the project, and
+ * React/NestJS/Node backend, FastAPI, and Cargo adapters never execute the project, and
  * custom adapters are held to that same read-only boundary.
  */
 export async function analyzeProject(
@@ -108,7 +108,7 @@ export async function analyzeProject(
   if (workspaces.length === 0 && !diagnostics.some((item) => item.severity === "partial-scan")) {
     diagnostics.push({
       code: "NO_SUPPORTED_WORKSPACE",
-      message: "No statically recognizable React, NestJS, FastAPI, or Cargo workspace was found.",
+      message: "No statically recognizable React, NestJS, Node backend, FastAPI, or Cargo workspace was found.",
       severity: "unsupported",
       paths: ["."],
     });

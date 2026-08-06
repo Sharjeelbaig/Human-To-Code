@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Maya Chen is a product designer who makes complex products feel clear and useful.">
+  <title>Maya Chen — Product Designer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header shell">
+    <a class="brand" href="index.html">Maya Chen</a>
+    <nav aria-label="Primary navigation">
+      <a href="#work">Work</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">Toggle theme</button>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <p class="eyebrow">Product designer · New York / Remote</p>
+      <h1 id="hero-title">Thoughtful products for real people.</h1>
+      <p class="hero-copy">I turn complex workflows into calm, useful experiences that help people do their best work.</p>
+      <a class="button" href="#work">See selected work</a>
+    </section>
+
+    <section id="work" class="section shell" aria-labelledby="work-title">
+      <p class="eyebrow">Selected work</p>
+      <h2 id="work-title">A few things I have helped make.</h2>
+      <div class="project-grid">
+        <article class="project-card project-card--warm">
+          <p class="project-number">01 · Planning</p>
+          <h3>Northstar</h3>
+          <p>A clearer planning tool for busy teams, from first signal to shared direction.</p>
+          <a class="text-link" href="work.html#northstar">Read case study <span aria-hidden="true">↗</span></a>
+        </article>
+        <article class="project-card project-card--blue">
+          <p class="project-number">02 · Community</p>
+          <h3>Common Ground</h3>
+          <p>A welcoming community experience designed to make belonging easier to find.</p>
+          <a class="text-link" href="work.html#common-ground">Read case study <span aria-hidden="true">↗</span></a>
+        </article>
+      </div>
+    </section>
+
+    <section id="about" class="section section--about shell" aria-labelledby="about-title">
+      <div>
+        <p class="eyebrow">A little about me</p>
+        <h2 id="about-title">Design is how I make room for better questions.</h2>
+      </div>
+      <div class="about-copy">
+        <p>I partner with teams from first sketch to final detail. My work blends research, systems thinking, and a deep respect for the people on the other side of the screen.</p>
+        <p>When I am away from my desk, I am usually looking for a good bookstore, cooking for friends, or taking a long walk with a camera.</p>
+      </div>
+    </section>
+
+    <section id="contact" class="section contact shell" aria-labelledby="contact-title">
+      <p class="eyebrow">Say hello</p>
+      <h2 id="contact-title">Let’s make something useful.</h2>
+      <p class="contact-intro">Have a thoughtful problem to solve? I would love to hear about it.</p>
+      <form id="contact-form" class="contact-form" novalidate>
+        <div class="form-row">
+          <label for="name">Your name</label>
+          <input id="name" name="name" autocomplete="name" required>
+        </div>
+        <div class="form-row">
+          <label for="email">Your email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="form-row">
+          <label for="message">Your message</label>
+          <textarea id="message" name="message" rows="4" required></textarea>
+        </div>
+        <button class="button" type="submit">Send hello</button>
+        <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer shell">
+    <span>© 2026 Maya Chen</span>
+    <a href="work.html">View all work</a>
+  </footer>
+  <script src="script.js" defer></script>
+</body>
+</html>

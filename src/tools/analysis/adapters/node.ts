@@ -1,6 +1,7 @@
 /**
  * Node.js ecosystem adapter: static recognition of React (Vite, Next, CRA,
- * libraries, Nx) and NestJS (standalone, Nest CLI monorepo, Nx) workspaces
+ * libraries, Nx), NestJS (standalone, Nest CLI monorepo, Nx), and common
+ * TypeScript backend workspaces (Express, Hono, Fastify, Koa, Node HTTP, Nx)
  * from manifests, lockfiles, and configuration — without executing project
  * code — plus their version evidence and candidate validation commands.
  */
@@ -57,11 +58,11 @@ interface NodeManifest {
 }
 
 interface NodeCandidate {
-  ecosystem: "react" | "nestjs";
+  ecosystem: "react" | "nestjs" | "node";
   root: string;
   manifest: NodeManifest;
   projectConfig?: string;
-  forcedVariant?: "nx-react" | "nx-nest" | "nest-monorepo";
+  forcedVariant?: "nx-react" | "nx-nest" | "nest-monorepo" | "nx-node";
   projectName?: string;
   sourceRoot?: string;
 }
@@ -126,20 +127,58 @@ async function readManifest(
   }
 }
 
-function frameworkKinds(manifest: NodeManifest): Array<"react" | "nestjs"> {
+async function hasNodeServerSource(
+  context: AnalyzerContext,
+  root: string,
+): Promise<boolean> {
+  const files = context
+    .filesBelow(root)
+    .filter((path) => SOURCE_EXTENSIONS.some((extension) => path.endsWith(extension)))
+    .slice(0, MAX_SOURCE_FILES);
+  for (const file of files) {
+    const source = await context.readText(file, 128 * 1024);
+    if (
+      source !== undefined
+      && /\b(?:createServer|serve)\s*\(|\.(?:listen)\s*\(/u.test(source)
+    ) return true;
+  }
+  return false;
+}
+
+async function frameworkKinds(
+  manifest: NodeManifest,
+  context: AnalyzerContext,
+): Promise<Array<"react" | "nestjs" | "node">> {
   const names = new Set(Object.keys(manifest.dependencies));
-  const result: Array<"react" | "nestjs"> = [];
-  if (names.has("react") || names.has("react-dom") || names.has("next") || names.has("react-scripts")) {
+  const result: Array<"react" | "nestjs" | "node"> = [];
+  const hasReact = names.has("react") || names.has("react-dom") || names.has("next") || names.has("react-scripts");
+  const hasNest = names.has("@nestjs/core") || names.has("@nestjs/common");
+  if (hasReact) {
     result.push("react");
   }
-  if (names.has("@nestjs/core") || names.has("@nestjs/common")) result.push("nestjs");
+  if (hasNest) result.push("nestjs");
+  const hasKnownBackend = [
+    "express",
+    "hono",
+    "@hono/node-server",
+    "fastify",
+    "koa",
+  ].some((name) => names.has(name));
+  // A direct Express dependency is common in Nest applications, where Nest's
+  // adapter owns the HTTP lifecycle. Do not create a duplicate generic Node
+  // workspace in that case; standalone backend projects remain grounded.
+  if (!hasReact && !hasNest && (hasKnownBackend || await hasNodeServerSource(context, manifest.root))) {
+    result.push("node");
+  }
   return result;
 }
 
-function inferNxEcosystem(value: unknown): "react" | "nestjs" | undefined {
+function inferNxEcosystem(value: unknown): "react" | "nestjs" | "node" | undefined {
   const serialized = JSON.stringify(value).toLowerCase();
   if (/(@nx|@nrwl)\/(nest|node):/.test(serialized) || serialized.includes("@nestjs/")) {
-    return "nestjs";
+    return serialized.includes("@nestjs/") || /(@nx|@nrwl)\/nest:/.test(serialized)
+      ? "nestjs"
+      : "node";
   }
   if (/(@nx|@nrwl)\/(react|next|web):/.test(serialized) || serialized.includes("next:")) {
     return "react";
@@ -208,7 +247,11 @@ async function loadNodeCandidates(
       root: projectRoot,
       manifest: owner,
       projectConfig: projectPath,
-      forcedVariant: ecosystem === "react" ? "nx-react" : "nx-nest",
+      forcedVariant: ecosystem === "react"
+        ? "nx-react"
+        : ecosystem === "nestjs"
+          ? "nx-nest"
+          : "nx-node",
       ...(typeof data.name === "string" ? { projectName: data.name } : {}),
       ...(typeof data.sourceRoot === "string"
         ? { sourceRoot: normalizeProjectPath(data.sourceRoot) }
@@ -260,7 +303,7 @@ async function loadNodeCandidates(
   }
 
   for (const manifest of manifests) {
-    const kinds = frameworkKinds(manifest);
+    const kinds = await frameworkKinds(manifest, context);
     for (const ecosystem of kinds) {
       if (rootsClaimedByVirtualProjects.has(manifest.root)) {
         // Keep an unrelated framework at a mixed root, but avoid duplicating
@@ -1196,11 +1239,243 @@ async function analyzeNest(
   });
 }
 
-/** Static Node adapter covering both React and NestJS project profiles. */
+function nodeBackendVariant(candidate: NodeCandidate): string {
+  if (candidate.forcedVariant === "nx-node") return "nx-node";
+  const dependencies = candidate.manifest.dependencies;
+  if (dependencies.express !== undefined) return "express";
+  if (dependencies.hono !== undefined || dependencies["@hono/node-server"] !== undefined) return "hono";
+  if (dependencies.fastify !== undefined) return "fastify";
+  if (dependencies.koa !== undefined || dependencies["@koa/router"] !== undefined) return "koa";
+  return "node-http";
+}
+
+function backendFrameworkName(variant: string): string {
+  switch (variant) {
+    case "express": return "Express";
+    case "hono": return "Hono";
+    case "fastify": return "Fastify";
+    case "koa": return "Koa";
+    case "nx-node": return "Nx Node";
+    default: return "Node.js HTTP";
+  }
+}
+
+function backendPrimaryDependency(variant: string): string | undefined {
+  switch (variant) {
+    case "express": return "express";
+    case "hono": return "hono";
+    case "fastify": return "fastify";
+    case "koa": return "koa";
+    default: return undefined;
+  }
+}
+
+function backendRoutes(source: string): string[] {
+  const routes: string[] = [];
+  const routePattern = /\b(?:app|router|server)\s*\.\s*(?:get|post|put|patch|delete|options|head|all|use|route)\s*\(\s*[`"']([^`"']*)/giu;
+  for (const match of source.matchAll(routePattern)) {
+    const path = match[1]?.trim();
+    if (path?.startsWith("/")) routes.push(path.replace(/\/+/gu, "/").replace(/\/$/u, "") || "/");
+  }
+  const honoOnPattern = /\b(?:app|router)\s*\.\s*on\s*\(\s*[^,]+,\s*[`"']([^`"']*)/giu;
+  for (const match of source.matchAll(honoOnPattern)) {
+    const path = match[1]?.trim();
+    if (path?.startsWith("/")) routes.push(path.replace(/\/+/gu, "/").replace(/\/$/u, "") || "/");
+  }
+  return routes;
+}
+
+async function analyzeNodeBackend(
+  context: AnalyzerContext,
+  candidate: NodeCandidate,
+  manifests: NodeManifest[],
+): Promise<WorkspaceProfileV1> {
+  const diagnostics: AnalyzerDiagnostic[] = [];
+  const lockfiles = nearestLockfiles(context, candidate.root);
+  const managers = sortedUnique(lockfiles.map(packageManagerFromLock));
+  const declaredManager = declaredPackageManager(candidate.manifest);
+  if (managers.length > 1) {
+    diagnostics.push({
+      code: "CONFLICTING_NODE_LOCKFILES",
+      message: "Multiple package-manager lockfiles own this workspace.",
+      severity: "needs-input",
+      paths: lockfiles,
+    });
+  }
+  if (declaredManager && managers[0] && declaredManager !== managers[0]) {
+    diagnostics.push({
+      code: "PACKAGE_MANAGER_MISMATCH",
+      message: `package.json declares ${declaredManager}, but the owning lockfile belongs to ${managers[0]}.`,
+      severity: "needs-input",
+      paths: [candidate.manifest.path, ...lockfiles],
+    });
+  }
+  const manager = (managers[0] ?? declaredManager ?? "npm") as "npm" | "pnpm" | "yarn" | "bun";
+  const variant = nodeBackendVariant(candidate);
+  const primaryName = backendPrimaryDependency(variant);
+  const dependencyNames = [
+    primaryName,
+    "@hono/node-server",
+    "@koa/router",
+    "typescript",
+    "zod",
+    "joi",
+    "valibot",
+    "yup",
+    "drizzle-orm",
+    "@prisma/client",
+    "prisma",
+    "typeorm",
+  ].filter((name): name is string => name !== undefined);
+  const dependencyVersions = (
+    await Promise.all(
+      [...new Set(dependencyNames)].map((name) => dependencyEvidence(context, candidate.manifest, lockfiles, name)),
+    )
+  ).filter((value): value is DependencyVersionEvidence => value !== undefined);
+  const primary = primaryName === undefined
+    ? undefined
+    : dependencyVersions.find((dependency) => dependency.name === primaryName);
+  if (primary && !primary.resolvedVersion) {
+    diagnostics.push({
+      code: "UNRESOLVED_FRAMEWORK_VERSION",
+      message: `${primaryName} has no exact version in a statically readable lockfile.`,
+      severity: "needs-input",
+      paths: [candidate.manifest.path, ...lockfiles],
+    });
+  }
+  const files = context
+    .filesBelow(candidate.root)
+    .filter((path) => SOURCE_EXTENSIONS.some((extension) => path.endsWith(extension)))
+    .slice(0, MAX_SOURCE_FILES);
+  if (context.filesBelow(candidate.root).filter((path) => SOURCE_EXTENSIONS.some((extension) => path.endsWith(extension))).length > MAX_SOURCE_FILES) {
+    diagnostics.push({
+      code: "SOURCE_ANALYSIS_LIMIT",
+      message: `The workspace has more than ${MAX_SOURCE_FILES} source files; Node backend analysis is capped at ${MAX_SOURCE_FILES}.`,
+      severity: "partial-scan",
+      paths: [candidate.root],
+    });
+  }
+  const routes: string[] = [];
+  const middlewareFiles: string[] = [];
+  const authFiles: string[] = [];
+  const schemaFiles: string[] = [];
+  const sourceEvidence: Array<{ path: string; hash?: string }> = [];
+  for (const file of files) {
+    const source = await context.readText(file, 512 * 1024);
+    if (source === undefined) continue;
+    routes.push(...backendRoutes(source));
+    if (/\b(?:middleware|middleware\s*\(|app\.use\s*\(|router\.use\s*\()/iu.test(source)) middlewareFiles.push(file);
+    if (/\b(?:authenticate|authorization|authorize|jwt|session|permission|requireAuth|isAuthenticated|authMiddleware)\b/iu.test(source)) authFiles.push(file);
+    if (/\b(?:zod|joi|valibot|yup|schema|validator|validation)\b/iu.test(source)) schemaFiles.push(file);
+    sourceEvidence.push({ path: file, hash: await context.contentHash(file) });
+  }
+  const { aliases, configs } = await readTsAliases(context, candidate.root, diagnostics);
+  const owner = workspaceOwner(candidate.manifest, manifests);
+  const sourceRoots = nearestExistingRoots(context, candidate.root, ["src", "app", "server"]);
+  const entryPoints = context.inventory.files.filter(
+    (path) => isBelow(path, candidate.root) && /(?:^|\/)(?:main|server|app|index)\.[cm]?[jt]s$/.test(path),
+  );
+  const dependencyNamesSet = candidate.manifest.dependencies;
+  const orms = [
+    dependencyNamesSet["drizzle-orm"] ? "drizzle" : undefined,
+    dependencyNamesSet["@prisma/client"] || dependencyNamesSet.prisma ? "prisma" : undefined,
+    dependencyNamesSet.typeorm ? "typeorm" : undefined,
+  ].filter((value): value is string => value !== undefined);
+  const evidence = await Promise.all([
+    evidenceFor(context, candidate.manifest.path, "manifest", `${backendFrameworkName(variant)} package manifest`),
+    ...(owner.path !== candidate.manifest.path
+      ? [evidenceFor(context, owner.path, "workspace", "Owning Node workspace manifest")]
+      : []),
+    ...(context.hasFile(joinProjectPath(owner.root, "pnpm-workspace.yaml"))
+      ? [evidenceFor(context, joinProjectPath(owner.root, "pnpm-workspace.yaml"), "workspace", "pnpm workspace ownership")]
+      : []),
+    ...lockfiles.map((path) => evidenceFor(context, path, "lockfile", "Owning dependency lockfile")),
+    ...configs.map((path) => evidenceFor(context, path, "config", "Static TypeScript alias configuration")),
+    ...(candidate.projectConfig
+      ? [evidenceFor(context, candidate.projectConfig, "workspace", "Static Nx project boundary")]
+      : []),
+  ]);
+  for (const item of sourceEvidence) {
+    evidence.push({
+      kind: "source",
+      path: item.path,
+      detail: "Inspected for backend routes, middleware, authentication, schemas, and entry points",
+      ...(item.hash === undefined ? {} : { contentHash: item.hash }),
+    });
+  }
+  return finalizeWorkspace({
+    schemaVersion: PROJECT_PROFILE_SCHEMA_VERSION,
+    id: `node:${candidate.root}${candidate.projectName ? `:${candidate.projectName}` : ""}`,
+    relativeRoot: candidate.root,
+    ecosystem: "node",
+    variant,
+    support: supportFor("node", variant, primary?.resolvedVersion),
+    ownership: {
+      root: owner.root,
+      ...(owner.name ? { owner: owner.name } : {}),
+      members: membersOf(owner, manifests),
+    },
+    framework: {
+      name: backendFrameworkName(variant),
+      ...(primary?.declaredVersion ? { declaredVersion: primary.declaredVersion } : {}),
+      ...(primary?.resolvedVersion ? { resolvedVersion: primary.resolvedVersion } : {}),
+      ...(primary?.source ? { versionSource: primary.source } : {}),
+      dependencies: dependencyVersions,
+    },
+    packageManager: { name: manager, ...(lockfiles[0] ? { lockfile: lockfiles[0] } : {}) },
+    runtime: {
+      node: typeof candidate.manifest.data.engines === "object"
+        ? String(asObject(candidate.manifest.data.engines)?.node ?? "unspecified")
+        : "unspecified",
+      typescript: candidate.manifest.dependencies.typescript ?? "not-declared",
+      moduleSystem: candidate.manifest.data.type === "module" ? "esm" : "commonjs-or-inferred",
+    },
+    manifests: sortedUnique([
+      candidate.manifest.path,
+      owner.path,
+      ...(context.hasFile(joinProjectPath(owner.root, "pnpm-workspace.yaml"))
+        ? [joinProjectPath(owner.root, "pnpm-workspace.yaml")]
+        : []),
+      ...(candidate.projectConfig ? [candidate.projectConfig] : []),
+      ...configs,
+    ]),
+    lockfiles,
+    sourceRoots,
+    testRoots: nearestExistingRoots(context, candidate.root, ["test", "tests", "e2e"]),
+    generatedRoots: nearestExistingRoots(context, candidate.root, ["dist", "generated"]),
+    migrationRoots: nearestExistingRoots(context, candidate.root, ["migrations", "prisma/migrations", "drizzle"]),
+    protectedRoots: sortedUnique([".git", "node_modules", joinProjectPath(candidate.root, ".env")]),
+    moduleAliases: aliases,
+    workspaceDependencies: Object.entries(candidate.manifest.dependencies)
+      .filter(([, version]) => version.startsWith("workspace:"))
+      .map(([name]) => name),
+    publicExports: publicExports(candidate.manifest.data),
+    entryPoints,
+    routes: sortedUnique(routes),
+    signals: {
+      projectName: candidate.projectName ?? candidate.manifest.name ?? "unknown",
+      httpAdapter: variant,
+      middlewareFiles: sortedUnique(middlewareFiles),
+      authFiles: sortedUnique(authFiles),
+      schemaFiles: sortedUnique(schemaFiles),
+      orms,
+      validationLibraries: dependenciesMatching(dependencyNamesSet, ["zod", "joi", "valibot", "yup"]),
+    },
+    validationPlan: validationFromScripts(candidate.manifest, candidate.manifest.root, manager),
+    manualAcceptance: [
+      "For protected endpoints, verify unauthenticated, unauthorized, authorized, and foreign-owner/tenant behavior.",
+      "Verify route middleware ordering and error serialization in the runtime adapter.",
+      "Schema changes require an explicitly reviewed migration; never enable ORM synchronization as a shortcut.",
+    ],
+    diagnostics,
+    evidence,
+  });
+}
+
+/** Static Node adapter covering React, NestJS, and common Node backend profiles. */
 export class NodeEcosystemAdapter implements EcosystemAdapter {
-  // The interface has a single ecosystem discriminator, while this shared
-  // adapter statically emits two closely related Node ecosystem profiles.
-  readonly ecosystem = "react" as const;
+  // This shared adapter statically emits several closely related Node profiles.
+  readonly ecosystem = "node" as const;
 
   async analyze(context: AnalyzerContext): Promise<WorkspaceProfileV1[]> {
     const { candidates, manifests } = await loadNodeCandidates(context);
@@ -1213,7 +1488,9 @@ export class NodeEcosystemAdapter implements EcosystemAdapter {
       profiles.push(
         candidate.ecosystem === "react"
           ? await analyzeReact(context, candidate, manifests)
-          : await analyzeNest(context, candidate, manifests),
+          : candidate.ecosystem === "nestjs"
+            ? await analyzeNest(context, candidate, manifests)
+            : await analyzeNodeBackend(context, candidate, manifests),
       );
     }
     return profiles;

@@ -99,7 +99,7 @@ Loopback-local Ollama has no remote API cost and needs no `pricing` at all.
 
 | Key | Type | Rules |
 | --- | --- | --- |
-| `ecosystem` | string | One of `react`, `nestjs`, `fastapi`, `rust`. |
+| `ecosystem` | string | One of `react`, `nestjs`, `node`, `fastapi`, `rust`. |
 | `dependency` | string | At most 256 characters, matching `/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/i`. |
 | `version` | string | At most 128 characters, and an exact identifier. Moving targets (`latest`, `next`, `stable`, `nightly`, `main`, `master`, `head`, `dev`) and range operators (`<`, `>`, `=`, `^`, `~`, `*`) are refused. |
 | `url` | string | HTTPS only, at most 2048 characters, no credentials, port, or fragment, and valid percent-encoding. The path or query **has to visibly contain the exact `version` string**, so a pinned entry can't quietly resolve somewhere else. |

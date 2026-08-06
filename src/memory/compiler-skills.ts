@@ -9,6 +9,7 @@ export type CompilerSkillId =
   | "core.change-contract"
   | "react.integration"
   | "nestjs.backend"
+  | "node.backend"
   | "fastapi.backend"
   | "rust.cargo";
 
@@ -36,7 +37,7 @@ export const CORE_COMPILER_SKILL: CompilerSkillV1 = {
   schemaVersion: 1,
   id: "core.change-contract",
   title: "Scoped change-contract compiler",
-  ecosystems: ["react", "nestjs", "fastapi", "rust"],
+  ecosystems: ["react", "nestjs", "node", "fastapi", "rust"],
   instructions: [
     "Implement only requirements and paths authorized by the reviewed contract.",
     "Prefer existing project patterns and dependencies over introducing alternatives.",
@@ -115,6 +116,33 @@ export const NEST_COMPILER_SKILL: CompilerSkillV1 = {
   requiredValidationCategories: ["typecheck", "test", "build", "integration"],
 };
 
+export const NODE_BACKEND_COMPILER_SKILL: CompilerSkillV1 = {
+  schemaVersion: 1,
+  id: "node.backend",
+  title: "TypeScript Node backend integration",
+  ecosystems: ["node"],
+  instructions: [
+    "Preserve the detected HTTP adapter, route ownership, middleware order, error boundary, runtime, and module system.",
+    "Preserve request parsing, response serialization, authentication, authorization, tenant filters, and validation schemas.",
+    "Reuse existing framework and package conventions; do not introduce a second router, adapter, or schema library without an explicit contract.",
+    "Keep deployment-specific APIs aligned with the detected Node, Hono, Express, Fastify, or Koa runtime target.",
+  ],
+  requiredEvidence: [
+    "resolved backend framework and TypeScript versions",
+    "route, middleware, authentication, schema, and entry-point evidence",
+    "nearest endpoint and integration-test patterns",
+    "package scripts and runtime/module-system configuration",
+  ],
+  prohibitedWithoutContract: [
+    "public-route changes",
+    "middleware or authorization weakening",
+    "HTTP adapter migration",
+    "runtime or deployment-target change",
+    "database migration application",
+  ],
+  requiredValidationCategories: ["typecheck", "test", "build", "integration"],
+};
+
 export const FASTAPI_COMPILER_SKILL: CompilerSkillV1 = {
   schemaVersion: 1,
   id: "fastapi.backend",
@@ -173,6 +201,7 @@ export const COMPILER_SKILLS: readonly CompilerSkillV1[] = Object.freeze([
   freezeSkill(CORE_COMPILER_SKILL),
   freezeSkill(REACT_COMPILER_SKILL),
   freezeSkill(NEST_COMPILER_SKILL),
+  freezeSkill(NODE_BACKEND_COMPILER_SKILL),
   freezeSkill(FASTAPI_COMPILER_SKILL),
   freezeSkill(RUST_COMPILER_SKILL),
 ]);

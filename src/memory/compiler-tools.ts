@@ -265,7 +265,7 @@ export class CompilerToolExecutor {
 
     const results: ContextCandidateV1[] = [];
     let hasInstalledApiEvidence = false;
-    if (workspace.ecosystem === "react" || workspace.ecosystem === "nestjs") {
+    if (workspace.ecosystem === "react" || workspace.ecosystem === "nestjs" || workspace.ecosystem === "node") {
       const packageRoots = [...new Set([
         workspace.relativeRoot === "." ? `node_modules/${name}` : `${workspace.relativeRoot}/node_modules/${name}`,
         `node_modules/${name}`,

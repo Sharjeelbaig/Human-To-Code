@@ -332,8 +332,15 @@ async function initConfig(root: string, cli: CliOptions): Promise<number> {
       );
     throw error;
   }
-  console.log(
-    `Wrote ${target}. Review provider, model, privacy consent, sandbox, and budgets before remote generation.`,
+  output(
+    cli.json
+      ? {
+          status: "INITIALIZED",
+          path: target,
+          compiler: { enabled: config.compiler.enabled },
+        }
+      : `Wrote ${target}. Review provider, model, privacy consent, sandbox, and budgets before remote generation.`,
+    cli.json,
   );
   return 0;
 }
@@ -859,9 +866,9 @@ async function buildCommand(
           }
         : {}),
     };
-    if (!cli.yes || units.length === 0) {
+    if (!cli.yes || cli.dryRun || units.length === 0) {
       output(plan, true);
-      return units.length === 0 ? 3 : cli.yes ? 0 : 3;
+      return units.length === 0 ? 3 : cli.dryRun ? 0 : 3;
     }
   } else {
     output(
